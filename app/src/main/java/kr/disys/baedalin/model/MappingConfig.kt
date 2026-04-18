@@ -42,8 +42,8 @@ object Presets {
     
     fun getPackageName(preset: String): String = when (preset) {
         "BAEMIN" -> "com.woowahan.bros"
-        "COUPANG" -> "com.coupang.mobile.eats.courier" // 쿠팡이츠 배달파트너 패키지명 업데이트
-        "YOGIYO" -> "com.yogiyo.rider"
+        "COUPANG" -> "com.coupang.mobile.eats.courier"
+        "YOGIYO" -> "kr.co.yogiyo.riderapp" // 요기요 라이더 패키지명 업데이트
         else -> ""
     }
     
