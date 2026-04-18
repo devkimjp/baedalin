@@ -2,6 +2,7 @@ package kr.disys.baedalin
 
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
@@ -21,6 +22,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.drawable.toBitmap
 import kr.disys.baedalin.model.ClickType
@@ -110,7 +112,7 @@ class MainActivity : ComponentActivity() {
         presetList.forEach { info ->
             val intent = Intent(this, FloatingWidgetService::class.java).apply {
                 action = FloatingWidgetService.ACTION_SHOW_WIDGET
-                putExtra("preset_name", presetName) // 프리셋 이름 전달
+                putExtra("preset_name", presetName)
                 putExtra("function_name", info.function.name)
                 putExtra("icon", info.icon)
                 putExtra("tooltip", info.tooltip)
@@ -252,7 +254,7 @@ fun MainScreen(
                 }
             }
 
-            Divider()
+            HorizontalDivider()
 
             Text("프리셋 로드 (앱 실행 포함)", style = MaterialTheme.typography.titleMedium)
             
@@ -262,7 +264,7 @@ fun MainScreen(
                 PresetButton("요기요설정", "YOGIYO")
             }
 
-            Divider()
+            HorizontalDivider()
 
             Text("개별 기능 설정", style = MaterialTheme.typography.titleMedium)
 
@@ -325,4 +327,16 @@ fun getIconFor(function: DeliveryFunction): String = when(function) {
     DeliveryFunction.PATH -> "Ⓟ"
     DeliveryFunction.ZOOM_IN -> "⊕"
     DeliveryFunction.ZOOM_OUT -> "⊖"
+}
+
+@Preview(showBackground = true)
+@Composable
+fun MainScreenPreview() {
+    BaedalinTheme {
+        MainScreen(
+            recordingFunction = null,
+            recordingClickType = null,
+            onStartRecording = { _, _ -> }
+        )
+    }
 }
