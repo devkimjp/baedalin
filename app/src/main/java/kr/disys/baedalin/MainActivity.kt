@@ -582,46 +582,43 @@ fun MainScreen(
             ) {
                 items(DeliveryFunction.entries) { function ->
                     Card(modifier = Modifier.fillMaxWidth()) {
-                        Column(modifier = Modifier.padding(12.dp)) {
-                            // 기능 이름과 설정된 키 목록 표시
-                            Text(function.label, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                            
-                            val mappings = remember(function) {
-                                ClickType.entries.map { type ->
-                                    val k = prefs.getInt("${function.name}_keycode", -1)
-                                    val t = prefs.getString("${function.name}_clicktype", "")
-                                    if (k != -1 && t == type.name) "[$type: $k]" else null
-                                }.filterNotNull().joinToString(", ")
-                            }
-                            if (mappings.isNotEmpty()) {
-                                Text(mappings, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Row(
+                            modifier = Modifier.padding(12.dp).fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(function.label, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                                
+                                val mappings = remember(function) {
+                                    listOf(ClickType.SINGLE, ClickType.DOUBLE).map { type ->
+                                        val k = prefs.getInt("${function.name}_keycode", -1)
+                                        val t = prefs.getString("${function.name}_clicktype", "")
+                                        if (k != -1 && t == type.name) "[$type: $k]" else null
+                                    }.filterNotNull().joinToString(", ")
+                                }
+                                if (mappings.isNotEmpty()) {
+                                    Text(mappings, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
                             }
 
-                            Spacer(Modifier.height(8.dp))
-
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.End,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                    listOf(ClickType.SINGLE, ClickType.DOUBLE).forEach { type ->
-                                        val isRecording = recordingFunction == function && recordingClickType == type
-                                        Button(
-                                            onClick = { onStartRecording(function, type) },
-                                            colors = if (isRecording) ButtonDefaults.buttonColors(containerColor = Color.Red) else ButtonDefaults.buttonColors(),
-                                            modifier = Modifier.height(36.dp),
-                                            contentPadding = PaddingValues(horizontal = 8.dp)
-                                        ) {
-                                            Text(
-                                                text = when(type) {
-                                                    ClickType.SINGLE -> "단일"
-                                                    ClickType.DOUBLE -> "더블"
-                                                    else -> ""
-                                                },
-                                                fontSize = 11.sp
-                                            )
-                                        }
+                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                listOf(ClickType.SINGLE, ClickType.DOUBLE).forEach { type ->
+                                    val isRecording = recordingFunction == function && recordingClickType == type
+                                    Button(
+                                        onClick = { onStartRecording(function, type) },
+                                        colors = if (isRecording) ButtonDefaults.buttonColors(containerColor = Color.Red) else ButtonDefaults.buttonColors(),
+                                        modifier = Modifier.height(36.dp),
+                                        contentPadding = PaddingValues(horizontal = 8.dp)
+                                    ) {
+                                        Text(
+                                            text = when(type) {
+                                                ClickType.SINGLE -> "단일"
+                                                ClickType.DOUBLE -> "더블"
+                                                else -> ""
+                                            },
+                                            fontSize = 11.sp
+                                        )
                                     }
                                 }
                             }
