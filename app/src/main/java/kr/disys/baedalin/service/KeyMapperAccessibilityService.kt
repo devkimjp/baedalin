@@ -7,6 +7,7 @@ import android.graphics.Path
 import android.os.Handler
 import android.os.Looper
 import android.view.KeyEvent
+import android.view.InputDevice
 import android.view.accessibility.AccessibilityEvent
 import android.util.Log
 import kr.disys.baedalin.model.ClickType
@@ -54,6 +55,18 @@ class KeyMapperAccessibilityService : AccessibilityService() {
         // 키 입력 모드(녹화 중)일 때는 가로채지 않고 MainActivity로 이벤트를 보냄
         if (KeyRecordingState.isRecording) {
             return false
+        }
+        
+        // 특정 장치 필터링 로직
+        val prefs = getSharedPreferences("mappings", MODE_PRIVATE)
+        val targetDescriptor = prefs.getString("selected_device_descriptor", null)
+        
+        if (targetDescriptor != null) {
+            val device = InputDevice.getDevice(event.deviceId)
+            if (device == null || device.descriptor != targetDescriptor) {
+                // 선택된 장치가 아니면 가로채지 않고 시스템에 통과시킴
+                return false
+            }
         }
         
         val keyCode = event.keyCode

@@ -10,6 +10,8 @@ import android.os.Bundle
 import android.provider.Settings
 import android.util.Log
 import android.view.KeyEvent
+import android.view.InputDevice
+import android.hardware.input.InputManager
 import android.view.accessibility.AccessibilityManager
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -63,6 +65,13 @@ class MainActivity : ComponentActivity() {
     private var conflictFunction by mutableStateOf<DeliveryFunction?>(null)
     private var pendingKeyCode by mutableStateOf<Int?>(null)
 
+    private var selectedDeviceDescriptor by mutableStateOf<String?>(null)
+    private var selectedDeviceName by mutableStateOf("모든 장치 (전역 감시)")
+    private var inputDevices by mutableStateOf<List<InputDeviceInfo>>(emptyList())
+    private var showDevicePicker by mutableStateOf(false)
+
+    data class InputDeviceInfo(val name: String, val descriptor: String)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -92,10 +101,17 @@ class MainActivity : ComponentActivity() {
                         isOverlayEnabled = isOverlayEnabled
                     )
                 } else {
+                    // 권한 허용된 상태에서 홈 진입 시 장치 목록 로드
+                    LaunchedEffect(Unit) {
+                        refreshDeviceList()
+                    }
+                    
                     Box {
                         MainScreen(
                             recordingFunction = recordingFunction,
                             recordingClickType = recordingClickType,
+                            selectedDeviceName = selectedDeviceName,
+                            onDeviceClick = { showDevicePicker = true },
                             onStartRecording = { func, type ->
                                 if (recordingFunction == func && recordingClickType == type) {
                                     // 이미 해당 기능의 입력 모드라면 해제 (기존 키 유지)
@@ -112,6 +128,17 @@ class MainActivity : ComponentActivity() {
                             }
                         )
                         
+                        if (showDevicePicker) {
+                            DevicePickerDialog(
+                                devices = inputDevices,
+                                onDismiss = { showDevicePicker = false },
+                                onDeviceSelected = { device ->
+                                    saveSelectedDevice(device)
+                                    showDevicePicker = false
+                                }
+                            )
+                        }
+
                         if (showAppPicker) {
                             AppPickerDialog(
                                 onDismiss = { showAppPicker = false },
@@ -276,6 +303,38 @@ class MainActivity : ComponentActivity() {
             .apply()
         
         Log.d("KeyMapper", "Saved new mapping: ${function.name} -> key $keyCode")
+    }
+
+    private fun refreshDeviceList() {
+        val deviceIds = InputDevice.getDeviceIds()
+        val list = mutableListOf<InputDeviceInfo>()
+        
+        for (id in deviceIds) {
+            val device = InputDevice.getDevice(id) ?: continue
+            // 외부 장치이면서 키보드/버튼 입력을 지원하는 경우
+            if (device.isExternal && (device.sources and InputDevice.SOURCE_KEYBOARD != 0)) {
+                list.add(InputDeviceInfo(device.name, device.descriptor))
+            }
+        }
+        inputDevices = list
+        
+        val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
+        selectedDeviceDescriptor = prefs.getString("selected_device_descriptor", null)
+        selectedDeviceName = list.find { it.descriptor == selectedDeviceDescriptor }?.name ?: "모든 장치 (전역 감시)"
+    }
+
+    private fun saveSelectedDevice(device: InputDeviceInfo?) {
+        val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
+        if (device == null) {
+            prefs.edit().remove("selected_device_descriptor").apply()
+            selectedDeviceDescriptor = null
+            selectedDeviceName = "모든 장치 (전역 감시)"
+        } else {
+            prefs.edit().putString("selected_device_descriptor", device.descriptor).apply()
+            selectedDeviceDescriptor = device.descriptor
+            selectedDeviceName = device.name
+        }
+        Toast.makeText(this, "감시 장치 설정: $selectedDeviceName", Toast.LENGTH_SHORT).show()
     }
 }
 
@@ -464,6 +523,8 @@ data class AppEntry(val name: String, val packageName: String, val icon: android
 fun MainScreen(
     recordingFunction: DeliveryFunction?,
     recordingClickType: ClickType?,
+    selectedDeviceName: String,
+    onDeviceClick: () -> Unit,
     onStartRecording: (DeliveryFunction, ClickType) -> Unit
 ) {
     val context = LocalContext.current
@@ -480,6 +541,24 @@ fun MainScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            // 장치 선택 섹션
+            Card(
+                modifier = Modifier.fillMaxWidth().clickable { onDeviceClick() },
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f))
+            ) {
+                Row(
+                    modifier = Modifier.padding(12.dp).fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column {
+                        Text("감시할 입력 장치", style = MaterialTheme.typography.labelMedium)
+                        Text(selectedDeviceName, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
+                    }
+                    Icon(imageVector = Icons.Default.Settings, contentDescription = null)
+                }
+            }
+
             // 상단 안내 메시지 영역 삭제 (레이아웃 흩트러짐 방지)
 
 
@@ -540,6 +619,51 @@ fun MainScreen(
 }
 
 @Composable
+fun DevicePickerDialog(
+    devices: List<MainActivity.InputDeviceInfo>,
+    onDismiss: () -> Unit,
+    onDeviceSelected: (MainActivity.InputDeviceInfo?) -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("입력 장치 선택") },
+        text = {
+            LazyColumn {
+                item {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onDeviceSelected(null) }
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("모든 장치 (전역 감시)", style = MaterialTheme.typography.bodyLarge)
+                    }
+                    HorizontalDivider()
+                }
+                items(devices) { device ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onDeviceSelected(device) }
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(text = device.name, style = MaterialTheme.typography.bodyLarge)
+                            Text(text = device.descriptor, style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("닫기") }
+        }
+    )
+}
+
+@Composable
 fun RowScope.PresetButton(name: String, presetName: String) {
     val context = LocalContext.current
     Button(
@@ -582,6 +706,8 @@ fun MainScreenPreview() {
         MainScreen(
             recordingFunction = null,
             recordingClickType = null,
+            selectedDeviceName = "테스트 장치",
+            onDeviceClick = {},
             onStartRecording = { _, _ -> }
         )
     }
