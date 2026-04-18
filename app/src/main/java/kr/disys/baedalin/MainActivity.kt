@@ -34,7 +34,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
@@ -43,6 +42,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.graphics.drawable.toBitmap
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import kr.disys.baedalin.model.ClickType
 import kr.disys.baedalin.model.DeliveryFunction
 import kr.disys.baedalin.model.Presets
@@ -288,13 +288,15 @@ class MainActivity : ComponentActivity() {
         val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
         val editor = prefs.edit()
         
-        // 중요: 동일한 키가 다른 기능에 이미 할당되어 있다면 해당 기록을 삭제하여 중복 동작 방지
+        // 중요: 동일한 키와 '클릭 타입'이 모두 일치하는 경우에만 기존 기록을 삭제
         DeliveryFunction.entries.forEach { existingFunc ->
             val storedKey = prefs.getInt("${existingFunc.name}_keycode", -1)
-            if (storedKey == keyCode) {
+            val storedType = prefs.getString("${existingFunc.name}_clicktype", "")
+            
+            if (storedKey == keyCode && storedType == clickType.name) {
                 editor.remove("${existingFunc.name}_keycode")
                 editor.remove("${existingFunc.name}_clicktype")
-                Log.d("KeyMapper", "Removed duplicate mapping for ${existingFunc.name} using key $keyCode")
+                Log.d("KeyMapper", "Removed duplicate mapping for ${existingFunc.name} ($storedType) using key $keyCode")
             }
         }
         
@@ -302,7 +304,7 @@ class MainActivity : ComponentActivity() {
             .putString("${function.name}_clicktype", clickType.name)
             .apply()
         
-        Log.d("KeyMapper", "Saved new mapping: ${function.name} -> key $keyCode")
+        Log.d("KeyMapper", "Saved new mapping: ${function.name} ($clickType) -> key $keyCode")
     }
 
     private fun refreshDeviceList() {
@@ -528,7 +530,8 @@ fun MainScreen(
     onStartRecording: (DeliveryFunction, ClickType) -> Unit
 ) {
     val context = LocalContext.current
-    
+    val prefs = context.getSharedPreferences("mappings", Context.MODE_PRIVATE)
+
     Scaffold(
         topBar = {
             TopAppBar(title = { Text("배달인 키매퍼") })
@@ -559,9 +562,6 @@ fun MainScreen(
                 }
             }
 
-            // 상단 안내 메시지 영역 삭제 (레이아웃 흩트러짐 방지)
-
-
             HorizontalDivider()
 
             Text("프리셋 로드 (앱 실행 포함)", style = MaterialTheme.typography.titleMedium)
@@ -581,33 +581,48 @@ fun MainScreen(
                 modifier = Modifier.weight(1f)
             ) {
                 items(DeliveryFunction.entries) { function ->
-                    val prefs = context.getSharedPreferences("mappings", Context.MODE_PRIVATE)
-                    val keyCode = prefs.getInt("${function.name}_keycode", -1)
-                    val keyText = if (keyCode != -1) " (Key: $keyCode)" else ""
-
                     Card(modifier = Modifier.fillMaxWidth()) {
-                        Row(
-                            modifier = Modifier.padding(8.dp).fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(function.label + keyText, modifier = Modifier.weight(1f))
-                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                Button(onClick = {
-                                    val intent = Intent(context, FloatingWidgetService::class.java).apply {
-                                        action = FloatingWidgetService.ACTION_SHOW_WIDGET
-                                        putExtra("function_name", function.name)
-                                        putExtra("tooltip", function.label)
-                                        putExtra("icon", getIconFor(function))
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            // 기능 이름과 설정된 키 목록 표시
+                            Text(function.label, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                            
+                            val mappings = remember(function) {
+                                ClickType.entries.map { type ->
+                                    val k = prefs.getInt("${function.name}_keycode", -1)
+                                    val t = prefs.getString("${function.name}_clicktype", "")
+                                    if (k != -1 && t == type.name) "[$type: $k]" else null
+                                }.filterNotNull().joinToString(", ")
+                            }
+                            if (mappings.isNotEmpty()) {
+                                Text(mappings, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+
+                            Spacer(Modifier.height(8.dp))
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.End,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    listOf(ClickType.SINGLE, ClickType.DOUBLE).forEach { type ->
+                                        val isRecording = recordingFunction == function && recordingClickType == type
+                                        Button(
+                                            onClick = { onStartRecording(function, type) },
+                                            colors = if (isRecording) ButtonDefaults.buttonColors(containerColor = Color.Red) else ButtonDefaults.buttonColors(),
+                                            modifier = Modifier.height(36.dp),
+                                            contentPadding = PaddingValues(horizontal = 8.dp)
+                                        ) {
+                                            Text(
+                                                text = when(type) {
+                                                    ClickType.SINGLE -> "단일"
+                                                    ClickType.DOUBLE -> "더블"
+                                                    else -> ""
+                                                },
+                                                fontSize = 11.sp
+                                            )
+                                        }
                                     }
-                                    context.startService(intent)
-                                }) { Text("위젯") }
-                                
-                                Button(
-                                    onClick = { onStartRecording(function, ClickType.SINGLE) },
-                                    colors = if (recordingFunction == function) ButtonDefaults.buttonColors(containerColor = Color.Red) else ButtonDefaults.buttonColors()
-                                ) {
-                                    Text("키입력")
                                 }
                             }
                         }

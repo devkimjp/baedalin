@@ -3,6 +3,7 @@ package kr.disys.baedalin.service
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.accessibilityservice.GestureDescription
+import android.content.Context
 import android.graphics.Path
 import android.os.Handler
 import android.os.Looper
@@ -23,6 +24,7 @@ class KeyMapperAccessibilityService : AccessibilityService() {
     private val longPressTimeout = 500L
     
     private var pendingClickRunnable: Runnable? = null
+    private var longPressRunnable: Runnable? = null
     private var isLongPressed = false
 
     override fun onCreate() {
@@ -36,7 +38,6 @@ class KeyMapperAccessibilityService : AccessibilityService() {
             eventTypes = AccessibilityEvent.TYPES_ALL_MASK
             feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC
             notificationTimeout = 100
-            // flagDefault를 제거하고 flagRequestFilterKeyEvents를 확실히 포함
             flags = AccessibilityServiceInfo.FLAG_REQUEST_FILTER_KEY_EVENTS or 
                     AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS or
                     AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS
@@ -46,143 +47,82 @@ class KeyMapperAccessibilityService : AccessibilityService() {
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        // Log.d("KeyMapper", "AccessibilityEvent: ${event?.eventType}")
     }
 
     override fun onInterrupt() {}
 
     override fun onKeyEvent(event: KeyEvent): Boolean {
-        // 키 입력 모드(녹화 중)일 때는 가로채지 않고 MainActivity로 이벤트를 보냄
         if (KeyRecordingState.isRecording) {
             return false
         }
         
-        // 특정 장치 필터링 로직
-        val prefs = getSharedPreferences("mappings", MODE_PRIVATE)
+        val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
         val targetDescriptor = prefs.getString("selected_device_descriptor", null)
         
         if (targetDescriptor != null) {
             val device = InputDevice.getDevice(event.deviceId)
             if (device == null || device.descriptor != targetDescriptor) {
-                // 선택된 장치가 아니면 가로채지 않고 시스템에 통과시킴
                 return false
             }
         }
         
         val keyCode = event.keyCode
         val action = event.action
-
-        // 모든 키 입력을 일단 로그로 남겨서 서비스가 이벤트를 받는지 확인
-        Log.d("KeyMapper", "Incoming KeyEvent: keyCode=$keyCode, action=$action")
-
-        // KeyCode 24 (Volume Up) 특수 처리: 콜확인 동작으로 즉시 변환
-        if (keyCode == KeyEvent.KEYCODE_VOLUME_UP) {
-            if (action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
-                Log.d("KeyMapper", "Volume Up detected, performing CALL_CHECK tap")
-                handleCallCheckAction()
-            }
-            return true
-        }
-
         val isMapped = isKeyMapped(keyCode)
         
-        if (isMapped) {
-            Log.d("KeyMapper", ">> DETECTED MAPPED KEY: $keyCode <<")
-        }
+        if (!isMapped) return super.onKeyEvent(event)
 
         if (action == KeyEvent.ACTION_DOWN) {
+            if (event.repeatCount > 0) return true
             if (keyCode != lastKeyCode) {
                 pendingClickRunnable?.let { handler.removeCallbacks(it) }
                 clickCount = 0
             }
-            
             lastKeyCode = keyCode
-            isLongPressed = false
-            
-            handler.postDelayed({
-                if (lastKeyCode == keyCode && !isLongPressed) {
-                    isLongPressed = true
-                    if (handleAction(keyCode, ClickType.LONG)) {
-                        Log.d("KeyMapper", "Long press handled for $keyCode")
-                    }
-                }
-            }, longPressTimeout)
-            
-            if (isMapped) return true
+            return true
         }
 
         if (action == KeyEvent.ACTION_UP) {
-            handler.removeCallbacksAndMessages(null)
-            
-            if (isLongPressed) {
-                isLongPressed = false
-                clickCount = 0
-                return if (isMapped) true else super.onKeyEvent(event)
-            }
-
             clickCount++
             
             pendingClickRunnable?.let { handler.removeCallbacks(it) }
             
-            val clickRunnable = Runnable {
-                handleAction(keyCode, if (clickCount >= 2) ClickType.DOUBLE else ClickType.SINGLE)
+            pendingClickRunnable = Runnable {
+                val type = if (clickCount >= 2) ClickType.DOUBLE else ClickType.SINGLE
+                handleAction(keyCode, type)
                 clickCount = 0
-                lastKeyCode = -1
-            }
+            }.also { handler.postDelayed(it, doubleClickTimeout) }
             
-            pendingClickRunnable = clickRunnable
-            handler.postDelayed(clickRunnable, doubleClickTimeout)
-            
-            if (isMapped) return true
+            return true
         }
 
         return super.onKeyEvent(event)
     }
 
+    private fun cancelAllTimers() {
+        handler.removeCallbacksAndMessages(null)
+        pendingClickRunnable = null
+        longPressRunnable = null
+    }
+
     private fun isKeyMapped(keyCode: Int): Boolean {
-        val prefs = getSharedPreferences("mappings", MODE_PRIVATE)
-        // SharedPreferences 내용을 상세히 출력하여 실제 저장된 값을 확인
-        val allEntries = prefs.all
-        Log.d("KeyMapper", "Checking mapping for key $keyCode. Current mappings count: ${allEntries.size}")
-        
+        val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
         var found = false
         DeliveryFunction.entries.forEach { function ->
             val storedKey = prefs.getInt("${function.name}_keycode", -1)
-            if (storedKey != -1) {
-                Log.d("KeyMapper", "  Mapping entry: ${function.name}_keycode = $storedKey")
-                if (storedKey == keyCode) {
-                    found = true
-                }
+            if (storedKey == keyCode) {
+                found = true
             }
         }
         return found
     }
 
-    private fun handleCallCheckAction() {
-        val prefs = getSharedPreferences("mappings", MODE_PRIVATE)
-        val activePreset = prefs.getString("active_preset", "DEFAULT") ?: "DEFAULT"
-        val function = DeliveryFunction.CALL_CHECK
-        
-        val x = prefs.getInt("${activePreset}_${function.name}_x", -1).toFloat()
-        val y = prefs.getInt("${activePreset}_${function.name}_y", -1).toFloat()
-        
-        if (x != -1f && y != -1f) {
-            val tapX = x + 50f
-            val tapY = y + 90f
-            Log.d("KeyMapper", "PERFORMING CALL_CHECK TAP at ($tapX, $tapY)")
-            performTap(tapX, tapY)
-        } else {
-            Log.w("KeyMapper", "Coordinates NOT FOUND for CALL_CHECK in preset $activePreset")
-        }
-    }
-
     private fun handleAction(keyCode: Int, clickType: ClickType): Boolean {
-        val prefs = getSharedPreferences("mappings", MODE_PRIVATE)
+        val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
         val activePreset = prefs.getString("active_preset", "DEFAULT") ?: "DEFAULT"
         
         Log.d("KeyMapper", "handleAction: keyCode=$keyCode, clickType=$clickType, activePreset=$activePreset")
         
-        // 매칭되는 첫 번째 기능만 찾아서 실행 (중복 동작 방지)
         val function = DeliveryFunction.entries.find { func ->
             val mappedKey = prefs.getInt("${func.name}_keycode", -1)
             val mappedClick = prefs.getString("${func.name}_clicktype", ClickType.SINGLE.name)
@@ -190,22 +130,60 @@ class KeyMapperAccessibilityService : AccessibilityService() {
         }
         
         if (function != null) {
-            val x = prefs.getInt("${activePreset}_${function.name}_x", -1).toFloat()
-            val y = prefs.getInt("${activePreset}_${function.name}_y", -1).toFloat()
-            
-            if (x != -1f && y != -1f) {
-                val tapX = x + 50f
-                val tapY = y + 90f
-                Log.d("KeyMapper", "PERFORMING ACTION: ${function.name} at ($tapX, $tapY)")
-                
-                when (function) {
-                    DeliveryFunction.ZOOM_IN -> performSwipe(tapX, tapY, tapX + 200, tapY + 200)
-                    DeliveryFunction.ZOOM_OUT -> performSwipe(tapX + 200, tapY + 200, tapX, tapY)
-                    else -> performTap(tapX, tapY)
+            val displayMetrics = resources.displayMetrics
+            val centerX = displayMetrics.widthPixels / 2f
+            val centerY = displayMetrics.heightPixels / 2f
+
+            when (function) {
+                DeliveryFunction.ZOOM_OUT -> {
+                    Log.d("KeyMapper", "PERFORMING ZOOM_OUT: Double-tap and Drag UP")
+                    val gestureBuilder = GestureDescription.Builder()
+
+                    // 1. 첫 번째 탭 (빠르게 떼기)
+                    val tapPath = Path()
+                    tapPath.moveTo(centerX, centerY)
+                    gestureBuilder.addStroke(GestureDescription.StrokeDescription(tapPath, 0, 50))
+
+                    // 2. 두 번째 탭 후 위로 드래그 (축소)
+                    val swipePath = Path()
+                    swipePath.moveTo(centerX, centerY)
+                    swipePath.lineTo(centerX, centerY - 200f) // 위로 이동
+                    gestureBuilder.addStroke(GestureDescription.StrokeDescription(swipePath, 100, 200))
+
+                    dispatchGesture(gestureBuilder.build(), null, null)
+                    return true
                 }
-                return true
-            } else {
-                Log.w("KeyMapper", "Coordinates NOT FOUND for ${function.name} in preset $activePreset")
+
+                DeliveryFunction.ZOOM_IN -> {
+                    Log.d("KeyMapper", "PERFORMING ZOOM_IN: Double-tap and Drag DOWN")
+                    val gestureBuilder = GestureDescription.Builder()
+
+                    // 1. 첫 번째 탭
+                    val tapPath = Path()
+                    tapPath.moveTo(centerX, centerY)
+                    gestureBuilder.addStroke(GestureDescription.StrokeDescription(tapPath, 0, 50))
+
+                    // 2. 두 번째 탭 후 아래로 드래그 (확대)
+                    val swipePath = Path()
+                    swipePath.moveTo(centerX, centerY)
+                    swipePath.lineTo(centerX, centerY + 200f) // 아래로 이동
+                    gestureBuilder.addStroke(GestureDescription.StrokeDescription(swipePath, 100, 200))
+
+                    dispatchGesture(gestureBuilder.build(), null, null)
+                    return true
+                }
+                else -> {
+                    val x = prefs.getInt("${activePreset}_${function.name}_x", -1).toFloat()
+                    val y = prefs.getInt("${activePreset}_${function.name}_y", -1).toFloat()
+                    
+                    if (x != -1f && y != -1f) {
+                        val tapX = x + 50f
+                        val tapY = y + 90f
+                        Log.d("KeyMapper", "PERFORMING ACTION: ${function.name} at ($tapX, $tapY)")
+                        performTap(tapX, tapY)
+                        return true
+                    }
+                }
             }
         }
         return false
