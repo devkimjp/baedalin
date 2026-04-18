@@ -34,18 +34,24 @@ class FloatingWidgetService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val action = intent?.action
-        currentPreset = intent?.getStringExtra("preset_name") ?: currentPreset
         
-        val functionName = intent?.getStringExtra("function_name")
-        val icon = intent?.getStringExtra("icon") ?: "?"
-        val tooltip = intent?.getStringExtra("tooltip") ?: ""
-        val targetX = intent?.getIntExtra("x", -1) ?: -1
-        val targetY = intent?.getIntExtra("y", -1) ?: -1
-        val color = intent?.getIntExtra("color", 0xAAFF0000.toInt()) ?: 0xAAFF0000.toInt()
-        val isSettings = intent?.getBooleanExtra("is_settings", false) ?: false
-
         when (action) {
             ACTION_SHOW_WIDGET -> {
+                val newPreset = intent.getStringExtra("preset_name")
+                if (newPreset != null) {
+                    currentPreset = newPreset
+                    val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
+                    prefs.edit().putString("active_preset", currentPreset).apply()
+                }
+
+                val functionName = intent.getStringExtra("function_name")
+                val icon = intent.getStringExtra("icon") ?: "?"
+                val tooltip = intent.getStringExtra("tooltip") ?: ""
+                val targetX = intent.getIntExtra("x", -1)
+                val targetY = intent.getIntExtra("y", -1)
+                val color = intent.getIntExtra("color", 0xAAFF0000.toInt())
+                val isSettings = intent.getBooleanExtra("is_settings", false)
+
                 if (isSettings) {
                     showSettingsWidget()
                 } else if (functionName != null) {
@@ -53,10 +59,17 @@ class FloatingWidgetService : Service() {
                 }
             }
             ACTION_HIDE_WIDGET -> {
+                val functionName = intent?.getStringExtra("function_name")
                 if (functionName != null) hideWidget(functionName)
             }
             ACTION_HIDE_ALL -> hideAll()
             ACTION_HIDE_PRESETS -> hidePresets()
+            ACTION_UPDATE_KEY -> {
+                val functionName = intent?.getStringExtra("function_name")
+                // 키 매핑 업데이트 시 필요하다면 위젯의 텍스트를 변경하는 등의 처리를 할 수 있습니다.
+                // 현재 위젯에는 키코드가 표시되지 않으므로 로깅만 수행합니다.
+                android.util.Log.d("FloatingWidget", "Key updated for $functionName")
+            }
         }
         
         return START_NOT_STICKY
@@ -318,5 +331,6 @@ class FloatingWidgetService : Service() {
         const val ACTION_HIDE_WIDGET = "ACTION_HIDE_WIDGET"
         const val ACTION_HIDE_ALL = "ACTION_HIDE_ALL"
         const val ACTION_HIDE_PRESETS = "ACTION_HIDE_PRESETS"
+        const val ACTION_UPDATE_KEY = "ACTION_UPDATE_KEY"
     }
 }
