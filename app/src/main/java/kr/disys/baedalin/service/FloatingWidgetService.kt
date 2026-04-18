@@ -23,6 +23,7 @@ class FloatingWidgetService : Service() {
     private val overlayViews = mutableMapOf<String, View>()
     private val ICON_SIZE = 100 
     private var settingsParams: WindowManager.LayoutParams? = null
+    private var currentPreset: String = "DEFAULT"
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -33,6 +34,8 @@ class FloatingWidgetService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val action = intent?.action
+        currentPreset = intent?.getStringExtra("preset_name") ?: currentPreset
+        
         val functionName = intent?.getStringExtra("function_name")
         val icon = intent?.getStringExtra("icon") ?: "?"
         val tooltip = intent?.getStringExtra("tooltip") ?: ""
@@ -108,7 +111,6 @@ class FloatingWidgetService : Service() {
             layoutParams = lp
         }
 
-        // 프리셋 선택 시 MainActivity를 호출하여 앱 실행 및 위젯 갱신 트리거
         val triggerPreset = { presetName: String ->
             menuLayout.visibility = View.GONE
             windowManager.updateViewLayout(root, settingsParams!!)
@@ -191,7 +193,7 @@ class FloatingWidgetService : Service() {
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.START
@@ -199,18 +201,27 @@ class FloatingWidgetService : Service() {
         }
         
         val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
-        // SharedPreferences 키를 currentPresetName 대신 모델에서 직접 가져오지 않으므로 functionName만 쓰거나 컨텍스트 전달 필요
-        // 여기서는 단순화를 위해 functionName을 사용하며, 실제 운영시엔 앱별 접두어를 붙이는 것이 좋습니다.
+        val prefKeyX = "${currentPreset}_${functionName}_x"
+        val prefKeyY = "${currentPreset}_${functionName}_y"
         
         val offsetX = ICON_SIZE / 2
         val offsetY = ICON_SIZE / 2 + 40
 
-        if (targetX != -1 && targetY != -1) {
+        // 저장된 좌표가 있으면 불러오고, 없으면 프리셋 좌표 사용
+        val savedX = prefs.getInt(prefKeyX, -1)
+        val savedY = prefs.getInt(prefKeyY, -1)
+
+        if (savedX != -1 && savedY != -1) {
+            params.x = savedX
+            params.y = savedY
+        } else if (targetX != -1 && targetY != -1) {
             params.x = targetX - offsetX
             params.y = targetY - offsetY
+            // 처음 표시될 때 기본 좌표를 저장
+            prefs.edit().putInt(prefKeyX, params.x).putInt(prefKeyY, params.y).apply()
         } else {
-            params.x = prefs.getInt("${functionName}_x", 100)
-            params.y = prefs.getInt("${functionName}_y", 100)
+            params.x = 100
+            params.y = 100
         }
 
         val container = LinearLayout(this).apply {
@@ -262,7 +273,11 @@ class FloatingWidgetService : Service() {
                         p.x = initialX + (event.rawX - initialTouchX).toInt()
                         p.y = initialY + (event.rawY - initialTouchY).toInt()
                         windowManager.updateViewLayout(container, p)
-                        prefs.edit().putInt("${functionName}_x", p.x).putInt("${functionName}_y", p.y).apply()
+                        return true
+                    }
+                    MotionEvent.ACTION_UP -> {
+                        // 이동 완료 시 실시간 저장
+                        prefs.edit().putInt(prefKeyX, p.x).putInt(prefKeyY, p.y).apply()
                         return true
                     }
                 }

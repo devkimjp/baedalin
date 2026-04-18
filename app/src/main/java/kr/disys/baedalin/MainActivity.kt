@@ -2,7 +2,6 @@ package kr.disys.baedalin
 
 import android.content.Context
 import android.content.Intent
-import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
@@ -35,7 +34,6 @@ class MainActivity : ComponentActivity() {
     private var recordingFunction by mutableStateOf<DeliveryFunction?>(null)
     private var recordingClickType by mutableStateOf<ClickType?>(null)
     
-    // App selection state
     private var showAppPicker by mutableStateOf(false)
     private var targetPresetForPicker by mutableStateOf<String?>(null)
 
@@ -84,13 +82,11 @@ class MainActivity : ComponentActivity() {
 
     private fun loadPresetWithApp(presetName: String) {
         val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
-        // Check if there's a custom saved package first
-        var packageName = prefs.getString("${presetName}_custom_pkg", Presets.getPackageName(presetName)) ?: ""
+        val packageName = prefs.getString("${presetName}_custom_pkg", Presets.getPackageName(presetName)) ?: ""
         
         val launchIntent = packageManager.getLaunchIntentForPackage(packageName)
         
         if (launchIntent == null) {
-            // App not found, show picker
             targetPresetForPicker = presetName
             showAppPicker = true
             Toast.makeText(this, "설치된 앱을 찾을 수 없어 앱 선택창을 띄웁니다.", Toast.LENGTH_SHORT).show()
@@ -105,18 +101,16 @@ class MainActivity : ComponentActivity() {
         }
         val color = Presets.getColor(presetName)
 
-        // 1. Hide Presets
         startService(Intent(this, FloatingWidgetService::class.java).apply {
             action = FloatingWidgetService.ACTION_HIDE_PRESETS
         })
         
-        // 2. Launch App
         startActivity(launchIntent)
         
-        // 3. Show Preset Widgets
         presetList.forEach { info ->
             val intent = Intent(this, FloatingWidgetService::class.java).apply {
                 action = FloatingWidgetService.ACTION_SHOW_WIDGET
+                putExtra("preset_name", presetName) // 프리셋 이름 전달
                 putExtra("function_name", info.function.name)
                 putExtra("icon", info.icon)
                 putExtra("tooltip", info.tooltip)
@@ -127,7 +121,6 @@ class MainActivity : ComponentActivity() {
             startService(intent)
         }
         
-        // 4. Show Settings Widget
         startService(Intent(this, FloatingWidgetService::class.java).apply {
             action = FloatingWidgetService.ACTION_SHOW_WIDGET
             putExtra("is_settings", true)
@@ -187,7 +180,6 @@ fun AppPickerDialog(onDismiss: () -> Unit, onAppSelected: (String) -> Unit) {
                             .padding(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // App Icon
                         androidx.compose.foundation.Image(
                             bitmap = app.icon.toBitmap().asImageBitmap(),
                             contentDescription = null,
@@ -244,7 +236,6 @@ fun MainScreen(
                 }
             }
 
-            // Permission Buttons
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = {
                     context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
