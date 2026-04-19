@@ -8,15 +8,21 @@ import android.graphics.PixelFormat
 import android.graphics.drawable.GradientDrawable
 import android.os.IBinder
 import android.view.Gravity
-import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
 import android.widget.Button
 import android.widget.FrameLayout
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.Toast
+import androidx.core.content.edit
 import kr.disys.baedalin.MainActivity
+import kr.disys.baedalin.R
+import kr.disys.baedalin.model.Presets
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 
 class FloatingWidgetService : Service() {
 
@@ -42,8 +48,9 @@ class FloatingWidgetService : Service() {
                 val newPreset = intent.getStringExtra("preset_name")
                 if (newPreset != null) {
                     currentPreset = newPreset
-                    val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
-                    prefs.edit().putString("active_preset", currentPreset).apply()
+                    getSharedPreferences("mappings", Context.MODE_PRIVATE).edit {
+                        putString("active_preset", currentPreset)
+                    }
                 }
 
                 val functionName = intent.getStringExtra("function_name")
@@ -53,12 +60,11 @@ class FloatingWidgetService : Service() {
                 val targetY = intent.getIntExtra("y", -1)
                 val color = intent.getIntExtra("color", 0xAAFF0000.toInt())
                 val isSettings = intent.getBooleanExtra("is_settings", false)
-                val keyInfo = intent.getStringExtra("key_info")
 
                 if (isSettings) {
                     showSettingsWidget()
                 } else if (functionName != null) {
-                    showWidget(functionName, icon, tooltip, targetX, targetY, color, keyInfo)
+                    showWidget(functionName, icon, tooltip, targetX, targetY, color)
                 }
             }
             ACTION_HIDE_WIDGET -> {
@@ -70,6 +76,26 @@ class FloatingWidgetService : Service() {
         }
         
         return START_NOT_STICKY
+    }
+
+    private fun loadPresetInternal(presetName: String) {
+        val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
+        prefs.edit { putString("active_preset", presetName) }
+        currentPreset = presetName
+
+        val presetList = when(presetName) {
+            "BAEMIN" -> Presets.BAEMIN
+            "COUPANG" -> Presets.COUPANG
+            "YOGIYO" -> Presets.YOGIYO
+            else -> Presets.BAEMIN
+        }
+        val color = Presets.getColor(presetName)
+
+        hidePresets()
+
+        presetList.forEach { info ->
+            showWidget(info.function.name, info.icon, info.tooltip, info.x, info.y, color)
+        }
     }
 
     private fun showSettingsWidget() {
@@ -125,25 +151,65 @@ class FloatingWidgetService : Service() {
             menuLayout.visibility = View.GONE
             windowManager.updateViewLayout(root, settingsParams!!)
             
-            val intent = Intent(this, MainActivity::class.java).apply {
-                putExtra("load_preset", presetName)
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            // 1. 위젯 프리셋 즉시 갱신 (MainActivity를 띄우지 않음)
+            loadPresetInternal(presetName)
+
+            // 2. 해당 배달 앱 실행
+            val packageName = prefs.getString("${presetName}_custom_pkg", Presets.getPackageName(presetName)) ?: ""
+            val launchIntent = packageManager.getLaunchIntentForPackage(packageName)
+            if (launchIntent != null) {
+                launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                startActivity(launchIntent)
+            } else {
+                Toast.makeText(this, "앱을 찾을 수 없습니다: $packageName", Toast.LENGTH_SHORT).show()
             }
-            startActivity(intent)
         }
 
-        val btnBaemin = Button(this).apply { text = "배민"; setOnClickListener { triggerPreset("BAEMIN") } }
-        val btnCoupang = Button(this).apply { text = "쿠팡"; setOnClickListener { triggerPreset("COUPANG") } }
-        val btnYogiyo = Button(this).apply { text = "요기요"; setOnClickListener { triggerPreset("YOGIYO") } }
+        val createIconBtn = { resId: Int, presetName: String ->
+            ImageView(this).apply {
+                setImageResource(resId)
+                scaleType = ImageView.ScaleType.FIT_CENTER
+                val size = 120
+                layoutParams = LinearLayout.LayoutParams(size, size).apply {
+                    setMargins(10, 10, 10, 10)
+                }
+                setPadding(10, 10, 10, 10)
+                setOnClickListener { triggerPreset(presetName) }
+            }
+        }
+
+        val iconBaemin = createIconBtn(R.drawable.ic_baemin, "BAEMIN")
+        val iconCoupang = createIconBtn(R.drawable.ic_coupang_eats, "COUPANG")
+        val iconYogiyo = createIconBtn(R.drawable.ic_yogiyo, "YOGIYO")
+        
         val btnClose = Button(this).apply { 
-            text = "전체 종료"
-            setBackgroundColor(Color.RED)
+            text = "OFF"
+            setTextColor(Color.WHITE)
+            textSize = 12f
+            setBackground(GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(0xCCFF4444.toInt())
+            })
+            layoutParams = LinearLayout.LayoutParams(100, 100).apply {
+                gravity = Gravity.CENTER_HORIZONTAL
+                setMargins(0, 20, 0, 10)
+            }
             setOnClickListener { hideAll() } 
         }
 
-        menuLayout.addView(btnBaemin)
-        menuLayout.addView(btnCoupang)
-        menuLayout.addView(btnYogiyo)
+        menuLayout.apply {
+            val shape = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = 40f
+                setColor(0xCC222222.toInt())
+                setStroke(2, 0x44FFFFFF.toInt())
+            }
+            background = shape
+        }
+
+        menuLayout.addView(iconBaemin)
+        menuLayout.addView(iconCoupang)
+        menuLayout.addView(iconYogiyo)
         menuLayout.addView(btnClose)
 
         root.addView(menuLayout)
@@ -183,7 +249,10 @@ class FloatingWidgetService : Service() {
                             menuLayout.visibility = if (menuLayout.visibility == View.VISIBLE) View.GONE else View.VISIBLE
                             windowManager.updateViewLayout(root, p)
                         } else {
-                            prefs.edit().putInt("${functionName}_x", p.x).putInt("${functionName}_y", p.y).apply()
+                            prefs.edit { 
+                                putInt("${functionName}_x", p.x)
+                                putInt("${functionName}_y", p.y)
+                            }
                         }
                         return true
                     }
@@ -196,7 +265,7 @@ class FloatingWidgetService : Service() {
         overlayViews[functionName] = root
     }
 
-    private fun showWidget(functionName: String, icon: String, tooltip: String, targetX: Int, targetY: Int, color: Int, keyInfo: String?) {
+    private fun showWidget(functionName: String, icon: String, tooltip: String, targetX: Int, targetY: Int, color: Int) {
         hideWidget(functionName)
 
         val params = WindowManager.LayoutParams(
@@ -228,7 +297,7 @@ class FloatingWidgetService : Service() {
             params.x = targetX - offsetX
             params.y = targetY - offsetY
             // 처음 표시될 때 기본 좌표를 저장
-            prefs.edit().putInt(prefKeyX, params.x).putInt(prefKeyY, params.y).apply()
+            prefs.edit { putInt(prefKeyX, params.x); putInt(prefKeyY, params.y) }
         } else {
             params.x = 100
             params.y = 100
@@ -287,7 +356,7 @@ class FloatingWidgetService : Service() {
                     }
                     MotionEvent.ACTION_UP -> {
                         // 이동 완료 시 실시간 저장
-                        prefs.edit().putInt(prefKeyX, p.x).putInt(prefKeyY, p.y).apply()
+                        prefs.edit { putInt(prefKeyX, p.x); putInt(prefKeyY, p.y) }
                         return true
                     }
                 }
@@ -297,10 +366,6 @@ class FloatingWidgetService : Service() {
 
         windowManager.addView(container, params)
         overlayViews[functionName] = container
-    }
-
-    private fun updateKeyInfo(functionName: String, keyInfo: String) {
-        // No-op: Key info display is disabled
     }
 
     private fun hideWidget(functionName: String) {
@@ -334,8 +399,8 @@ class FloatingWidgetService : Service() {
     }
 
     companion object {
-        private val _isRunning = kotlinx.coroutines.flow.MutableStateFlow(false)
-        val isRunning: kotlinx.coroutines.flow.StateFlow<Boolean> = _isRunning
+        private val _isRunning = MutableStateFlow(false)
+        val isRunning: StateFlow<Boolean> = _isRunning
         const val ACTION_SHOW_WIDGET = "ACTION_SHOW_WIDGET"
         const val ACTION_HIDE_WIDGET = "ACTION_HIDE_WIDGET"
         const val ACTION_HIDE_ALL = "ACTION_HIDE_ALL"

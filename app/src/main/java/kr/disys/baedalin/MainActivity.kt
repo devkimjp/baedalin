@@ -5,7 +5,6 @@ import android.accessibilityservice.AccessibilityServiceInfo
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
@@ -32,7 +31,6 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -43,10 +41,11 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.edit
 import androidx.core.graphics.drawable.toBitmap
+import androidx.core.net.toUri
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import kr.disys.baedalin.model.ClickType
 import kr.disys.baedalin.model.DeliveryFunction
 import kr.disys.baedalin.model.Presets
@@ -88,9 +87,9 @@ class MainActivity : ComponentActivity() {
                 val context = LocalContext.current
                 var isAccessibilityEnabled by remember { mutableStateOf(false) }
                 var isOverlayEnabled by remember { mutableStateOf(false) }
-                val lifecycleOwner = LocalLifecycleOwner.current
                 val isServiceRunning by FloatingWidgetService.isRunning.collectAsState()
 
+                val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
                 DisposableEffect(lifecycleOwner) {
                     val observer = LifecycleEventObserver { _, event ->
                         if (event == Lifecycle.Event.ON_RESUME) {
@@ -129,7 +128,7 @@ class MainActivity : ComponentActivity() {
                                         action = FloatingWidgetService.ACTION_HIDE_ALL
                                     })
                                 } else {
-                                    val prefs = getSharedPreferences("mappings", MODE_PRIVATE)
+                                    val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
                                     val activePreset = prefs.getString("active_preset", "BAEMIN") ?: "BAEMIN"
                                     loadPreset(activePreset)
                                 }
@@ -215,8 +214,8 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun loadPreset(presetName: String) {
-        val prefs = getSharedPreferences("mappings", MODE_PRIVATE)
-        prefs.edit().putString("active_preset", presetName).apply()
+        val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
+        prefs.edit { putString("active_preset", presetName) }
 
         val presetList = when(presetName) {
             "BAEMIN" -> Presets.BAEMIN
@@ -261,13 +260,13 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun saveCustomPackage(preset: String, pkgName: String) {
-        val prefs = getSharedPreferences("mappings", MODE_PRIVATE)
-        prefs.edit().putString("${preset}_custom_pkg", pkgName).apply()
+        val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
+        prefs.edit { putString("${preset}_custom_pkg", pkgName) }
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
         if (recordingFunction != null && recordingClickType != null) {
-            val prefs = getSharedPreferences("mappings", MODE_PRIVATE)
+            val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
             val prefix = selectedDeviceDescriptor ?: "GLOBAL"
             
             // 다른 기능에서 이 키를 이미 매핑했는지 확인
@@ -309,41 +308,41 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun saveMapping(function: DeliveryFunction, clickType: ClickType, keyCode: Int) {
-        val prefs = getSharedPreferences("mappings", MODE_PRIVATE)
-        val editor = prefs.edit()
+        val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
         val prefix = selectedDeviceDescriptor ?: "GLOBAL"
         
-        // 중요: 동일한 키와 '클릭 타입'이 모두 일치하는 경우에만 기존 기록을 삭제
-        DeliveryFunction.entries.forEach { existingFunc ->
-            val storedKey = prefs.getInt("${prefix}_${existingFunc.name}_keycode", -1)
-            val storedType = prefs.getString("${prefix}_${existingFunc.name}_clicktype", "")
-            
-            if (storedKey == keyCode && storedType == clickType.name) {
-                editor.remove("${prefix}_${existingFunc.name}_keycode")
-                editor.remove("${prefix}_${existingFunc.name}_clicktype")
-                Log.d("KeyMapper", "Removed duplicate mapping for ${existingFunc.name} ($storedType) using key $keyCode")
+        prefs.edit {
+            // 중요: 동일한 키와 '클릭 타입'이 모두 일치하는 경우에만 기존 기록을 삭제
+            DeliveryFunction.entries.forEach { existingFunc ->
+                val storedKey = prefs.getInt("${prefix}_${existingFunc.name}_keycode", -1)
+                val storedType = prefs.getString("${prefix}_${existingFunc.name}_clicktype", "")
+                
+                if (storedKey == keyCode && storedType == clickType.name) {
+                    remove("${prefix}_${existingFunc.name}_keycode")
+                    remove("${prefix}_${existingFunc.name}_clicktype")
+                    Log.d("KeyMapper", "Removed duplicate mapping for ${existingFunc.name} ($storedType) using key $keyCode")
+                }
             }
+            
+            putInt("${prefix}_${function.name}_keycode", keyCode)
+            putString("${prefix}_${function.name}_clicktype", clickType.name)
         }
-        
-        editor.putInt("${prefix}_${function.name}_keycode", keyCode)
-            .putString("${prefix}_${function.name}_clicktype", clickType.name)
-            .apply()
         
         Log.d("KeyMapper", "Saved new mapping: ${function.name} ($clickType) -> key $keyCode")
     }
 
     private fun refreshDeviceList() {
-        val prefs = getSharedPreferences("mappings", MODE_PRIVATE)
+        val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
         val historyJson = prefs.getString("device_history", "[]") ?: "[]"
         
         // 간단한 수동 파싱 (장치명|식별자 형태의 리스트)
         val history = historyJson.removeSurrounding("[", "]")
             .split(";;;")
             .filter { it.isNotBlank() }
-            .map { 
+            .mapNotNull { 
                 val parts = it.trim().split("|||")
                 if (parts.size >= 2) InputDeviceInfo(parts[0], parts[1], false) else null
-            }.filterNotNull().toMutableList()
+            }.toMutableList()
 
         val deviceIds = InputDevice.getDeviceIds()
         val currentConnected = mutableListOf<InputDeviceInfo>()
@@ -371,7 +370,7 @@ class MainActivity : ComponentActivity() {
 
         // 히스토리 저장 (구분자 변경: ;;; 와 |||)
         val newHistoryJson = history.joinToString(prefix = "[", postfix = "]", separator = ";;;") { "${it.name}|||${it.descriptor}" }
-        prefs.edit().putString("device_history", newHistoryJson).apply()
+        prefs.edit { putString("device_history", newHistoryJson) }
 
         inputDevices = history.sortedByDescending { it.isConnected }
         
@@ -381,13 +380,13 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun saveSelectedDevice(device: InputDeviceInfo?) {
-        val prefs = getSharedPreferences("mappings", MODE_PRIVATE)
+        val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
         if (device == null) {
-            prefs.edit().remove("selected_device_descriptor").apply()
+            prefs.edit { remove("selected_device_descriptor") }
             selectedDeviceDescriptor = null
             selectedDeviceName = "모든 장치 (전역 감시)"
         } else {
-            prefs.edit().putString("selected_device_descriptor", device.descriptor).apply()
+            prefs.edit { putString("selected_device_descriptor", device.descriptor) }
             selectedDeviceDescriptor = device.descriptor
             selectedDeviceName = device.name
         }
@@ -443,7 +442,7 @@ fun PermissionWizard(
             description = "배달 앱 화면 위에 위젯을 띄우기 위해 필요합니다.",
             isGranted = isOverlayEnabled,
             onClick = {
-                val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${context.packageName}"))
+                val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, "package:${context.packageName}".toUri())
                 context.startActivity(intent)
             }
         )
