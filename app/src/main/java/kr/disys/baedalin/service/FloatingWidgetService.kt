@@ -30,6 +30,7 @@ class FloatingWidgetService : Service() {
     override fun onCreate() {
         super.onCreate()
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
+        isRunning = true
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -323,10 +324,17 @@ class FloatingWidgetService : Service() {
     private fun hideAll() {
         overlayViews.values.forEach { windowManager.removeView(it) }
         overlayViews.clear()
+        isRunning = false
         stopSelf()
     }
 
+    override fun onDestroy() {
+        super.onDestroy()
+        isRunning = false
+    }
+
     companion object {
+        var isRunning = false
         const val ACTION_SHOW_WIDGET = "ACTION_SHOW_WIDGET"
         const val ACTION_HIDE_WIDGET = "ACTION_HIDE_WIDGET"
         const val ACTION_HIDE_ALL = "ACTION_HIDE_ALL"

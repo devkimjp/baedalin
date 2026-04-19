@@ -23,8 +23,11 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
@@ -81,6 +84,7 @@ class MainActivity : ComponentActivity() {
                 val context = LocalContext.current
                 var isAccessibilityEnabled by remember { mutableStateOf(false) }
                 var isOverlayEnabled by remember { mutableStateOf(false) }
+                var isServiceRunning by remember { mutableStateOf(false) }
 
                 val lifecycleOwner = LocalLifecycleOwner.current
                 DisposableEffect(lifecycleOwner) {
@@ -88,7 +92,8 @@ class MainActivity : ComponentActivity() {
                         if (event == Lifecycle.Event.ON_RESUME) {
                             isAccessibilityEnabled = isAccessibilityServiceEnabled(context, KeyMapperAccessibilityService::class.java)
                             isOverlayEnabled = Settings.canDrawOverlays(context)
-                            Log.d("KeyMapper", "MainActivity ON_RESUME - Accessibility: $isAccessibilityEnabled, Overlay: $isOverlayEnabled")
+                            isServiceRunning = FloatingWidgetService.isRunning
+                            Log.d("KeyMapper", "MainActivity ON_RESUME - Accessibility: $isAccessibilityEnabled, Overlay: $isOverlayEnabled, Service: $isServiceRunning")
                         }
                     }
                     lifecycleOwner.lifecycle.addObserver(observer)
@@ -111,7 +116,21 @@ class MainActivity : ComponentActivity() {
                             recordingFunction = recordingFunction,
                             recordingClickType = recordingClickType,
                             selectedDeviceName = selectedDeviceName,
+                            isServiceRunning = isServiceRunning,
                             onDeviceClick = { showDevicePicker = true },
+                            onStartService = {
+                                if (isServiceRunning) {
+                                    startService(Intent(context, FloatingWidgetService::class.java).apply {
+                                        action = FloatingWidgetService.ACTION_HIDE_ALL
+                                    })
+                                    isServiceRunning = false
+                                } else {
+                                    val prefs = context.getSharedPreferences("mappings", Context.MODE_PRIVATE)
+                                    val activePreset = prefs.getString("active_preset", "BAEMIN") ?: "BAEMIN"
+                                    loadPresetWithApp(activePreset)
+                                    isServiceRunning = true
+                                }
+                            },
                             onStartRecording = { func, type ->
                                 if (recordingFunction == func && recordingClickType == type) {
                                     // 이미 해당 기능의 입력 모드라면 해제 (기존 키 유지)
@@ -526,7 +545,9 @@ fun MainScreen(
     recordingFunction: DeliveryFunction?,
     recordingClickType: ClickType?,
     selectedDeviceName: String,
+    isServiceRunning: Boolean,
     onDeviceClick: () -> Unit,
+    onStartService: () -> Unit,
     onStartRecording: (DeliveryFunction, ClickType) -> Unit
 ) {
     val context = LocalContext.current
@@ -626,6 +647,31 @@ fun MainScreen(
                     }
                 }
             }
+
+            // 서비스 시작/중지 버튼 (맨 하단 고정)
+            Button(
+                onClick = onStartService,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(64.dp),
+                shape = RoundedCornerShape(16.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (isServiceRunning) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                    contentColor = if (isServiceRunning) MaterialTheme.colorScheme.onError else MaterialTheme.colorScheme.onPrimary
+                ),
+                elevation = ButtonDefaults.buttonElevation(defaultElevation = 4.dp)
+            ) {
+                Icon(
+                    imageVector = if (isServiceRunning) Icons.Default.Close else Icons.Default.PlayArrow,
+                    contentDescription = null
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = if (isServiceRunning) "서비스 중지" else "서비스 시작",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.ExtraBold
+                )
+            }
         }
     }
 }
@@ -719,7 +765,9 @@ fun MainScreenPreview() {
             recordingFunction = null,
             recordingClickType = null,
             selectedDeviceName = "테스트 장치",
+            isServiceRunning = false,
             onDeviceClick = {},
+            onStartService = {},
             onStartRecording = { _, _ -> }
         )
     }
