@@ -52,7 +52,7 @@ class KeyMapperAccessibilityService : AccessibilityService() {
     override fun onInterrupt() {}
 
     override fun onKeyEvent(event: KeyEvent): Boolean {
-        if (KeyRecordingState.isRecording) {
+        if (!FloatingWidgetService.isRunning || KeyRecordingState.isRecording) {
             return false
         }
         
@@ -68,7 +68,8 @@ class KeyMapperAccessibilityService : AccessibilityService() {
         
         val keyCode = event.keyCode
         val action = event.action
-        val isMapped = isKeyMapped(keyCode)
+        val prefix = targetDescriptor ?: "GLOBAL"
+        val isMapped = isKeyMapped(keyCode, prefix)
         
         if (!isMapped) return super.onKeyEvent(event)
 
@@ -89,7 +90,7 @@ class KeyMapperAccessibilityService : AccessibilityService() {
             
             pendingClickRunnable = Runnable {
                 val type = if (clickCount >= 2) ClickType.DOUBLE else ClickType.SINGLE
-                handleAction(keyCode, type)
+                handleAction(keyCode, type, prefix)
                 clickCount = 0
             }.also { handler.postDelayed(it, doubleClickTimeout) }
             
@@ -105,11 +106,11 @@ class KeyMapperAccessibilityService : AccessibilityService() {
         longPressRunnable = null
     }
 
-    private fun isKeyMapped(keyCode: Int): Boolean {
+    private fun isKeyMapped(keyCode: Int, prefix: String): Boolean {
         val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
         var found = false
         DeliveryFunction.entries.forEach { function ->
-            val storedKey = prefs.getInt("${function.name}_keycode", -1)
+            val storedKey = prefs.getInt("${prefix}_${function.name}_keycode", -1)
             if (storedKey == keyCode) {
                 found = true
             }
@@ -117,15 +118,15 @@ class KeyMapperAccessibilityService : AccessibilityService() {
         return found
     }
 
-    private fun handleAction(keyCode: Int, clickType: ClickType): Boolean {
+    private fun handleAction(keyCode: Int, clickType: ClickType, prefix: String): Boolean {
         val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
         val activePreset = prefs.getString("active_preset", "DEFAULT") ?: "DEFAULT"
         
-        Log.d("KeyMapper", "handleAction: keyCode=$keyCode, clickType=$clickType, activePreset=$activePreset")
+        Log.d("KeyMapper", "handleAction: keyCode=$keyCode, clickType=$clickType, prefix=$prefix, activePreset=$activePreset")
         
         val function = DeliveryFunction.entries.find { func ->
-            val mappedKey = prefs.getInt("${func.name}_keycode", -1)
-            val mappedClick = prefs.getString("${func.name}_clicktype", ClickType.SINGLE.name)
+            val mappedKey = prefs.getInt("${prefix}_${func.name}_keycode", -1)
+            val mappedClick = prefs.getString("${prefix}_${func.name}_clicktype", ClickType.SINGLE.name)
             mappedKey == keyCode && mappedClick == clickType.name
         }
         

@@ -6,12 +6,12 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.util.Log
 import android.view.KeyEvent
 import android.view.InputDevice
-import android.hardware.input.InputManager
 import android.view.accessibility.AccessibilityManager
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -72,8 +72,11 @@ class MainActivity : ComponentActivity() {
     private var selectedDeviceName by mutableStateOf("모든 장치 (전역 감시)")
     private var inputDevices by mutableStateOf<List<InputDeviceInfo>>(emptyList())
     private var showDevicePicker by mutableStateOf(false)
+    
+    // 매핑 변경 시 UI를 즉시 갱신하기 위한 상태
+    private var mappingVersion by mutableIntStateOf(0)
 
-    data class InputDeviceInfo(val name: String, val descriptor: String)
+    data class InputDeviceInfo(val name: String, val descriptor: String, val isConnected: Boolean = false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -116,6 +119,8 @@ class MainActivity : ComponentActivity() {
                             recordingFunction = recordingFunction,
                             recordingClickType = recordingClickType,
                             selectedDeviceName = selectedDeviceName,
+                            selectedDeviceDescriptor = selectedDeviceDescriptor,
+                            mappingVersion = mappingVersion,
                             isServiceRunning = isServiceRunning,
                             onDeviceClick = { showDevicePicker = true },
                             onStartService = {
@@ -125,9 +130,9 @@ class MainActivity : ComponentActivity() {
                                     })
                                     isServiceRunning = false
                                 } else {
-                                    val prefs = context.getSharedPreferences("mappings", Context.MODE_PRIVATE)
+                                    val prefs = getSharedPreferences("mappings", MODE_PRIVATE)
                                     val activePreset = prefs.getString("active_preset", "BAEMIN") ?: "BAEMIN"
-                                    loadPresetWithApp(activePreset)
+                                    loadPreset(activePreset)
                                     isServiceRunning = true
                                 }
                             },
@@ -164,7 +169,7 @@ class MainActivity : ComponentActivity() {
                                 onAppSelected = { pkgName ->
                                     saveCustomPackage(targetPresetForPicker!!, pkgName)
                                     showAppPicker = false
-                                    loadPresetWithApp(targetPresetForPicker!!)
+                                    loadPreset(targetPresetForPicker!!)
                                 }
                             )
                         }
@@ -207,22 +212,13 @@ class MainActivity : ComponentActivity() {
     private fun handleIntent(intent: Intent?) {
         val preset = intent?.getStringExtra("load_preset")
         if (preset != null) {
-            loadPresetWithApp(preset)
+            loadPreset(preset)
         }
     }
 
-    private fun loadPresetWithApp(presetName: String) {
-        val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
-        val packageName = prefs.getString("${presetName}_custom_pkg", Presets.getPackageName(presetName)) ?: ""
-        
-        val launchIntent = packageManager.getLaunchIntentForPackage(packageName)
-        
-        if (launchIntent == null) {
-            targetPresetForPicker = presetName
-            showAppPicker = true
-            Toast.makeText(this, "설치된 앱을 찾을 수 없어 앱 선택창을 띄웁니다.", Toast.LENGTH_SHORT).show()
-            return
-        }
+    private fun loadPreset(presetName: String) {
+        val prefs = getSharedPreferences("mappings", MODE_PRIVATE)
+        prefs.edit().putString("active_preset", presetName).apply()
 
         val presetList = when(presetName) {
             "BAEMIN" -> Presets.BAEMIN
@@ -236,9 +232,16 @@ class MainActivity : ComponentActivity() {
             action = FloatingWidgetService.ACTION_HIDE_PRESETS
         })
         
-        startActivity(launchIntent)
-        
+        // 앱 자동 실행 로직 제거됨
+
+        val prefix = selectedDeviceDescriptor ?: "GLOBAL"
         presetList.forEach { info ->
+            val keycode = prefs.getInt("${prefix}_${info.function.name}_keycode", -1)
+            val keyInfo = if (keycode != -1) {
+                val keyName = KeyEvent.keyCodeToString(keycode).replace("KEYCODE_", "")
+                "$keycode ($keyName)"
+            } else null
+
             val intent = Intent(this, FloatingWidgetService::class.java).apply {
                 action = FloatingWidgetService.ACTION_SHOW_WIDGET
                 putExtra("preset_name", presetName)
@@ -248,6 +251,7 @@ class MainActivity : ComponentActivity() {
                 putExtra("x", info.x)
                 putExtra("y", info.y)
                 putExtra("color", color)
+                if (keyInfo != null) putExtra("key_info", keyInfo)
             }
             startService(intent)
         }
@@ -256,20 +260,23 @@ class MainActivity : ComponentActivity() {
             action = FloatingWidgetService.ACTION_SHOW_WIDGET
             putExtra("is_settings", true)
         })
+        
+        mappingVersion++ // 프리셋 로드 시에도 UI 갱신
     }
 
     private fun saveCustomPackage(preset: String, pkgName: String) {
-        val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
+        val prefs = getSharedPreferences("mappings", MODE_PRIVATE)
         prefs.edit().putString("${preset}_custom_pkg", pkgName).apply()
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
         if (recordingFunction != null && recordingClickType != null) {
-            val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
+            val prefs = getSharedPreferences("mappings", MODE_PRIVATE)
+            val prefix = selectedDeviceDescriptor ?: "GLOBAL"
             
             // 다른 기능에서 이 키를 이미 매핑했는지 확인
             val conflict = DeliveryFunction.entries.find { 
-                prefs.getInt("${it.name}_keycode", -1) == keyCode 
+                prefs.getInt("${prefix}_${it.name}_keycode", -1) == keyCode 
             }
 
             if (conflict != null && conflict != recordingFunction) {
@@ -301,51 +308,84 @@ class MainActivity : ComponentActivity() {
             putExtra("keycode", keyCode)
         }
         startService(intent)
+        
+        mappingVersion++ // 매핑 저장 시 UI 갱신 트리거
     }
 
     private fun saveMapping(function: DeliveryFunction, clickType: ClickType, keyCode: Int) {
-        val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
+        val prefs = getSharedPreferences("mappings", MODE_PRIVATE)
         val editor = prefs.edit()
+        val prefix = selectedDeviceDescriptor ?: "GLOBAL"
         
         // 중요: 동일한 키와 '클릭 타입'이 모두 일치하는 경우에만 기존 기록을 삭제
         DeliveryFunction.entries.forEach { existingFunc ->
-            val storedKey = prefs.getInt("${existingFunc.name}_keycode", -1)
-            val storedType = prefs.getString("${existingFunc.name}_clicktype", "")
+            val storedKey = prefs.getInt("${prefix}_${existingFunc.name}_keycode", -1)
+            val storedType = prefs.getString("${prefix}_${existingFunc.name}_clicktype", "")
             
             if (storedKey == keyCode && storedType == clickType.name) {
-                editor.remove("${existingFunc.name}_keycode")
-                editor.remove("${existingFunc.name}_clicktype")
+                editor.remove("${prefix}_${existingFunc.name}_keycode")
+                editor.remove("${prefix}_${existingFunc.name}_clicktype")
                 Log.d("KeyMapper", "Removed duplicate mapping for ${existingFunc.name} ($storedType) using key $keyCode")
             }
         }
         
-        editor.putInt("${function.name}_keycode", keyCode)
-            .putString("${function.name}_clicktype", clickType.name)
+        editor.putInt("${prefix}_${function.name}_keycode", keyCode)
+            .putString("${prefix}_${function.name}_clicktype", clickType.name)
             .apply()
         
         Log.d("KeyMapper", "Saved new mapping: ${function.name} ($clickType) -> key $keyCode")
     }
 
     private fun refreshDeviceList() {
+        val prefs = getSharedPreferences("mappings", MODE_PRIVATE)
+        val historyJson = prefs.getString("device_history", "[]") ?: "[]"
+        
+        // 간단한 수동 파싱 (장치명|식별자 형태의 리스트)
+        val history = historyJson.removeSurrounding("[", "]")
+            .split(";;;")
+            .filter { it.isNotBlank() }
+            .map { 
+                val parts = it.trim().split("|||")
+                if (parts.size >= 2) InputDeviceInfo(parts[0], parts[1], false) else null
+            }.filterNotNull().toMutableList()
+
         val deviceIds = InputDevice.getDeviceIds()
-        val list = mutableListOf<InputDeviceInfo>()
+        val currentConnected = mutableListOf<InputDeviceInfo>()
         
         for (id in deviceIds) {
             val device = InputDevice.getDevice(id) ?: continue
-            // 외부 장치이면서 키보드/버튼 입력을 지원하는 경우
-            if (device.isExternal && (device.sources and InputDevice.SOURCE_KEYBOARD != 0)) {
-                list.add(InputDeviceInfo(device.name, device.descriptor))
+            val isExternalDevice = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                device.isExternal
+            } else {
+                !device.isVirtual
+            }
+            if (isExternalDevice && (device.sources and InputDevice.SOURCE_KEYBOARD != 0)) {
+                val info = InputDeviceInfo(device.name, device.descriptor, true)
+                currentConnected.add(info)
+                
+                // 히스토리에 없으면 추가, 있으면 연결 상태 업데이트
+                val index = history.indexOfFirst { it.descriptor == info.descriptor }
+                if (index == -1) {
+                    history.add(info)
+                } else {
+                    history[index] = info
+                }
             }
         }
-        inputDevices = list
+
+        // 히스토리 저장 (구분자 변경: ;;; 와 |||)
+        val newHistoryJson = history.joinToString(prefix = "[", postfix = "]", separator = ";;;") { "${it.name}|||${it.descriptor}" }
+        prefs.edit().putString("device_history", newHistoryJson).apply()
+
+        inputDevices = history.sortedByDescending { it.isConnected }
         
-        val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
         selectedDeviceDescriptor = prefs.getString("selected_device_descriptor", null)
-        selectedDeviceName = list.find { it.descriptor == selectedDeviceDescriptor }?.name ?: "모든 장치 (전역 감시)"
+        selectedDeviceName = history.find { it.descriptor == selectedDeviceDescriptor }?.name ?: "모든 장치 (전역 감시)"
+        mappingVersion++
     }
 
     private fun saveSelectedDevice(device: InputDeviceInfo?) {
-        val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
+        val prefs = getSharedPreferences("mappings", MODE_PRIVATE)
         if (device == null) {
             prefs.edit().remove("selected_device_descriptor").apply()
             selectedDeviceDescriptor = null
@@ -356,6 +396,7 @@ class MainActivity : ComponentActivity() {
             selectedDeviceName = device.name
         }
         Toast.makeText(this, "감시 장치 설정: $selectedDeviceName", Toast.LENGTH_SHORT).show()
+        mappingVersion++
     }
 }
 
@@ -545,6 +586,8 @@ fun MainScreen(
     recordingFunction: DeliveryFunction?,
     recordingClickType: ClickType?,
     selectedDeviceName: String,
+    selectedDeviceDescriptor: String?,
+    mappingVersion: Int,
     isServiceRunning: Boolean,
     onDeviceClick: () -> Unit,
     onStartService: () -> Unit,
@@ -585,12 +628,12 @@ fun MainScreen(
 
             HorizontalDivider()
 
-            Text("프리셋 로드 (앱 실행 포함)", style = MaterialTheme.typography.titleMedium)
+            Text("프리셋 로드 (위젯 표시 전용)", style = MaterialTheme.typography.titleMedium)
             
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                PresetButton("배민설정", "BAEMIN")
-                PresetButton("쿠팡설정", "COUPANG")
-                PresetButton("요기요설정", "YOGIYO")
+                PresetButton("배민프리셋", "BAEMIN")
+                PresetButton("쿠팡프리셋", "COUPANG")
+                PresetButton("요기요프리셋", "YOGIYO")
             }
 
             HorizontalDivider()
@@ -611,35 +654,50 @@ fun MainScreen(
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(function.label, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                                 
-                                val mappings = remember(function) {
-                                    listOf(ClickType.SINGLE, ClickType.DOUBLE).map { type ->
-                                        val k = prefs.getInt("${function.name}_keycode", -1)
-                                        val t = prefs.getString("${function.name}_clicktype", "")
-                                        if (k != -1 && t == type.name) "[$type: $k]" else null
-                                    }.filterNotNull().joinToString(", ")
+                                val mappings = remember(function, selectedDeviceDescriptor, mappingVersion) {
+                                    val prefix = selectedDeviceDescriptor ?: "GLOBAL"
+                                    listOf(ClickType.SINGLE, ClickType.DOUBLE).mapNotNull { type ->
+                                        val k = prefs.getInt("${prefix}_${function.name}_keycode", -1)
+                                        val t = prefs.getString("${prefix}_${function.name}_clicktype", "")
+                                        if (k != -1 && t == type.name) {
+                                            val keyName = KeyEvent.keyCodeToString(k).replace("KEYCODE_", "")
+                                            "${if(type == ClickType.SINGLE) "S" else "D"}:$k ($keyName)"
+                                        } else null
+                                    }.joinToString(" ")
                                 }
                                 if (mappings.isNotEmpty()) {
                                     Text(mappings, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
                             }
 
-                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 listOf(ClickType.SINGLE, ClickType.DOUBLE).forEach { type ->
                                     val isRecording = recordingFunction == function && recordingClickType == type
-                                    Button(
+                                    val prefix = selectedDeviceDescriptor ?: "GLOBAL"
+                                    val isMapped = remember(function, selectedDeviceDescriptor, type, mappingVersion) {
+                                        prefs.getInt("${prefix}_${function.name}_keycode", -1) != -1 && 
+                                        prefs.getString("${prefix}_${function.name}_clicktype", "") == type.name
+                                    }
+
+                                    Surface(
                                         onClick = { onStartRecording(function, type) },
-                                        colors = if (isRecording) ButtonDefaults.buttonColors(containerColor = Color.Red) else ButtonDefaults.buttonColors(),
-                                        modifier = Modifier.height(36.dp),
-                                        contentPadding = PaddingValues(horizontal = 8.dp)
+                                        modifier = Modifier.size(36.dp),
+                                        shape = CircleShape,
+                                        color = if (isRecording) Color.Red 
+                                                else if (isMapped) MaterialTheme.colorScheme.primaryContainer 
+                                                else MaterialTheme.colorScheme.surfaceVariant,
+                                        tonalElevation = 2.dp
                                     ) {
-                                        Text(
-                                            text = when(type) {
-                                                ClickType.SINGLE -> "단일"
-                                                ClickType.DOUBLE -> "더블"
-                                                else -> ""
-                                            },
-                                            fontSize = 11.sp
-                                        )
+                                        Box(contentAlignment = Alignment.Center) {
+                                            Text(
+                                                text = if (type == ClickType.SINGLE) "S" else "D",
+                                                fontSize = 13.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = if (isRecording) Color.White 
+                                                        else if (isMapped) MaterialTheme.colorScheme.onPrimaryContainer 
+                                                        else MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -708,8 +766,16 @@ fun DevicePickerDialog(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column {
+                            val statusColor = if (device.isConnected) Color(0xFF4CAF50) else Color.Gray
+                            val statusText = if (device.isConnected) "연결됨" else "연결 안 됨"
                             Text(text = device.name, style = MaterialTheme.typography.bodyLarge)
-                            Text(text = device.descriptor, style = MaterialTheme.typography.bodySmall)
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(modifier = Modifier.size(8.dp).background(statusColor, CircleShape))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(text = statusText, style = MaterialTheme.typography.bodySmall, color = statusColor)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(text = device.descriptor, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                            }
                         }
                     }
                 }
@@ -739,15 +805,6 @@ fun RowScope.PresetButton(name: String, presetName: String) {
     }
 }
 
-fun getIconFor(function: DeliveryFunction): String = when(function) {
-    DeliveryFunction.CALL_CHECK -> "✆"
-    DeliveryFunction.ACCEPT -> "Ⓐ"
-    DeliveryFunction.REJECT -> "Ⓡ"
-    DeliveryFunction.PATH -> "Ⓟ"
-    DeliveryFunction.ZOOM_IN -> "⊕"
-    DeliveryFunction.ZOOM_OUT -> "⊖"
-}
-
 fun isAccessibilityServiceEnabled(context: Context, service: Class<out AccessibilityService>): Boolean {
     val am = context.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager
     val enabledServices = am.getEnabledAccessibilityServiceList(AccessibilityServiceInfo.FEEDBACK_ALL_MASK)
@@ -765,6 +822,8 @@ fun MainScreenPreview() {
             recordingFunction = null,
             recordingClickType = null,
             selectedDeviceName = "테스트 장치",
+            selectedDeviceDescriptor = null,
+            mappingVersion = 0,
             isServiceRunning = false,
             onDeviceClick = {},
             onStartService = {},

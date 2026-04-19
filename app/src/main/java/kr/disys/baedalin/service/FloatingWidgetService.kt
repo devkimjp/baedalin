@@ -8,6 +8,7 @@ import android.graphics.PixelFormat
 import android.graphics.drawable.GradientDrawable
 import android.os.IBinder
 import android.view.Gravity
+import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
@@ -52,11 +53,12 @@ class FloatingWidgetService : Service() {
                 val targetY = intent.getIntExtra("y", -1)
                 val color = intent.getIntExtra("color", 0xAAFF0000.toInt())
                 val isSettings = intent.getBooleanExtra("is_settings", false)
+                val keyInfo = intent.getStringExtra("key_info")
 
                 if (isSettings) {
                     showSettingsWidget()
                 } else if (functionName != null) {
-                    showWidget(functionName, icon, tooltip, targetX, targetY, color)
+                    showWidget(functionName, icon, tooltip, targetX, targetY, color, keyInfo)
                 }
             }
             ACTION_HIDE_WIDGET -> {
@@ -67,9 +69,12 @@ class FloatingWidgetService : Service() {
             ACTION_HIDE_PRESETS -> hidePresets()
             ACTION_UPDATE_KEY -> {
                 val functionName = intent?.getStringExtra("function_name")
-                // 키 매핑 업데이트 시 필요하다면 위젯의 텍스트를 변경하는 등의 처리를 할 수 있습니다.
-                // 현재 위젯에는 키코드가 표시되지 않으므로 로깅만 수행합니다.
-                android.util.Log.d("FloatingWidget", "Key updated for $functionName")
+                val keycode = intent?.getIntExtra("keycode", -1) ?: -1
+                if (functionName != null && keycode != -1) {
+                    val keyName = KeyEvent.keyCodeToString(keycode).replace("KEYCODE_", "")
+                    val keyInfo = "$keycode ($keyName)"
+                    updateKeyInfo(functionName, keyInfo)
+                }
             }
         }
         
@@ -200,7 +205,7 @@ class FloatingWidgetService : Service() {
         overlayViews[functionName] = root
     }
 
-    private fun showWidget(functionName: String, icon: String, tooltip: String, targetX: Int, targetY: Int, color: Int) {
+    private fun showWidget(functionName: String, icon: String, tooltip: String, targetX: Int, targetY: Int, color: Int, keyInfo: String?) {
         hideWidget(functionName)
 
         val params = WindowManager.LayoutParams(
@@ -267,6 +272,17 @@ class FloatingWidgetService : Service() {
         }
         container.addView(circleView)
 
+        val keyInfoView = TextView(this).apply {
+            tag = "key_info"
+            text = keyInfo ?: ""
+            setTextColor(Color.YELLOW)
+            setBackgroundColor(0xCC000000.toInt())
+            setPadding(8, 2, 8, 2)
+            textSize = 9f
+            visibility = if (keyInfo.isNullOrEmpty()) View.GONE else View.VISIBLE
+        }
+        container.addView(keyInfoView)
+
         container.setOnTouchListener(object : View.OnTouchListener {
             private var initialX: Int = 0
             private var initialY: Int = 0
@@ -301,6 +317,18 @@ class FloatingWidgetService : Service() {
 
         windowManager.addView(container, params)
         overlayViews[functionName] = container
+    }
+
+    private fun updateKeyInfo(functionName: String, keyInfo: String) {
+        val container = overlayViews[functionName] as? LinearLayout ?: return
+        for (i in 0 until container.childCount) {
+            val child = container.getChildAt(i)
+            if (child is TextView && child.tag == "key_info") {
+                child.text = keyInfo
+                child.visibility = if (keyInfo.isEmpty()) View.GONE else View.VISIBLE
+                break
+            }
+        }
     }
 
     private fun hideWidget(functionName: String) {
