@@ -37,8 +37,17 @@ object Presets {
         PresetInfo(DeliveryFunction.PATH, "Ⓟ", "경로", 107, 1588)
     )
 
-    val COUPANG = BAEMIN // 동일하게 설정
-    val YOGIYO = BAEMIN   // 동일하게 설정
+    val COUPANG = listOf(
+        PresetInfo(DeliveryFunction.REJECT, "Ⓡ", "거절", 725, 2130),
+        PresetInfo(DeliveryFunction.ACCEPT, "Ⓐ", "수락", 252, 2134),
+        PresetInfo(DeliveryFunction.PATH, "Ⓟ", "경로", 107, 1588)
+    )
+
+    val YOGIYO = listOf(
+        PresetInfo(DeliveryFunction.REJECT, "Ⓡ", "거절", 725, 2130),
+        PresetInfo(DeliveryFunction.ACCEPT, "Ⓐ", "수락", 252, 2134),
+        PresetInfo(DeliveryFunction.PATH, "Ⓟ", "경로", 107, 1588)
+    )
     
     fun getPackageName(preset: String): String = when (preset) {
         "BAEMIN" -> "com.woowahan.bros"
