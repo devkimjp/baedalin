@@ -34,6 +34,89 @@ class FloatingWidgetService : Service() {
     private var isMoveMode: Boolean = false
     private var currentPreset: String = "DEFAULT"
 
+    private var customWidgetCounter = 1
+    private var lastAddedX = 200
+    private var lastAddedY = 250
+    private var isToolbarFolded = false
+    private var isPresetsHidden = false
+
+    private fun addNumberedWidget(prefs: android.content.SharedPreferences) {
+        val preset = currentPreset
+        val counterKey = "${preset}_custom_counter"
+        val counter = prefs.getInt(counterKey, 1)
+        val label = counter.toString()
+        val functionName = "${preset}_CUSTOM_$label"
+        val color = Presets.getColor(preset)
+        
+        // 1. 위젯 표시
+        showWidget(
+            functionName = functionName,
+            icon = label,
+            tooltip = "사용자 위젯 $label",
+            targetX = lastAddedX,
+            targetY = lastAddedY,
+            color = color
+        )
+        
+        // 2. 데이터 저장 (모드별 분리)
+        val listKey = "${preset}_active_custom_widgets"
+        val currentWidgets = prefs.getString(listKey, "") ?: ""
+        val newList = if (currentWidgets.isEmpty()) label else "$currentWidgets,$label"
+        
+        prefs.edit { 
+            putString(listKey, newList)
+            putInt(counterKey, counter + 1)
+            putInt("${preset}_last_added_x", lastAddedX + 60)
+            putInt("${preset}_last_added_y", lastAddedY + 60)
+        }
+
+        // 3. 좌표 및 카운터 갱신 (로컬 상태도 현재 모드에 맞춰 동기화)
+        lastAddedX += 60
+        lastAddedY += 60
+        if (lastAddedX > 800 || lastAddedY > 1200) {
+            lastAddedX = 200
+            lastAddedY = 250
+        }
+    }
+
+    private fun loadStoredCustomWidgets() {
+        val preset = currentPreset
+        val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
+        val listKey = "${preset}_active_custom_widgets"
+        val activeWidgets = prefs.getString(listKey, "") ?: ""
+        val color = Presets.getColor(preset)
+
+        if (activeWidgets.isNotEmpty()) {
+            activeWidgets.split(",").forEach { label ->
+                if (label.isNotBlank()) {
+                    showWidget(
+                        functionName = "${preset}_CUSTOM_$label",
+                        icon = label,
+                        tooltip = "사용자 위젯 $label",
+                        targetX = -1, // 저장된 좌표 사용
+                        targetY = -1,
+                        color = color
+                    )
+                }
+            }
+        }
+        
+        // 모드별 카운터 및 마지막 좌표 복구
+        lastAddedX = prefs.getInt("${preset}_last_added_x", 200)
+        lastAddedY = prefs.getInt("${preset}_last_added_y", 250)
+    }
+
+    private fun togglePresetsVisibility() {
+        isPresetsHidden = !isPresetsHidden
+        overlayViews.forEach { (name, view) ->
+            if (name != "SYSTEM_SETTINGS") {
+                view.visibility = if (isPresetsHidden) View.GONE else View.VISIBLE
+            }
+        }
+        val msg = if (isPresetsHidden) "위젯 숨기기" else "위젯 보이기"
+        Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+    }
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
@@ -50,47 +133,21 @@ class FloatingWidgetService : Service() {
                 val newPreset = intent.getStringExtra("preset_name")
                 if (newPreset != null) {
                     currentPreset = newPreset
-                    getSharedPreferences("mappings", Context.MODE_PRIVATE).edit {
-                        putString("active_preset", currentPreset)
-                    }
                 }
-
-                val functionName = intent.getStringExtra("function_name")
-                val icon = intent.getStringExtra("icon") ?: "?"
-                val tooltip = intent.getStringExtra("tooltip") ?: ""
-                val targetX = intent.getIntExtra("x", -1)
-                val targetY = intent.getIntExtra("y", -1)
-                val color = intent.getIntExtra("color", 0xAAFF0000.toInt())
-                val isSettings = intent.getBooleanExtra("is_settings", false)
-
-                if (isSettings) {
-                    showSettingsWidget()
-                } else if (functionName != null) {
-                    showWidget(functionName, icon, tooltip, targetX, targetY, color)
-                }
-            }
-            ACTION_LOAD_PRESET -> {
-                val presetName = intent.getStringExtra("preset_name")
-                if (presetName != null) {
-                    loadPresetInternal(presetName)
-                }
-            }
-            ACTION_HIDE_WIDGET -> {
-                val functionName = intent?.getStringExtra("function_name")
-                if (functionName != null) hideWidget(functionName)
+                showSettingsWidget()
+                loadStoredCustomWidgets() // 저장된 커스텀 위젯들도 복구
             }
             ACTION_HIDE_ALL -> hideAll()
-            ACTION_HIDE_PRESETS -> hidePresets()
+            ACTION_LOAD_PRESET -> {
+                val preset = intent.getStringExtra("preset_name") ?: "BAEMIN"
+                loadPresetInternal(preset)
+            }
         }
-        
         return START_NOT_STICKY
     }
 
     private fun loadPresetInternal(presetName: String) {
-        if (currentPreset == presetName && overlayViews.size > 1) {
-            // 이미 해당 프리셋이 활성화되어 있고 위젯들이 표시 중이면 로드 생략
-            return
-        }
+        if (currentPreset == presetName && overlayViews.size > 1) return
         val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
         prefs.edit { putString("active_preset", presetName) }
         currentPreset = presetName
@@ -108,14 +165,16 @@ class FloatingWidgetService : Service() {
         presetList.forEach { info ->
             showWidget(info.function.name, info.icon, info.tooltip, info.x, info.y, color)
         }
+
+        // 새 프리셋의 커스텀 위젯들 로드
+        loadStoredCustomWidgets()
     }
 
     private fun toggleMoveMode() {
         isMoveMode = !isMoveMode
-        val toastMsg = if (isMoveMode) "이동 모드 활성화 (위젯을 드래그하여 배치하세요)" else "LOCK 모드 활성화 (터치 투과)"
+        val toastMsg = if (isMoveMode) "이동 모드 활성화" else "LOCK 모드 활성화"
         Toast.makeText(this, toastMsg, Toast.LENGTH_SHORT).show()
 
-        // 전체 위젯의 터치 플래그 갱신 (설정 위젯은 제외)
         overlayViews.forEach { (name, view) ->
             if (name != "SYSTEM_SETTINGS") {
                 val params = view.layoutParams as WindowManager.LayoutParams
@@ -151,45 +210,24 @@ class FloatingWidgetService : Service() {
         }
         settingsParams = params
 
-        // 외부 컨테이너 (그림자 효과를 위해 패딩 포함)
         val root = FrameLayout(this).apply {
             setPadding(10, 10, 10, 10)
         }
 
-        // 세로형 툴바 배경 (캡슐 모양)
         val toolbarContainer = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(5, 15, 5, 15)
-            val shadowColor = 0x22000000.toInt()
+            setPadding(8, 8, 8, 8)
             val shape = GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE
                 cornerRadius = 60f
                 setColor(Color.WHITE)
-                // 얇은 테두리로 선명도 확보
                 setStroke(1, 0xFFDDDDDD.toInt())
             }
             background = shape
-            // Elevations / Shadows (API 21+)
             elevation = 8f
         }
 
-        val triggerPreset = { presetName: String ->
-            // 1. 위젯 프리셋 즉시 갱신
-            loadPresetInternal(presetName)
-
-            // 2. 해당 배달 앱 실행
-            val packageName = prefs.getString("${presetName}_custom_pkg", Presets.getPackageName(presetName)) ?: ""
-            val launchIntent = packageManager.getLaunchIntentForPackage(packageName)
-            if (launchIntent != null) {
-                launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                startActivity(launchIntent)
-            } else {
-                Toast.makeText(this, "앱을 찾을 수 없습니다: $packageName", Toast.LENGTH_SHORT).show()
-            }
-        }
-
-        // 통합 터치 리스너 정의 (드래그와 클릭 유연하게 지원)
         var initialTouchX = 0f
         var initialTouchY = 0f
         var offsetX = 0f
@@ -237,41 +275,46 @@ class FloatingWidgetService : Service() {
             }
         }
 
-        // 모든 구성 요소에 통합 터치 리스너 적용
         root.setOnTouchListener(unifiedTouchListener)
         toolbarContainer.setOnTouchListener(unifiedTouchListener)
 
-        val createToolbarIcon = { resId: Int, onClick: () -> Unit ->
+        val createToolbarIcon = { resId: Int, onClick: (View) -> Unit ->
             ImageView(this).apply {
                 setImageResource(resId)
                 scaleType = ImageView.ScaleType.FIT_CENTER
-                val size = 110
+                val size = 100 
                 layoutParams = LinearLayout.LayoutParams(size, size).apply {
-                    setMargins(0, 10, 0, 10)
+                    setMargins(0, 4, 0, 4) // Spacing 4px
                 }
-                setPadding(25, 25, 25, 25)
-                setOnClickListener { onClick() }
+                setPadding(20, 20, 20, 20)
+                setOnClickListener { v -> onClick(v) }
                 setOnTouchListener(unifiedTouchListener)
             }
         }
 
-        // 아이콘 생성 및 툴바 추가
-        val btnSettings = createToolbarIcon(R.drawable.ic_simple_settings) { 
-            Toast.makeText(this, "설정 메뉴", Toast.LENGTH_SHORT).show()
+        val btnAdd = createToolbarIcon(R.drawable.ic_toolbar_add) { _ -> addNumberedWidget(prefs) }
+        val btnMove = createToolbarIcon(R.drawable.ic_toolbar_lock) { _ -> toggleMoveMode() }
+        val btnHide = createToolbarIcon(R.drawable.ic_toolbar_hide) { _ -> togglePresetsVisibility() }
+        val btnClose = createToolbarIcon(R.drawable.ic_toolbar_close) { _ -> hideAll() }
+        val btnFold = createToolbarIcon(R.drawable.ic_toolbar_fold) { v -> 
+            isToolbarFolded = !isToolbarFolded
+            val visibility = if (isToolbarFolded) View.GONE else View.VISIBLE
+            btnAdd.visibility = visibility
+            btnMove.visibility = visibility
+            btnHide.visibility = visibility
+            btnClose.visibility = visibility
+            
+            val iconRes = if (isToolbarFolded) R.drawable.ic_toolbar_unfold else R.drawable.ic_toolbar_fold
+            (v as ImageView).setImageResource(iconRes)
         }
-        val btnBaemin = createToolbarIcon(R.drawable.ic_simple_baemin) { triggerPreset("BAEMIN") }
-        val btnCoupang = createToolbarIcon(R.drawable.ic_simple_coupang) { triggerPreset("COUPANG") }
-        val btnLock = createToolbarIcon(R.drawable.ic_simple_lock) { toggleMoveMode() }
-        val btnClose = createToolbarIcon(R.drawable.ic_simple_close) { hideAll() }
 
-        toolbarContainer.addView(btnSettings)
-        toolbarContainer.addView(btnBaemin)
-        toolbarContainer.addView(btnCoupang)
-        toolbarContainer.addView(btnLock)
+        toolbarContainer.addView(btnAdd)
+        toolbarContainer.addView(btnMove)
+        toolbarContainer.addView(btnHide)
         toolbarContainer.addView(btnClose)
+        toolbarContainer.addView(btnFold)
 
         root.addView(toolbarContainer)
-
         windowManager.addView(root, params)
         overlayViews[functionName] = root
     }

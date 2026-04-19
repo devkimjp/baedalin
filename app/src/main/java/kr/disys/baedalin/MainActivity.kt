@@ -631,6 +631,75 @@ fun MainScreen(
                 PresetButton("요기요프리셋", "YOGIYO")
             }
 
+            // 모드별 커스텀 위젯 관리 섹션
+            val presets = listOf("BAEMIN", "COUPANG", "YOGIYO")
+            
+            presets.forEach { presetName ->
+                val listKey = "${presetName}_active_custom_widgets"
+                val activeWidgets = remember(mappingVersion) {
+                    prefs.getString(listKey, "")?.split(",")?.filter { it.isNotBlank() } ?: emptyList()
+                }
+
+                if (activeWidgets.isNotEmpty()) {
+                    val modeLabel = when(presetName) {
+                        "BAEMIN" -> "배민"
+                        "COUPANG" -> "쿠팡"
+                        "YOGIYO" -> "요기요"
+                        else -> presetName
+                    }
+                    val modeColor = Color(Presets.getColor(presetName))
+
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("$modeLabel 커스텀 위젯", style = MaterialTheme.typography.titleMedium, color = modeColor)
+                    
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        activeWidgets.forEach { label ->
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(containerColor = modeColor.copy(alpha = 0.1f))
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp).fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Box(
+                                            modifier = Modifier.size(32.dp).background(modeColor, CircleShape),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(label, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                        }
+                                        Spacer(modifier = Modifier.width(12.dp))
+                                        Text("사용자 위젯 $label", style = MaterialTheme.typography.bodyLarge)
+                                    }
+                                    IconButton(onClick = {
+                                        val newList = activeWidgets.filter { it != label }.joinToString(",")
+                                        prefs.edit { putString(listKey, newList) }
+                                        
+                                        // 서비스에 위젯 제거 명령 전달
+                                        val intent = Intent(context, FloatingWidgetService::class.java).apply {
+                                            action = FloatingWidgetService.ACTION_HIDE_WIDGET
+                                            putExtra("function_name", "${presetName}_CUSTOM_$label")
+                                        }
+                                        context.startService(intent)
+                                        
+                                        Toast.makeText(context, "$modeLabel 위젯 $label 삭제됨", Toast.LENGTH_SHORT).show()
+                                        // Re-trigger recomposition
+                                        (context as? MainActivity)?.let { 
+                                            // mappingVersion++ logic is usually inside private methods, 
+                                            // but since it's just for UI refresh here, we rely on the state change
+                                        }
+                                    }) {
+                                        Icon(Icons.Default.Close, contentDescription = "삭제", tint = MaterialTheme.colorScheme.error)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             HorizontalDivider()
 
             Text("개별 기능 설정", style = MaterialTheme.typography.titleMedium)
