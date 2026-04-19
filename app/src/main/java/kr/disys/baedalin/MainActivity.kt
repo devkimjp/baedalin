@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -87,15 +88,14 @@ class MainActivity : ComponentActivity() {
                 val context = LocalContext.current
                 var isAccessibilityEnabled by remember { mutableStateOf(false) }
                 var isOverlayEnabled by remember { mutableStateOf(false) }
-                var isServiceRunning by remember { mutableStateOf(false) }
-
                 val lifecycleOwner = LocalLifecycleOwner.current
+                val isServiceRunning by FloatingWidgetService.isRunning.collectAsState()
+
                 DisposableEffect(lifecycleOwner) {
                     val observer = LifecycleEventObserver { _, event ->
                         if (event == Lifecycle.Event.ON_RESUME) {
                             isAccessibilityEnabled = isAccessibilityServiceEnabled(context, KeyMapperAccessibilityService::class.java)
                             isOverlayEnabled = Settings.canDrawOverlays(context)
-                            isServiceRunning = FloatingWidgetService.isRunning
                             Log.d("KeyMapper", "MainActivity ON_RESUME - Accessibility: $isAccessibilityEnabled, Overlay: $isOverlayEnabled, Service: $isServiceRunning")
                         }
                     }
@@ -128,12 +128,10 @@ class MainActivity : ComponentActivity() {
                                     startService(Intent(context, FloatingWidgetService::class.java).apply {
                                         action = FloatingWidgetService.ACTION_HIDE_ALL
                                     })
-                                    isServiceRunning = false
                                 } else {
                                     val prefs = getSharedPreferences("mappings", MODE_PRIVATE)
                                     val activePreset = prefs.getString("active_preset", "BAEMIN") ?: "BAEMIN"
                                     loadPreset(activePreset)
-                                    isServiceRunning = true
                                 }
                             },
                             onStartRecording = { func, type ->

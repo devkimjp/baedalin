@@ -31,7 +31,7 @@ class FloatingWidgetService : Service() {
     override fun onCreate() {
         super.onCreate()
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
-        isRunning = true
+        _isRunning.value = true
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -352,17 +352,18 @@ class FloatingWidgetService : Service() {
     private fun hideAll() {
         overlayViews.values.forEach { windowManager.removeView(it) }
         overlayViews.clear()
-        isRunning = false
+        _isRunning.value = false
         stopSelf()
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        isRunning = false
+        _isRunning.value = false
     }
 
     companion object {
-        var isRunning = false
+        private val _isRunning = kotlinx.coroutines.flow.MutableStateFlow(false)
+        val isRunning: kotlinx.coroutines.flow.StateFlow<Boolean> = _isRunning
         const val ACTION_SHOW_WIDGET = "ACTION_SHOW_WIDGET"
         const val ACTION_HIDE_WIDGET = "ACTION_HIDE_WIDGET"
         const val ACTION_HIDE_ALL = "ACTION_HIDE_ALL"

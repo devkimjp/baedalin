@@ -52,7 +52,7 @@ class KeyMapperAccessibilityService : AccessibilityService() {
     override fun onInterrupt() {}
 
     override fun onKeyEvent(event: KeyEvent): Boolean {
-        if (!FloatingWidgetService.isRunning || KeyRecordingState.isRecording) {
+        if (!FloatingWidgetService.isRunning.value || KeyRecordingState.isRecording) {
             return false
         }
         
