@@ -30,6 +30,8 @@ class FloatingWidgetService : Service() {
     private val overlayViews = mutableMapOf<String, View>()
     private val ICON_SIZE = 100 
     private var settingsParams: WindowManager.LayoutParams? = null
+
+    private var isMoveMode: Boolean = false
     private var currentPreset: String = "DEFAULT"
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -108,6 +110,25 @@ class FloatingWidgetService : Service() {
         }
     }
 
+    private fun toggleMoveMode() {
+        isMoveMode = !isMoveMode
+        val toastMsg = if (isMoveMode) "이동 모드 활성화 (위젯을 드래그하여 배치하세요)" else "LOCK 모드 활성화 (터치 투과)"
+        Toast.makeText(this, toastMsg, Toast.LENGTH_SHORT).show()
+
+        // 전체 위젯의 터치 플래그 갱신 (설정 위젯은 제외)
+        overlayViews.forEach { (name, view) ->
+            if (name != "SYSTEM_SETTINGS") {
+                val params = view.layoutParams as WindowManager.LayoutParams
+                if (isMoveMode) {
+                    params.flags = params.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE.inv()
+                } else {
+                    params.flags = params.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+                }
+                windowManager.updateViewLayout(view, params)
+            }
+        }
+    }
+
     private fun showSettingsWidget() {
         val functionName = "SYSTEM_SETTINGS"
         if (overlayViews.containsKey(functionName)) return
@@ -130,38 +151,31 @@ class FloatingWidgetService : Service() {
         }
         settingsParams = params
 
-        val root = FrameLayout(this)
-        val settingsIcon = TextView(this).apply {
-            text = "⚙"
-            setTextColor(Color.WHITE)
-            textSize = 24f
-            gravity = Gravity.CENTER
-            val shape = GradientDrawable().apply {
-                shape = GradientDrawable.OVAL
-                setColor(0xCC333333.toInt())
-            }
-            background = shape
-            layoutParams = FrameLayout.LayoutParams(120, 120)
+        // 외부 컨테이너 (그림자 효과를 위해 패딩 포함)
+        val root = FrameLayout(this).apply {
+            setPadding(10, 10, 10, 10)
         }
 
-        val menuLayout = LinearLayout(this).apply {
+        // 세로형 툴바 배경 (캡슐 모양)
+        val toolbarContainer = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(0xEE222222.toInt())
-            setPadding(20, 20, 20, 20)
-            visibility = View.GONE
-            val lp = FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.WRAP_CONTENT,
-                FrameLayout.LayoutParams.WRAP_CONTENT
-            )
-            lp.topMargin = 125
-            layoutParams = lp
+            gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(5, 15, 5, 15)
+            val shadowColor = 0x22000000.toInt()
+            val shape = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = 60f
+                setColor(Color.WHITE)
+                // 얇은 테두리로 선명도 확보
+                setStroke(1, 0xFFDDDDDD.toInt())
+            }
+            background = shape
+            // Elevations / Shadows (API 21+)
+            elevation = 8f
         }
 
         val triggerPreset = { presetName: String ->
-            menuLayout.visibility = View.GONE
-            windowManager.updateViewLayout(root, settingsParams!!)
-            
-            // 1. 위젯 프리셋 즉시 갱신 (MainActivity를 띄우지 않음)
+            // 1. 위젯 프리셋 즉시 갱신
             loadPresetInternal(presetName)
 
             // 2. 해당 배달 앱 실행
@@ -175,102 +189,89 @@ class FloatingWidgetService : Service() {
             }
         }
 
-        val createIconBtn = { resId: Int, presetName: String ->
-            ImageView(this).apply {
-                setImageResource(resId)
-                scaleType = ImageView.ScaleType.FIT_CENTER
-                val size = 120
-                layoutParams = LinearLayout.LayoutParams(size, size).apply {
-                    setMargins(10, 10, 10, 10)
-                }
-                setPadding(10, 10, 10, 10)
-                setOnClickListener { triggerPreset(presetName) }
-            }
-        }
+        // 통합 터치 리스너 정의 (드래그와 클릭 유연하게 지원)
+        var initialTouchX = 0f
+        var initialTouchY = 0f
+        var offsetX = 0f
+        var offsetY = 0f
+        var isMoved = false
 
-        val iconBaemin = createIconBtn(R.drawable.ic_baemin, "BAEMIN")
-        val iconCoupang = createIconBtn(R.drawable.ic_coupang_eats, "COUPANG")
-        val iconYogiyo = createIconBtn(R.drawable.ic_yogiyo, "YOGIYO")
-        
-        val btnClose = Button(this).apply { 
-            text = "OFF"
-            setTextColor(Color.WHITE)
-            textSize = 12f
-            setBackground(GradientDrawable().apply {
-                shape = GradientDrawable.OVAL
-                setColor(0xCCFF4444.toInt())
-            })
-            layoutParams = LinearLayout.LayoutParams(100, 100).apply {
-                gravity = Gravity.CENTER_HORIZONTAL
-                setMargins(0, 20, 0, 10)
-            }
-            setOnClickListener { hideAll() } 
-        }
-
-        menuLayout.apply {
-            val shape = GradientDrawable().apply {
-                shape = GradientDrawable.RECTANGLE
-                cornerRadius = 40f
-                setColor(0xCC222222.toInt())
-                setStroke(2, 0x44FFFFFF.toInt())
-            }
-            background = shape
-        }
-
-        menuLayout.addView(iconBaemin)
-        menuLayout.addView(iconCoupang)
-        menuLayout.addView(iconYogiyo)
-        menuLayout.addView(btnClose)
-
-        root.addView(menuLayout)
-        root.addView(settingsIcon)
-
-        settingsIcon.setOnTouchListener(object : View.OnTouchListener {
-            private var initialX: Int = 0
-            private var initialY: Int = 0
-            private var initialTouchX: Float = 0f
-            private var initialTouchY: Float = 0f
-            private var isMoved = false
-
+        val unifiedTouchListener = object : View.OnTouchListener {
             override fun onTouch(v: View, event: MotionEvent): Boolean {
-                val p = settingsParams ?: return false
+                val p = root.layoutParams as WindowManager.LayoutParams
                 when (event.action) {
                     MotionEvent.ACTION_DOWN -> {
-                        initialX = p.x
-                        initialY = p.y
                         initialTouchX = event.rawX
                         initialTouchY = event.rawY
+                        offsetX = event.rawX - p.x
+                        offsetY = event.rawY - p.y
                         isMoved = false
-                        return true
+                        return true 
                     }
                     MotionEvent.ACTION_MOVE -> {
-                        val dx = (event.rawX - initialTouchX).toInt()
-                        val dy = (event.rawY - initialTouchY).toInt()
+                        val dx = event.rawX - initialTouchX
+                        val dy = event.rawY - initialTouchY
                         if (Math.abs(dx) > 10 || Math.abs(dy) > 10) {
-                            p.x = initialX + dx
-                            p.y = initialY + dy
+                            p.x = (event.rawX - offsetX).toInt()
+                            p.y = (event.rawY - offsetY).toInt()
                             windowManager.updateViewLayout(root, p)
                             isMoved = true
                         }
                         return true
                     }
                     MotionEvent.ACTION_UP -> {
-                        if (!isMoved) {
-                            menuLayout.visibility = if (menuLayout.visibility == View.VISIBLE) View.GONE else View.VISIBLE
-                            windowManager.updateViewLayout(root, p)
-                        } else {
+                        if (isMoved) {
+                            settingsParams?.x = p.x
+                            settingsParams?.y = p.y
                             prefs.edit { 
                                 putInt("${functionName}_x", p.x)
                                 putInt("${functionName}_y", p.y)
                             }
+                        } else {
+                            v.performClick()
                         }
                         return true
                     }
                 }
                 return false
             }
-        })
-        
+        }
+
+        // 모든 구성 요소에 통합 터치 리스너 적용
+        root.setOnTouchListener(unifiedTouchListener)
+        toolbarContainer.setOnTouchListener(unifiedTouchListener)
+
+        val createToolbarIcon = { resId: Int, onClick: () -> Unit ->
+            ImageView(this).apply {
+                setImageResource(resId)
+                scaleType = ImageView.ScaleType.FIT_CENTER
+                val size = 110
+                layoutParams = LinearLayout.LayoutParams(size, size).apply {
+                    setMargins(0, 10, 0, 10)
+                }
+                setPadding(25, 25, 25, 25)
+                setOnClickListener { onClick() }
+                setOnTouchListener(unifiedTouchListener)
+            }
+        }
+
+        // 아이콘 생성 및 툴바 추가
+        val btnSettings = createToolbarIcon(R.drawable.ic_simple_settings) { 
+            Toast.makeText(this, "설정 메뉴", Toast.LENGTH_SHORT).show()
+        }
+        val btnBaemin = createToolbarIcon(R.drawable.ic_simple_baemin) { triggerPreset("BAEMIN") }
+        val btnCoupang = createToolbarIcon(R.drawable.ic_simple_coupang) { triggerPreset("COUPANG") }
+        val btnLock = createToolbarIcon(R.drawable.ic_simple_lock) { toggleMoveMode() }
+        val btnClose = createToolbarIcon(R.drawable.ic_simple_close) { hideAll() }
+
+        toolbarContainer.addView(btnSettings)
+        toolbarContainer.addView(btnBaemin)
+        toolbarContainer.addView(btnCoupang)
+        toolbarContainer.addView(btnLock)
+        toolbarContainer.addView(btnClose)
+
+        root.addView(toolbarContainer)
+
         windowManager.addView(root, params)
         overlayViews[functionName] = root
     }
@@ -282,7 +283,10 @@ class FloatingWidgetService : Service() {
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or 
+            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or 
+            WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
+            (if (isMoveMode) 0 else WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE),
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.START
@@ -343,29 +347,31 @@ class FloatingWidgetService : Service() {
         container.addView(circleView)
 
         container.setOnTouchListener(object : View.OnTouchListener {
-            private var initialX: Int = 0
-            private var initialY: Int = 0
-            private var initialTouchX: Float = 0f
-            private var initialTouchY: Float = 0f
+            private var dragInitialX = 0f
+            private var dragInitialY = 0f
+            private var dragOffsetX = 0f
+            private var dragOffsetY = 0f
 
             override fun onTouch(v: View, event: MotionEvent): Boolean {
+                if (!isMoveMode) return false
                 val p = container.layoutParams as WindowManager.LayoutParams
                 when (event.action) {
                     MotionEvent.ACTION_DOWN -> {
-                        initialX = p.x
-                        initialY = p.y
-                        initialTouchX = event.rawX
-                        initialTouchY = event.rawY
+                        dragInitialX = event.rawX
+                        dragInitialY = event.rawY
+                        dragOffsetX = event.rawX - p.x
+                        dragOffsetY = event.rawY - p.y
                         return true
                     }
                     MotionEvent.ACTION_MOVE -> {
-                        p.x = initialX + (event.rawX - initialTouchX).toInt()
-                        p.y = initialY + (event.rawY - initialTouchY).toInt()
-                        windowManager.updateViewLayout(container, p)
+                        if (Math.abs(event.rawX - dragInitialX) > 10 || Math.abs(event.rawY - dragInitialY) > 10) {
+                            p.x = (event.rawX - dragOffsetX).toInt()
+                            p.y = (event.rawY - dragOffsetY).toInt()
+                            windowManager.updateViewLayout(container, p)
+                        }
                         return true
                     }
                     MotionEvent.ACTION_UP -> {
-                        // 이동 완료 시 실시간 저장
                         prefs.edit { putInt(prefKeyX, p.x); putInt(prefKeyY, p.y) }
                         return true
                     }
