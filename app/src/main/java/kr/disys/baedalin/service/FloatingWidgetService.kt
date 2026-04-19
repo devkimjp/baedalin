@@ -40,6 +40,16 @@ class FloatingWidgetService : Service() {
     private var isToolbarFolded = false
     private var isPresetsHidden = false
 
+    // 툴바 버튼 참조 저장용
+    private var btnAddView: View? = null
+    private var btnMoveView: View? = null
+    private var btnHideView: View? = null
+    private var btnCloseView: View? = null
+    private var btnSaveView: View? = null
+    private var btnBaeminView: View? = null
+    private var btnCoupangView: View? = null
+    private var btnFoldView: ImageView? = null
+
     private fun addNumberedWidget(prefs: android.content.SharedPreferences) {
         val preset = currentPreset
         val counterKey = "${preset}_custom_counter"
@@ -107,14 +117,36 @@ class FloatingWidgetService : Service() {
     }
 
     private fun togglePresetsVisibility() {
-        isPresetsHidden = !isPresetsHidden
+        setPresetsVisibility(!isPresetsHidden)
+    }
+
+    private fun setPresetsVisibility(hidden: Boolean) {
+        isPresetsHidden = hidden
         overlayViews.forEach { (name, view) ->
             if (name != "SYSTEM_SETTINGS") {
                 view.visibility = if (isPresetsHidden) View.GONE else View.VISIBLE
             }
         }
-        val msg = if (isPresetsHidden) "위젯 숨기기" else "위젯 보이기"
-        Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+        
+        // 툴바의 눈 아이콘 상태 동기화
+        (btnHideView as? ImageView)?.let { 
+            it.setImageResource(if (isPresetsHidden) R.drawable.ic_toolbar_hide_off else R.drawable.ic_toolbar_hide)
+        }
+    }
+
+    private fun setToolbarFolded(folded: Boolean) {
+        isToolbarFolded = folded
+        val visibility = if (isToolbarFolded) View.GONE else View.VISIBLE
+        btnAddView?.visibility = visibility
+        btnMoveView?.visibility = visibility
+        btnHideView?.visibility = visibility
+        btnCloseView?.visibility = visibility
+        btnSaveView?.visibility = visibility
+        btnBaeminView?.visibility = visibility
+        btnCoupangView?.visibility = visibility
+        
+        val iconRes = if (isToolbarFolded) R.drawable.ic_toolbar_unfold else R.drawable.ic_toolbar_fold
+        btnFoldView?.setImageResource(iconRes)
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -138,6 +170,14 @@ class FloatingWidgetService : Service() {
                 loadStoredCustomWidgets() // 저장된 커스텀 위젯들도 복구
             }
             ACTION_HIDE_ALL -> hideAll()
+            ACTION_HIDE_PRESETS -> {
+                setPresetsVisibility(true)
+                setToolbarFolded(true)
+            }
+            ACTION_HIDE_WIDGET -> {
+                val name = intent.getStringExtra("function_name")
+                if (name != null) hideWidget(name)
+            }
             ACTION_LOAD_PRESET -> {
                 val preset = intent.getStringExtra("preset_name") ?: "BAEMIN"
                 loadPresetInternal(preset)
@@ -293,25 +333,53 @@ class FloatingWidgetService : Service() {
         }
 
         val btnAdd = createToolbarIcon(R.drawable.ic_toolbar_add) { _ -> addNumberedWidget(prefs) }
-        val btnMove = createToolbarIcon(R.drawable.ic_toolbar_lock) { _ -> toggleMoveMode() }
-        val btnHide = createToolbarIcon(R.drawable.ic_toolbar_hide) { _ -> togglePresetsVisibility() }
-        val btnClose = createToolbarIcon(R.drawable.ic_toolbar_close) { _ -> hideAll() }
-        val btnFold = createToolbarIcon(R.drawable.ic_toolbar_fold) { v -> 
-            isToolbarFolded = !isToolbarFolded
-            val visibility = if (isToolbarFolded) View.GONE else View.VISIBLE
-            btnAdd.visibility = visibility
-            btnMove.visibility = visibility
-            btnHide.visibility = visibility
-            btnClose.visibility = visibility
-            
-            val iconRes = if (isToolbarFolded) R.drawable.ic_toolbar_unfold else R.drawable.ic_toolbar_fold
-            (v as ImageView).setImageResource(iconRes)
+        val btnMove = createToolbarIcon(R.drawable.ic_toolbar_lock) { v -> 
+            toggleMoveMode() 
+            (v as ImageView).setImageResource(if (isMoveMode) R.drawable.ic_toolbar_unlock else R.drawable.ic_toolbar_lock)
         }
+        val btnHide = createToolbarIcon(R.drawable.ic_toolbar_hide) { v -> 
+            togglePresetsVisibility() 
+            (v as ImageView).setImageResource(if (isPresetsHidden) R.drawable.ic_toolbar_hide_off else R.drawable.ic_toolbar_hide)
+        }
+        val btnClose = createToolbarIcon(R.drawable.ic_toolbar_close) { _ -> hideAll() }
+        val btnSave = createToolbarIcon(R.drawable.ic_toolbar_save) { _ -> 
+            val intentAction = Intent(this@FloatingWidgetService, MainActivity::class.java).apply {
+                action = ACTION_UPDATE_UI
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+            }
+            startActivity(intentAction)
+            Toast.makeText(this@FloatingWidgetService, "변경사항이 저장되었습니다.", Toast.LENGTH_SHORT).show()
+        }
+        val btnBaemin = createToolbarIcon(R.drawable.ic_toolbar_baemin) { _ -> 
+            loadPresetInternal("BAEMIN")
+            setPresetsVisibility(false) 
+            Toast.makeText(this@FloatingWidgetService, "배민 모드 강제 활성화", Toast.LENGTH_SHORT).show()
+        }
+        val btnCoupang = createToolbarIcon(R.drawable.ic_toolbar_coupang) { _ -> 
+            loadPresetInternal("COUPANG")
+            setPresetsVisibility(false) 
+            Toast.makeText(this@FloatingWidgetService, "쿠팡 모드 강제 활성화", Toast.LENGTH_SHORT).show()
+        }
+        val btnFold = createToolbarIcon(R.drawable.ic_toolbar_fold) { v -> 
+            setToolbarFolded(!isToolbarFolded)
+        }
+
+        this.btnAddView = btnAdd
+        this.btnMoveView = btnMove
+        this.btnHideView = btnHide
+        this.btnCloseView = btnClose
+        this.btnSaveView = btnSave
+        this.btnBaeminView = btnBaemin
+        this.btnCoupangView = btnCoupang
+        this.btnFoldView = btnFold as ImageView
 
         toolbarContainer.addView(btnAdd)
         toolbarContainer.addView(btnMove)
         toolbarContainer.addView(btnHide)
         toolbarContainer.addView(btnClose)
+        toolbarContainer.addView(btnSave)
+        toolbarContainer.addView(btnBaemin)
+        toolbarContainer.addView(btnCoupang)
         toolbarContainer.addView(btnFold)
 
         root.addView(toolbarContainer)
@@ -394,12 +462,25 @@ class FloatingWidgetService : Service() {
             private var dragInitialY = 0f
             private var dragOffsetX = 0f
             private var dragOffsetY = 0f
+            private var lastClickTime = 0L
 
             override fun onTouch(v: View, event: MotionEvent): Boolean {
                 if (!isMoveMode) return false
                 val p = container.layoutParams as WindowManager.LayoutParams
                 when (event.action) {
                     MotionEvent.ACTION_DOWN -> {
+                        val currentTime = System.currentTimeMillis()
+                        if (currentTime - lastClickTime < 300) {
+                            // 더블 클릭 감지 -> MainActivity 실행 (레코딩 모드)
+                            val intent = Intent(this@FloatingWidgetService, MainActivity::class.java).apply {
+                                action = ACTION_START_RECORDING
+                                putExtra("function_name", functionName)
+                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+                            }
+                            startActivity(intent)
+                        }
+                        lastClickTime = currentTime
+
                         dragInitialX = event.rawX
                         dragInitialY = event.rawY
                         dragOffsetX = event.rawX - p.x
@@ -466,5 +547,7 @@ class FloatingWidgetService : Service() {
         const val ACTION_HIDE_PRESETS = "ACTION_HIDE_PRESETS"
         const val ACTION_LOAD_PRESET = "ACTION_LOAD_PRESET"
         const val ACTION_UPDATE_KEY = "ACTION_UPDATE_KEY"
+        const val ACTION_START_RECORDING = "ACTION_START_RECORDING"
+        const val ACTION_UPDATE_UI = "ACTION_UPDATE_UI"
     }
 }

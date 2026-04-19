@@ -96,6 +96,13 @@ class MainActivity : ComponentActivity() {
                             isAccessibilityEnabled = isAccessibilityServiceEnabled(context, KeyMapperAccessibilityService::class.java)
                             isOverlayEnabled = Settings.canDrawOverlays(context)
                             Log.d("KeyMapper", "MainActivity ON_RESUME - Accessibility: $isAccessibilityEnabled, Overlay: $isOverlayEnabled, Service: $isServiceRunning")
+                            
+                            // 메인 화면 활성화 시 툴바 외 위젯 숨김 강제
+                            if (isServiceRunning) {
+                                context.startService(Intent(context, FloatingWidgetService::class.java).apply {
+                                    action = FloatingWidgetService.ACTION_HIDE_PRESETS
+                                })
+                            }
                         }
                     }
                     lifecycleOwner.lifecycle.addObserver(observer)
@@ -133,6 +140,7 @@ class MainActivity : ComponentActivity() {
                                     loadPreset(activePreset)
                                 }
                             },
+                            onUpdateMappingVersion = { mappingVersion++ },
                             onStartRecording = { func, type ->
                                 if (recordingFunction == func && recordingClickType == type) {
                                     // 이미 해당 기능의 입력 모드라면 해제 (기존 키 유지)
@@ -210,6 +218,23 @@ class MainActivity : ComponentActivity() {
         val preset = intent?.getStringExtra("load_preset")
         if (preset != null) {
             loadPreset(preset)
+        }
+
+        // 더블 클릭 연동: 자동 레코딩 모드 시작
+        if (intent?.action == FloatingWidgetService.ACTION_START_RECORDING) {
+            val funcName = intent.getStringExtra("function_name")
+            val function = DeliveryFunction.entries.find { it.name == funcName }
+            if (function != null) {
+                recordingFunction = function
+                recordingClickType = ClickType.SINGLE
+                KeyRecordingState.isRecording = true
+                Toast.makeText(this, "${function.label}의 키 입력을 대기 중입니다...", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        // UI 갱신 요청 처리
+        if (intent?.action == FloatingWidgetService.ACTION_UPDATE_UI) {
+            mappingVersion++
         }
     }
 
@@ -586,6 +611,7 @@ fun MainScreen(
     isServiceRunning: Boolean,
     onDeviceClick: () -> Unit,
     onStartService: () -> Unit,
+    onUpdateMappingVersion: () -> Unit,
     onStartRecording: (DeliveryFunction, ClickType) -> Unit
 ) {
     val context = LocalContext.current
@@ -685,11 +711,7 @@ fun MainScreen(
                                         context.startService(intent)
                                         
                                         Toast.makeText(context, "$modeLabel 위젯 $label 삭제됨", Toast.LENGTH_SHORT).show()
-                                        // Re-trigger recomposition
-                                        (context as? MainActivity)?.let { 
-                                            // mappingVersion++ logic is usually inside private methods, 
-                                            // but since it's just for UI refresh here, we rely on the state change
-                                        }
+                                        onUpdateMappingVersion()
                                     }) {
                                         Icon(Icons.Default.Close, contentDescription = "삭제", tint = MaterialTheme.colorScheme.error)
                                     }
@@ -904,6 +926,7 @@ fun MainScreenPreview() {
             isServiceRunning = false,
             onDeviceClick = {},
             onStartService = {},
+            onUpdateMappingVersion = {},
             onStartRecording = { _, _ -> }
         )
     }
