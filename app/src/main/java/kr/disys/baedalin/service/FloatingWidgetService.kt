@@ -67,15 +67,6 @@ class FloatingWidgetService : Service() {
             }
             ACTION_HIDE_ALL -> hideAll()
             ACTION_HIDE_PRESETS -> hidePresets()
-            ACTION_UPDATE_KEY -> {
-                val functionName = intent?.getStringExtra("function_name")
-                val keycode = intent?.getIntExtra("keycode", -1) ?: -1
-                if (functionName != null && keycode != -1) {
-                    val keyName = KeyEvent.keyCodeToString(keycode).replace("KEYCODE_", "")
-                    val keyInfo = "$keycode ($keyName)"
-                    updateKeyInfo(functionName, keyInfo)
-                }
-            }
         }
         
         return START_NOT_STICKY
@@ -272,17 +263,6 @@ class FloatingWidgetService : Service() {
         }
         container.addView(circleView)
 
-        val keyInfoView = TextView(this).apply {
-            tag = "key_info"
-            text = keyInfo ?: ""
-            setTextColor(Color.YELLOW)
-            setBackgroundColor(0xCC000000.toInt())
-            setPadding(8, 2, 8, 2)
-            textSize = 9f
-            visibility = if (keyInfo.isNullOrEmpty()) View.GONE else View.VISIBLE
-        }
-        container.addView(keyInfoView)
-
         container.setOnTouchListener(object : View.OnTouchListener {
             private var initialX: Int = 0
             private var initialY: Int = 0
@@ -320,15 +300,7 @@ class FloatingWidgetService : Service() {
     }
 
     private fun updateKeyInfo(functionName: String, keyInfo: String) {
-        val container = overlayViews[functionName] as? LinearLayout ?: return
-        for (i in 0 until container.childCount) {
-            val child = container.getChildAt(i)
-            if (child is TextView && child.tag == "key_info") {
-                child.text = keyInfo
-                child.visibility = if (keyInfo.isEmpty()) View.GONE else View.VISIBLE
-                break
-            }
-        }
+        // No-op: Key info display is disabled
     }
 
     private fun hideWidget(functionName: String) {

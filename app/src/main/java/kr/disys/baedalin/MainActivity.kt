@@ -229,8 +229,6 @@ class MainActivity : ComponentActivity() {
         startService(Intent(this, FloatingWidgetService::class.java).apply {
             action = FloatingWidgetService.ACTION_HIDE_PRESETS
         })
-        
-        // 앱 자동 실행 로직 제거됨
 
         val prefix = selectedDeviceDescriptor ?: "GLOBAL"
         presetList.forEach { info ->
@@ -790,11 +788,24 @@ fun RowScope.PresetButton(name: String, presetName: String) {
     val context = LocalContext.current
     Button(
         onClick = {
+            // 1. 위젯 표시 (프리셋 로드)
             val intent = Intent(context, MainActivity::class.java).apply {
                 putExtra("load_preset", presetName)
                 addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
             }
             context.startActivity(intent)
+            
+            // 2. 해당 앱 실행 (서비스 시작과는 독립적으로 동작)
+            (context as? MainActivity)?.let { activity ->
+                val prefs = activity.getSharedPreferences("mappings", Context.MODE_PRIVATE)
+                val packageName = prefs.getString("${presetName}_custom_pkg", Presets.getPackageName(presetName)) ?: ""
+                val launchIntent = activity.packageManager.getLaunchIntentForPackage(packageName)
+                if (launchIntent != null) {
+                    activity.startActivity(launchIntent)
+                } else {
+                    Toast.makeText(activity, "앱을 찾을 수 없습니다: $packageName", Toast.LENGTH_SHORT).show()
+                }
+            }
         },
         modifier = Modifier.weight(1f),
         contentPadding = PaddingValues(horizontal = 4.dp)
