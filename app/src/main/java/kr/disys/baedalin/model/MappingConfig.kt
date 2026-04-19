@@ -46,7 +46,14 @@ object Presets {
         "YOGIYO" -> "kr.co.yogiyo.riderapp" // 요기요 라이더 패키지명 업데이트
         else -> ""
     }
-    
+
+    fun getPresetFromPackage(packageName: String): String? = when (packageName) {
+        "com.woowahan.bros" -> "BAEMIN"
+        "com.coupang.mobile.eats.courier" -> "COUPANG"
+        "kr.co.yogiyo.riderapp" -> "YOGIYO"
+        else -> null
+    }
+
     fun getColor(preset: String): Int = when (preset) {
         "BAEMIN" -> 0xAA2AC1BC.toInt()
         "COUPANG" -> 0xAA007AFF.toInt()

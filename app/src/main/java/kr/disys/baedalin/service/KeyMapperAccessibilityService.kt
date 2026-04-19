@@ -11,9 +11,11 @@ import android.view.KeyEvent
 import android.view.InputDevice
 import android.view.accessibility.AccessibilityEvent
 import android.util.Log
+import android.content.Intent
+import kr.disys.baedalin.KeyRecordingState
 import kr.disys.baedalin.model.ClickType
 import kr.disys.baedalin.model.DeliveryFunction
-import kr.disys.baedalin.KeyRecordingState
+import kr.disys.baedalin.model.Presets
 
 class KeyMapperAccessibilityService : AccessibilityService() {
 
@@ -47,6 +49,17 @@ class KeyMapperAccessibilityService : AccessibilityService() {
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
+        if (event?.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+            val packageName = event.packageName?.toString() ?: return
+            val preset = Presets.getPresetFromPackage(packageName)
+            if (preset != null && FloatingWidgetService.isRunning.value) {
+                val intent = Intent(this, FloatingWidgetService::class.java).apply {
+                    action = FloatingWidgetService.ACTION_LOAD_PRESET
+                    putExtra("preset_name", preset)
+                }
+                startService(intent)
+            }
+        }
     }
 
     override fun onInterrupt() {}

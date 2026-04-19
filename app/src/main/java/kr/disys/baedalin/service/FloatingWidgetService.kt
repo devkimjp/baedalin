@@ -67,6 +67,12 @@ class FloatingWidgetService : Service() {
                     showWidget(functionName, icon, tooltip, targetX, targetY, color)
                 }
             }
+            ACTION_LOAD_PRESET -> {
+                val presetName = intent.getStringExtra("preset_name")
+                if (presetName != null) {
+                    loadPresetInternal(presetName)
+                }
+            }
             ACTION_HIDE_WIDGET -> {
                 val functionName = intent?.getStringExtra("function_name")
                 if (functionName != null) hideWidget(functionName)
@@ -79,6 +85,10 @@ class FloatingWidgetService : Service() {
     }
 
     private fun loadPresetInternal(presetName: String) {
+        if (currentPreset == presetName && overlayViews.size > 1) {
+            // 이미 해당 프리셋이 활성화되어 있고 위젯들이 표시 중이면 로드 생략
+            return
+        }
         val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
         prefs.edit { putString("active_preset", presetName) }
         currentPreset = presetName
@@ -405,6 +415,7 @@ class FloatingWidgetService : Service() {
         const val ACTION_HIDE_WIDGET = "ACTION_HIDE_WIDGET"
         const val ACTION_HIDE_ALL = "ACTION_HIDE_ALL"
         const val ACTION_HIDE_PRESETS = "ACTION_HIDE_PRESETS"
+        const val ACTION_LOAD_PRESET = "ACTION_LOAD_PRESET"
         const val ACTION_UPDATE_KEY = "ACTION_UPDATE_KEY"
     }
 }
