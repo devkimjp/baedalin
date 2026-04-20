@@ -46,12 +46,17 @@ import androidx.core.graphics.drawable.toBitmap
 import androidx.core.net.toUri
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import androidx.compose.material.icons.filled.*
+import android.content.ClipData
+import android.content.ClipboardManager
 import kr.disys.baedalin.model.ClickType
 import kr.disys.baedalin.model.DeliveryFunction
 import kr.disys.baedalin.model.Presets
+import kr.disys.baedalin.model.ShareConfig
 import kr.disys.baedalin.service.FloatingWidgetService
 import kr.disys.baedalin.service.KeyMapperAccessibilityService
 import kr.disys.baedalin.ui.theme.BaedalinTheme
+import kr.disys.baedalin.util.ShareManager
 
 object KeyRecordingState {
     var isRecording: Boolean = false
@@ -723,6 +728,12 @@ fun MainScreen(
 
             HorizontalDivider()
 
+            SharingSection(
+                onUpdateMappingVersion = onUpdateMappingVersion
+            )
+
+            HorizontalDivider()
+
             Text("개별 기능 설정", style = MaterialTheme.typography.titleMedium)
 
             LazyColumn(
@@ -936,5 +947,162 @@ fun MainScreenPreview() {
 fun PermissionWizardPreview() {
     BaedalinTheme {
         PermissionWizard(isAccessibilityEnabled = false, isOverlayEnabled = true)
+    }
+}
+@Composable
+fun SharingSection(
+    onUpdateMappingVersion: () -> Unit
+) {
+    val context = LocalContext.current
+    var showShareDialog by remember { mutableStateOf(false) }
+    var showImportDialog by remember { mutableStateOf(false) }
+    var showConfirmDialog by remember { mutableStateOf<ShareConfig?>(null) }
+    var shareCode by remember { mutableStateOf("") }
+    var importCode by remember { mutableStateOf("") }
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("좌표 공유 및 백업", style = MaterialTheme.typography.titleMedium)
+        
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+            Button(
+                onClick = {
+                    shareCode = ShareManager.exportConfig(context)
+                    showShareDialog = true
+                },
+                modifier = Modifier.weight(1f),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary)
+            ) {
+                Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("설정 공유하기")
+            }
+            
+            Button(
+                onClick = {
+                    importCode = ""
+                    showImportDialog = true
+                },
+                modifier = Modifier.weight(1f),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
+            ) {
+                Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("설정 불러오기")
+            }
+        }
+    }
+
+    if (showShareDialog) {
+        AlertDialog(
+            onDismissRequest = { showShareDialog = false },
+            title = { Text("내 설정 공유 코드") },
+            text = {
+                Column {
+                    Text("아래 코드를 복사하여 다른 사용자에게 공유하거나 백업하세요.", fontSize = 12.sp)
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = shareCode,
+                        onValueChange = {},
+                        readOnly = true,
+                        modifier = Modifier.fillMaxWidth().height(100.dp),
+                        textStyle = MaterialTheme.typography.bodySmall
+                    )
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                    val clip = ClipData.newPlainText("BaedalinConfig", shareCode)
+                    clipboard.setPrimaryClip(clip)
+                    Toast.makeText(context, "코드가 클립보드에 복사되었습니다.", Toast.LENGTH_SHORT).show()
+                    showShareDialog = false
+                }) { Text("복사하기") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showShareDialog = false }) { Text("닫기") }
+            }
+        )
+    }
+
+    if (showImportDialog) {
+        AlertDialog(
+            onDismissRequest = { showImportDialog = false },
+            title = { Text("설정 불러오기") },
+            text = {
+                Column {
+                    Text("공유받은 코드를 아래에 붙여넣으세요.", fontSize = 12.sp)
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = importCode,
+                        onValueChange = { importCode = it },
+                        modifier = Modifier.fillMaxWidth().height(100.dp),
+                        placeholder = { Text("이곳에 붙여넣으세요", fontSize = 12.sp) }
+                    )
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    try {
+                        val json = String(android.util.Base64.decode(importCode, android.util.Base64.NO_WRAP))
+                        val config = ShareConfig.fromJSONString(json)
+                        showConfirmDialog = config
+                        showImportDialog = false
+                    } catch (e: Exception) {
+                        Toast.makeText(context, "유효하지 않은 코드입니다.", Toast.LENGTH_SHORT).show()
+                    }
+                }) { Text("확인") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showImportDialog = false }) { Text("취소") }
+            }
+        )
+    }
+
+    if (showConfirmDialog != null) {
+        val config = showConfirmDialog!!
+        val currentDevice = ShareManager.getDeviceInfo(context)
+        val isDifferent = config.deviceInfo.model != currentDevice.model || 
+                          config.deviceInfo.width != currentDevice.width || 
+                          config.deviceInfo.height != currentDevice.height
+
+        AlertDialog(
+            onDismissRequest = { showConfirmDialog = null },
+            title = { Text("불러오기 확인") },
+            text = {
+                Column {
+                    if (isDifferent) {
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        ) {
+                            Text(
+                                "주의: 공유된 설정의 기기와 현재 기기의 해상도가 다릅니다. 위젯 위치가 어긋날 수 있습니다.",
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.padding(8.dp)
+                            )
+                        }
+                    }
+                    Text("작성 기기: ${config.deviceInfo.model}", fontWeight = FontWeight.Bold)
+                    Text("해상도: ${config.deviceInfo.width}x${config.deviceInfo.height} (${config.deviceInfo.dpi}dpi)")
+                    Spacer(Modifier.height(8.dp))
+                    Text("위 설정을 현재 기기에 적용하시겠습니까?\n(기존 좌표 정보가 모두 덮어써집니다.)")
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    if (ShareManager.importConfig(context, importCode) != null) {
+                        Toast.makeText(context, "설정이 성공적으로 적용되었습니다.", Toast.LENGTH_SHORT).show()
+                        onUpdateMappingVersion()
+                    } else {
+                        Toast.makeText(context, "설정 적용에 실패했습니다.", Toast.LENGTH_SHORT).show()
+                    }
+                    showConfirmDialog = null
+                }) { Text("적용하기") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showConfirmDialog = null }) { Text("취소") }
+            }
+        )
     }
 }
