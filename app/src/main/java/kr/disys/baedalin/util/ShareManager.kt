@@ -92,11 +92,12 @@ object ShareManager {
     }
 
     /**
-     * 입력된 텍스트에서 실제 Base64 코드를 추출합니다.
+     * 입력된 텍스트에서 실제 Base64 코드를 스마트하게 추출합니다.
+     * 구분자(---) 사이의 텍스트를 우선적으로 찾으며, 모든 공백 및 줄바꿈을 제거하여 정제합니다.
      */
     fun extractBase64(input: String): String {
         val delimiter = "---"
-        return if (input.contains(delimiter)) {
+        val codePart = if (input.contains(delimiter)) {
             val parts = input.split(delimiter)
             if (parts.size >= 3) {
                 parts[1].trim()
@@ -106,6 +107,9 @@ object ShareManager {
         } else {
             input.trim()
         }
+        
+        // Base64 문자열 내부에 포함될 수 있는 모든 공백/줄바꿈 제거 (디코딩 오류 방지)
+        return codePart.replace("\\s".toRegex(), "")
     }
 
     fun importConfig(context: Context, rawInput: String): ShareConfig? {
