@@ -1026,9 +1026,17 @@ fun SharingSection(
                     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                     val clip = ClipData.newPlainText("BaedalinConfig", shareCode)
                     clipboard.setPrimaryClip(clip)
-                    Toast.makeText(context, "코드가 클립보드에 복사되었습니다.", Toast.LENGTH_SHORT).show()
+                    
+                    // 앱 선택 공유 기능 추가
+                    val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                        type = "text/plain"
+                        putExtra(Intent.EXTRA_TEXT, shareCode)
+                    }
+                    context.startActivity(Intent.createChooser(shareIntent, "설정 공유하기"))
+                    
+                    Toast.makeText(context, "코드가 복사되었으며 공유 창이 열립니다.", Toast.LENGTH_SHORT).show()
                     showShareDialog = false
-                }) { Text("복사하기") }
+                }) { Text("공유/복사하기") }
             },
             dismissButton = {
                 TextButton(onClick = { showShareDialog = false }) { Text("닫기") }
