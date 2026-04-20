@@ -993,11 +993,22 @@ fun SharingSection(
     }
 
     if (showShareDialog) {
+        val deviceInfo = ShareManager.getDeviceInfo(context)
         AlertDialog(
             onDismissRequest = { showShareDialog = false },
             title = { Text("내 설정 공유 코드") },
             text = {
                 Column {
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Text("현재 기기 정보", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                            Text("모델: ${deviceInfo.model}", fontWeight = FontWeight.Bold)
+                            Text("해상도: ${deviceInfo.width}x${deviceInfo.height} (${deviceInfo.dpi}dpi)")
+                        }
+                    }
                     Text("아래 코드를 복사하여 다른 사용자에게 공유하거나 백업하세요.", fontSize = 12.sp)
                     Spacer(Modifier.height(8.dp))
                     OutlinedTextField(
