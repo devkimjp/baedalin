@@ -345,7 +345,7 @@ class FloatingWidgetService : Service() {
             togglePresetsVisibility() 
             (v as ImageView).setImageResource(if (isPresetsHidden) R.drawable.ic_toolbar_hide_off else R.drawable.ic_toolbar_hide)
         }
-        val btnClose = createToolbarIcon(R.drawable.ic_toolbar_close) { _ -> hideAll() }
+        val btnClose = createToolbarIcon(R.drawable.ic_toolbar_power) { _ -> hideAll() }
         val btnSave = createToolbarIcon(R.drawable.ic_toolbar_save) { _ -> 
             val intentAction = Intent(this@FloatingWidgetService, MainActivity::class.java).apply {
                 action = ACTION_UPDATE_UI
@@ -377,13 +377,11 @@ class FloatingWidgetService : Service() {
         this.btnCoupangView = btnCoupang
         this.btnFoldView = btnFold as ImageView
 
-        toolbarContainer.addView(btnAdd)
+        // 요청하신 순서대로 아이콘 배치 (잠금, 배민, 쿠팡, 종료, 접기)
         toolbarContainer.addView(btnMove)
-        toolbarContainer.addView(btnHide)
-        toolbarContainer.addView(btnClose)
-        toolbarContainer.addView(btnSave)
         toolbarContainer.addView(btnBaemin)
         toolbarContainer.addView(btnCoupang)
+        toolbarContainer.addView(btnClose)
         toolbarContainer.addView(btnFold)
 
         root.addView(toolbarContainer)
