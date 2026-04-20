@@ -74,8 +74,43 @@ object ShareManager {
         return Base64.encodeToString(json.toByteArray(), Base64.NO_WRAP)
     }
 
-    fun importConfig(context: Context, base64Code: String): ShareConfig? {
+    /**
+     * 사용자가 읽을 수 있는 기기 정보와 함께 공유 메시지를 생성합니다.
+     */
+    fun createShareMessage(context: Context, base64Code: String): String {
+        val device = getDeviceInfo(context)
+        return """
+            [달마링 위젯 좌표 공유]
+            - 기기 모델: ${device.model}
+            - 화면 해상도: ${device.width}x${device.height} (${device.dpi}dpi)
+            
+            ※ 아래 코드 전체를 복사하여 앱의 [설정 불러오기]에 붙여넣으세요:
+            ---
+            $base64Code
+            ---
+        """.trimIndent()
+    }
+
+    /**
+     * 입력된 텍스트에서 실제 Base64 코드를 추출합니다.
+     */
+    fun extractBase64(input: String): String {
+        val delimiter = "---"
+        return if (input.contains(delimiter)) {
+            val parts = input.split(delimiter)
+            if (parts.size >= 3) {
+                parts[1].trim()
+            } else {
+                input.trim()
+            }
+        } else {
+            input.trim()
+        }
+    }
+
+    fun importConfig(context: Context, rawInput: String): ShareConfig? {
         return try {
+            val base64Code = extractBase64(rawInput)
             val json = String(Base64.decode(base64Code, Base64.NO_WRAP))
             val config = ShareConfig.fromJSONString(json)
             

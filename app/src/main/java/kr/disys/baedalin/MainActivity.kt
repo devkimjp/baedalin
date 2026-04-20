@@ -966,7 +966,8 @@ fun SharingSection(
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
             Button(
                 onClick = {
-                    shareCode = ShareManager.exportConfig(context)
+                    val code = ShareManager.exportConfig(context)
+                    shareCode = ShareManager.createShareMessage(context, code)
                     showShareDialog = true
                 },
                 modifier = Modifier.weight(1f),
@@ -1009,13 +1010,13 @@ fun SharingSection(
                             Text("해상도: ${deviceInfo.width}x${deviceInfo.height} (${deviceInfo.dpi}dpi)")
                         }
                     }
-                    Text("아래 코드를 복사하여 다른 사용자에게 공유하거나 백업하세요.", fontSize = 12.sp)
+                    Text("아래 안내 문구를 포함한 전체 내용을 복사하여 다른 고객님께 보내주세요. 받는 분은 이 전체 내용을 그대로 붙여넣기만 하면 됩니다.", fontSize = 12.sp)
                     Spacer(Modifier.height(8.dp))
                     OutlinedTextField(
                         value = shareCode,
                         onValueChange = {},
                         readOnly = true,
-                        modifier = Modifier.fillMaxWidth().height(100.dp),
+                        modifier = Modifier.fillMaxWidth().height(180.dp),
                         textStyle = MaterialTheme.typography.bodySmall
                     )
                 }
@@ -1054,12 +1055,13 @@ fun SharingSection(
             confirmButton = {
                 Button(onClick = {
                     try {
-                        val json = String(android.util.Base64.decode(importCode, android.util.Base64.NO_WRAP))
+                        val base64Code = ShareManager.extractBase64(importCode)
+                        val json = String(android.util.Base64.decode(base64Code, android.util.Base64.NO_WRAP))
                         val config = ShareConfig.fromJSONString(json)
                         showConfirmDialog = config
                         showImportDialog = false
                     } catch (e: Exception) {
-                        Toast.makeText(context, "유효하지 않은 코드입니다.", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "유효한 공유 코드를 찾을 수 없습니다.", Toast.LENGTH_SHORT).show()
                     }
                 }) { Text("확인") }
             },
