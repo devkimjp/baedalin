@@ -187,7 +187,7 @@ class FloatingWidgetService : Service() {
     }
 
     private fun loadPresetInternal(presetName: String) {
-        if (currentPreset == presetName && overlayViews.size > 1) return
+        if (currentPreset == presetName && overlayViews.size > 1 && !isPresetsHidden) return
         val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
         prefs.edit { putString("active_preset", presetName) }
         currentPreset = presetName
@@ -201,6 +201,10 @@ class FloatingWidgetService : Service() {
         val color = Presets.getColor(presetName)
 
         hidePresets()
+        
+        // 프리셋 로드 시 숨김/접힘 상태 해제
+        setPresetsVisibility(false)
+        setToolbarFolded(false)
 
         presetList.forEach { info ->
             showWidget(info.function.name, info.icon, info.tooltip, info.x, info.y, color)

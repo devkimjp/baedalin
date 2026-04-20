@@ -51,13 +51,30 @@ class KeyMapperAccessibilityService : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event?.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
             val packageName = event.packageName?.toString() ?: return
+            
+            // 1. 자신의 앱 패키지이거나 시스템 관련 패키지는 무시 (이때는 상태 변경 금지)
+            if (packageName == "kr.disys.baedalin" || 
+                packageName == "com.android.systemui" || 
+                packageName == "android") {
+                return
+            }
+
             val preset = Presets.getPresetFromPackage(packageName)
-            if (preset != null && FloatingWidgetService.isRunning.value) {
-                val intent = Intent(this, FloatingWidgetService::class.java).apply {
-                    action = FloatingWidgetService.ACTION_LOAD_PRESET
-                    putExtra("preset_name", preset)
+            
+            if (FloatingWidgetService.isRunning.value) {
+                if (preset != null) {
+                    val intent = Intent(this, FloatingWidgetService::class.java).apply {
+                        action = FloatingWidgetService.ACTION_LOAD_PRESET
+                        putExtra("preset_name", preset)
+                    }
+                    startService(intent)
+                } else {
+                    // 2. 확실히 다른 앱(유튜브, 홈 화면 등)으로 나갔을 때만 숨김
+                    val intent = Intent(this, FloatingWidgetService::class.java).apply {
+                        action = FloatingWidgetService.ACTION_HIDE_PRESETS
+                    }
+                    startService(intent)
                 }
-                startService(intent)
             }
         }
     }
