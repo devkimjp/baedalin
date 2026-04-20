@@ -654,11 +654,10 @@ fun MainScreen(
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                 PresetButton("배민프리셋", "BAEMIN")
                 PresetButton("쿠팡프리셋", "COUPANG")
-                PresetButton("요기요프리셋", "YOGIYO")
             }
 
             // 모드별 커스텀 위젯 관리 섹션
-            val presets = listOf("BAEMIN", "COUPANG", "YOGIYO")
+            val presets = listOf("BAEMIN", "COUPANG")
             
             presets.forEach { presetName ->
                 val listKey = "${presetName}_active_custom_widgets"
