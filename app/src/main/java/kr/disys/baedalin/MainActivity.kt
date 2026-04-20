@@ -476,7 +476,7 @@ fun PermissionWizard(
         
         PermissionItem(
             title = "접근성 서비스 활성화",
-            description = "리모컨 신호를 터치 동작으로 변환하기 위해 필요합니다.\n[배달인 키매퍼 서비스]를 '사용'으로 설정해주세요.",
+            description = "리모컨 신호를 터치 동작으로 변환하기 위해 필요합니다.\n[달마링 키매퍼 서비스]를 '사용'으로 설정해주세요.",
             isGranted = isAccessibilityEnabled,
             onClick = {
                 context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
@@ -619,7 +619,7 @@ fun MainScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(title = { Text("배달인 키매퍼") })
+            TopAppBar(title = { Text("달마링 키매퍼") })
         }
     ) { innerPadding ->
         Column(
