@@ -57,6 +57,7 @@ import kr.disys.baedalin.service.FloatingWidgetService
 import kr.disys.baedalin.service.KeyMapperAccessibilityService
 import kr.disys.baedalin.ui.theme.BaedalinTheme
 import kr.disys.baedalin.util.ShareManager
+import androidx.compose.ui.res.painterResource
 
 object KeyRecordingState {
     var isRecording: Boolean = false
@@ -621,6 +622,7 @@ fun MainScreen(
 ) {
     val context = LocalContext.current
     val prefs = context.getSharedPreferences("mappings", Context.MODE_PRIVATE)
+    var transparency by remember { mutableStateOf(prefs.getFloat("toolbar_transparency", 1.0f)) }
 
     Scaffold(
         topBar = {
@@ -657,8 +659,8 @@ fun MainScreen(
             Text("프리셋 로드 (위젯 표시 전용)", style = MaterialTheme.typography.titleMedium)
             
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                PresetButton("배민프리셋", "BAEMIN")
-                PresetButton("쿠팡프리셋", "COUPANG")
+                PresetButton("배민프리셋", "BAEMIN", R.drawable.ic_toolbar_baemin)
+                PresetButton("쿠팡프리셋", "COUPANG", R.drawable.ic_toolbar_coupang)
             }
 
             // 모드별 커스텀 위젯 관리 섹션
@@ -731,6 +733,26 @@ fun MainScreen(
             SharingSection(
                 onUpdateMappingVersion = onUpdateMappingVersion
             )
+
+            HorizontalDivider()
+
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("툴바 투명도: ${(transparency * 100).toInt()}%", style = MaterialTheme.typography.titleMedium)
+                Slider(
+                    value = transparency,
+                    onValueChange = { 
+                        transparency = it
+                        prefs.edit { putFloat("toolbar_transparency", it) }
+                        val intent = Intent(context, FloatingWidgetService::class.java).apply {
+                            action = FloatingWidgetService.ACTION_UPDATE_TRANSPARENCY
+                            putExtra("transparency", it)
+                        }
+                        context.startService(intent)
+                    },
+                    valueRange = 0.2f..1.0f,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
 
             HorizontalDivider()
 
@@ -884,7 +906,7 @@ fun DevicePickerDialog(
 }
 
 @Composable
-fun RowScope.PresetButton(name: String, presetName: String) {
+fun RowScope.PresetButton(name: String, presetName: String, iconResId: Int) {
     val context = LocalContext.current
     Button(
         onClick = {
@@ -908,8 +930,14 @@ fun RowScope.PresetButton(name: String, presetName: String) {
             }
         },
         modifier = Modifier.weight(1f),
-        contentPadding = PaddingValues(horizontal = 4.dp)
+        contentPadding = PaddingValues(horizontal = 8.dp)
     ) {
+        androidx.compose.foundation.Image(
+            painter = painterResource(id = iconResId),
+            contentDescription = null,
+            modifier = Modifier.size(24.dp)
+        )
+        Spacer(modifier = Modifier.width(8.dp))
         Text(name, style = MaterialTheme.typography.labelSmall)
     }
 }

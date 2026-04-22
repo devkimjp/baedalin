@@ -182,6 +182,13 @@ class FloatingWidgetService : Service() {
                 val preset = intent.getStringExtra("preset_name") ?: "BAEMIN"
                 loadPresetInternal(preset)
             }
+            ACTION_UPDATE_TRANSPARENCY -> {
+                val alpha = intent.getFloatExtra("transparency", 1.0f)
+                overlayViews["SYSTEM_SETTINGS"]?.let { root ->
+                    val toolbar = (root as? FrameLayout)?.getChildAt(0)
+                    toolbar?.alpha = alpha
+                }
+            }
         }
         return START_NOT_STICKY
     }
@@ -270,6 +277,10 @@ class FloatingWidgetService : Service() {
             }
             background = shape
             elevation = 8f
+            
+            // 저장된 투명도 적용
+            val alpha = prefs.getFloat("toolbar_transparency", 1.0f)
+            this.alpha = alpha
         }
 
         var initialTouchX = 0f
@@ -328,9 +339,9 @@ class FloatingWidgetService : Service() {
                 scaleType = ImageView.ScaleType.FIT_CENTER
                 val size = 100 
                 layoutParams = LinearLayout.LayoutParams(size, size).apply {
-                    setMargins(0, 4, 0, 4) // Spacing 4px
+                    setMargins(0, 0, 0, 0) // 간격을 좁히기 위해 마진 제거
                 }
-                setPadding(20, 20, 20, 20)
+                setPadding(15, 15, 15, 15) // 패딩도 약간 줄임
                 setOnClickListener { v -> onClick(v) }
                 setOnTouchListener(unifiedTouchListener)
             }
@@ -551,5 +562,6 @@ class FloatingWidgetService : Service() {
         const val ACTION_UPDATE_KEY = "ACTION_UPDATE_KEY"
         const val ACTION_START_RECORDING = "ACTION_START_RECORDING"
         const val ACTION_UPDATE_UI = "ACTION_UPDATE_UI"
+        const val ACTION_UPDATE_TRANSPARENCY = "ACTION_UPDATE_TRANSPARENCY"
     }
 }
