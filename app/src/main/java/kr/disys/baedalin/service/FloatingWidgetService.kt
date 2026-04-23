@@ -1,8 +1,10 @@
 package kr.disys.baedalin.service
 
+import android.util.Log
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.view.KeyEvent
 import android.graphics.Color
 import android.graphics.PixelFormat
 import android.graphics.drawable.GradientDrawable
@@ -128,6 +130,9 @@ class FloatingWidgetService : Service() {
             }
         }
         
+        // 프리셋이 숨겨지면 키 매핑 간섭도 중지
+        _isInterceptionActive.value = !isPresetsHidden
+        
         // 툴바의 눈 아이콘 상태 동기화
         (btnHideView as? ImageView)?.let { 
             it.setImageResource(if (isPresetsHidden) R.drawable.ic_toolbar_hide_off else R.drawable.ic_toolbar_hide)
@@ -159,6 +164,7 @@ class FloatingWidgetService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val action = intent?.action
+        Log.d("KeyMapper", "FloatingWidgetService.onStartCommand: action=$action")
         
         when (action) {
             ACTION_SHOW_WIDGET -> {
@@ -180,13 +186,28 @@ class FloatingWidgetService : Service() {
             }
             ACTION_LOAD_PRESET -> {
                 val preset = intent.getStringExtra("preset_name") ?: "BAEMIN"
+                Log.d("KeyMapper", "!!! RECEIVED ACTION_LOAD_PRESET for $preset !!!")
                 loadPresetInternal(preset)
+                showSettingsWidget() // 프리셋 로드 시 툴바도 함께 표시
+                _isMappingEnabled.value = true
+                _isInterceptionActive.value = true // 매핑 인터셉트 활성화
+                getSharedPreferences("mappings", Context.MODE_PRIVATE).edit(commit = true) { putBoolean("is_mapping_enabled", true) }
+                Log.d("KeyMapper", "is_mapping_enabled successfully set to TRUE")
             }
             ACTION_UPDATE_TRANSPARENCY -> {
                 val alpha = intent.getFloatExtra("transparency", 1.0f)
                 overlayViews["SYSTEM_SETTINGS"]?.let { root ->
                     val toolbar = (root as? FrameLayout)?.getChildAt(0)
                     toolbar?.alpha = alpha
+                }
+            }
+            ACTION_START_SERVICE_ONLY -> {
+                Log.d("KeyMapper", "Starting service: Toolbar only")
+                showSettingsWidget()
+                _isMappingEnabled.value = true
+                _isInterceptionActive.value = false // 초기에는 좌표 위젯 숨김
+                getSharedPreferences("mappings", Context.MODE_PRIVATE).edit(commit = true) { 
+                    putBoolean("is_mapping_enabled", true) 
                 }
             }
         }
@@ -213,8 +234,16 @@ class FloatingWidgetService : Service() {
         setPresetsVisibility(false)
         setToolbarFolded(false)
 
+        val prefix = prefs.getString("selected_device_descriptor", "GLOBAL") ?: "GLOBAL"
+        
         presetList.forEach { info ->
-            showWidget(info.function.name, info.icon, info.tooltip, info.x, info.y, color)
+            val keycode = prefs.getInt("${prefix}_${info.function.name}_keycode", -1)
+            val keyInfo = if (keycode != -1) {
+                val keyName = KeyEvent.keyCodeToString(keycode).replace("KEYCODE_", "")
+                "$keycode ($keyName)"
+            } else null
+            
+            showWidget(info.function.name, info.icon, info.tooltip, info.x, info.y, color, keyInfo)
         }
 
         // 새 프리셋의 커스텀 위젯들 로드
@@ -356,7 +385,13 @@ class FloatingWidgetService : Service() {
             togglePresetsVisibility() 
             (v as ImageView).setImageResource(if (isPresetsHidden) R.drawable.ic_toolbar_hide_off else R.drawable.ic_toolbar_hide)
         }
-        val btnClose = createToolbarIcon(R.drawable.ic_toolbar_power) { _ -> hideAll() }
+        val btnClose = createToolbarIcon(R.drawable.ic_toolbar_power) { _ -> 
+            Log.d("KeyMapper", "Toolbar Power Button clicked: Stopping service and updating Prefs")
+            getSharedPreferences("mappings", Context.MODE_PRIVATE).edit(commit = true) { 
+                putBoolean("is_mapping_enabled", false) 
+            }
+            hideAll() 
+        }
         val btnSave = createToolbarIcon(R.drawable.ic_toolbar_save) { _ -> 
             val intentAction = Intent(this@FloatingWidgetService, MainActivity::class.java).apply {
                 action = ACTION_UPDATE_UI
@@ -366,14 +401,18 @@ class FloatingWidgetService : Service() {
             Toast.makeText(this@FloatingWidgetService, "변경사항이 저장되었습니다.", Toast.LENGTH_SHORT).show()
         }
         val btnBaemin = createToolbarIcon(R.drawable.ic_toolbar_baemin) { _ -> 
+            val pkg = Presets.getPackageName("BAEMIN")
+            launchApp(pkg)
             loadPresetInternal("BAEMIN")
             setPresetsVisibility(false) 
-            Toast.makeText(this@FloatingWidgetService, "배민 모드 강제 활성화", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this@FloatingWidgetService, "배민 실행 및 프리셋 활성화", Toast.LENGTH_SHORT).show()
         }
         val btnCoupang = createToolbarIcon(R.drawable.ic_toolbar_coupang) { _ -> 
+            val pkg = Presets.getPackageName("COUPANG")
+            launchApp(pkg)
             loadPresetInternal("COUPANG")
             setPresetsVisibility(false) 
-            Toast.makeText(this@FloatingWidgetService, "쿠팡 모드 강제 활성화", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this@FloatingWidgetService, "쿠팡 실행 및 프리셋 활성화", Toast.LENGTH_SHORT).show()
         }
         val btnFold = createToolbarIcon(R.drawable.ic_toolbar_fold) { v -> 
             setToolbarFolded(!isToolbarFolded)
@@ -400,7 +439,7 @@ class FloatingWidgetService : Service() {
         overlayViews[functionName] = root
     }
 
-    private fun showWidget(functionName: String, icon: String, tooltip: String, targetX: Int, targetY: Int, color: Int) {
+    private fun showWidget(functionName: String, icon: String, tooltip: String, targetX: Int, targetY: Int, color: Int, keyInfo: String? = null) {
         hideWidget(functionName)
 
         val params = WindowManager.LayoutParams(
@@ -469,6 +508,18 @@ class FloatingWidgetService : Service() {
             layoutParams = LinearLayout.LayoutParams(ICON_SIZE, ICON_SIZE)
         }
         container.addView(circleView)
+
+        if (keyInfo != null) {
+            val keyView = TextView(this).apply {
+                text = keyInfo
+                setTextColor(Color.YELLOW)
+                setBackgroundColor(0xAA000000.toInt())
+                setPadding(4, 2, 4, 2)
+                textSize = 9f
+                gravity = Gravity.CENTER
+            }
+            container.addView(keyView)
+        }
 
         container.setOnTouchListener(object : View.OnTouchListener {
             private var dragInitialX = 0f
@@ -542,6 +593,10 @@ class FloatingWidgetService : Service() {
     private fun hideAll() {
         overlayViews.values.forEach { windowManager.removeView(it) }
         overlayViews.clear()
+        _isMappingEnabled.value = false
+        _isInterceptionActive.value = false
+        getSharedPreferences("mappings", Context.MODE_PRIVATE).edit(commit = true) { putBoolean("is_mapping_enabled", false) }
+        Log.d("KeyMapper", "Mapping DISABLED via hideAll")
         _isRunning.value = false
         stopSelf()
     }
@@ -554,6 +609,12 @@ class FloatingWidgetService : Service() {
     companion object {
         private val _isRunning = MutableStateFlow(false)
         val isRunning: StateFlow<Boolean> = _isRunning
+
+        private val _isMappingEnabled = MutableStateFlow(false)
+        val isMappingEnabled: StateFlow<Boolean> = _isMappingEnabled
+
+        private val _isInterceptionActive = MutableStateFlow(false)
+        val isInterceptionActive: StateFlow<Boolean> = _isInterceptionActive
         const val ACTION_SHOW_WIDGET = "ACTION_SHOW_WIDGET"
         const val ACTION_HIDE_WIDGET = "ACTION_HIDE_WIDGET"
         const val ACTION_HIDE_ALL = "ACTION_HIDE_ALL"
@@ -563,5 +624,21 @@ class FloatingWidgetService : Service() {
         const val ACTION_START_RECORDING = "ACTION_START_RECORDING"
         const val ACTION_UPDATE_UI = "ACTION_UPDATE_UI"
         const val ACTION_UPDATE_TRANSPARENCY = "ACTION_UPDATE_TRANSPARENCY"
+        const val ACTION_START_SERVICE_ONLY = "ACTION_START_SERVICE_ONLY"
+    }
+
+    private fun launchApp(packageName: String) {
+        val launchIntent = packageManager.getLaunchIntentForPackage(packageName)
+        if (launchIntent != null) {
+            launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            try {
+                startActivity(launchIntent)
+            } catch (e: Exception) {
+                Log.e("KeyMapper", "Failed to launch app: $packageName", e)
+                Toast.makeText(this, "앱을 실행할 수 없습니다.", Toast.LENGTH_SHORT).show()
+            }
+        } else {
+            Toast.makeText(this, "앱이 설치되어 있지 않습니다: $packageName", Toast.LENGTH_SHORT).show()
+        }
     }
 }

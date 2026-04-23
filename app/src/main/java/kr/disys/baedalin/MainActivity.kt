@@ -4,6 +4,7 @@ import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.content.Context
 import android.content.Intent
+import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -12,10 +13,14 @@ import android.util.Log
 import android.view.KeyEvent
 import android.view.InputDevice
 import android.view.accessibility.AccessibilityManager
+import android.hardware.input.InputManager
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -75,25 +80,56 @@ class MainActivity : ComponentActivity() {
     private var pendingKeyCode by mutableStateOf<Int?>(null)
 
     private var selectedDeviceDescriptor by mutableStateOf<String?>(null)
-    private var selectedDeviceName by mutableStateOf("모든 장치 (전역 감시)")
+    private var selectedDeviceName by mutableStateOf("장치를 추가하세요")
     private var inputDevices by mutableStateOf<List<InputDeviceInfo>>(emptyList())
     private var showDevicePicker by mutableStateOf(false)
     
     // 매핑 변경 시 UI를 즉시 갱신하기 위한 상태
     private var mappingVersion by mutableIntStateOf(0)
 
+    private val deviceListener = object : InputManager.InputDeviceListener {
+        override fun onInputDeviceAdded(deviceId: Int) { refreshDeviceList() }
+        override fun onInputDeviceRemoved(deviceId: Int) { refreshDeviceList() }
+        override fun onInputDeviceChanged(deviceId: Int) { refreshDeviceList() }
+    }
+
     data class InputDeviceInfo(val name: String, val descriptor: String, val isConnected: Boolean = false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val inputManager = getSystemService(Context.INPUT_SERVICE) as InputManager
+        inputManager.registerInputDeviceListener(deviceListener, null)
+        
+        // 앱 초기 실행 시 매핑 상태 초기화 (안전장치)
+        // 앱 시작 시 상태를 강제로 false로 초기화하던 코드를 제거하여 이전 상태를 유지하거나 서비스와의 동기화 충돌을 방지함
+        Log.d("KeyMapper", "MainActivity.onCreate - Resetting is_mapping_enabled to false")
+
         enableEdgeToEdge()
         handleIntent(intent)
         setContent {
             BaedalinTheme {
                 val context = LocalContext.current
+                val prefs = remember { context.getSharedPreferences("mappings", Context.MODE_PRIVATE) }
+                var isMappingEnabled by remember { 
+                    mutableStateOf(prefs.getBoolean("is_mapping_enabled", false)) 
+                }
+                
+                // SharedPreferences 변경 리스너 등록
+                DisposableEffect(prefs) {
+                    val listener = SharedPreferences.OnSharedPreferenceChangeListener { p, key ->
+                        if (key == "is_mapping_enabled") {
+                            isMappingEnabled = p.getBoolean("is_mapping_enabled", false)
+                        }
+                    }
+                    prefs.registerOnSharedPreferenceChangeListener(listener)
+                    onDispose {
+                        prefs.unregisterOnSharedPreferenceChangeListener(listener)
+                    }
+                }
+
                 var isAccessibilityEnabled by remember { mutableStateOf(false) }
                 var isOverlayEnabled by remember { mutableStateOf(false) }
-                val isServiceRunning by FloatingWidgetService.isRunning.collectAsState()
+                var shakeDeviceSelector by remember { mutableStateOf(0) }
 
                 val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
                 DisposableEffect(lifecycleOwner) {
@@ -101,18 +137,20 @@ class MainActivity : ComponentActivity() {
                         if (event == Lifecycle.Event.ON_RESUME) {
                             isAccessibilityEnabled = isAccessibilityServiceEnabled(context, KeyMapperAccessibilityService::class.java)
                             isOverlayEnabled = Settings.canDrawOverlays(context)
-                            Log.d("KeyMapper", "MainActivity ON_RESUME - Accessibility: $isAccessibilityEnabled, Overlay: $isOverlayEnabled, Service: $isServiceRunning")
+                            Log.d("KeyMapper", "MainActivity ON_RESUME - Accessibility: $isAccessibilityEnabled, Overlay: $isOverlayEnabled, Mapping: $isMappingEnabled")
                             
-                            // 메인 화면 활성화 시 툴바 외 위젯 숨김 강제
-                            if (isServiceRunning) {
+                            // 메인 화면 활성화 시 툴바 표시 동기화 (좌표 위젯은 숨김)
+                            if (isMappingEnabled) {
                                 context.startService(Intent(context, FloatingWidgetService::class.java).apply {
-                                    action = FloatingWidgetService.ACTION_HIDE_PRESETS
+                                    action = FloatingWidgetService.ACTION_START_SERVICE_ONLY
                                 })
                             }
                         }
                     }
                     lifecycleOwner.lifecycle.addObserver(observer)
-                    onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+                    onDispose { 
+                        lifecycleOwner.lifecycle.removeObserver(observer)
+                    }
                 }
 
                 if (!isAccessibilityEnabled || !isOverlayEnabled) {
@@ -126,38 +164,59 @@ class MainActivity : ComponentActivity() {
                         refreshDeviceList()
                     }
                     
-                    Box {
-                        MainScreen(
-                            recordingFunction = recordingFunction,
-                            recordingClickType = recordingClickType,
-                            selectedDeviceName = selectedDeviceName,
-                            selectedDeviceDescriptor = selectedDeviceDescriptor,
-                            mappingVersion = mappingVersion,
-                            isServiceRunning = isServiceRunning,
-                            onDeviceClick = { showDevicePicker = true },
-                            onStartService = {
-                                if (isServiceRunning) {
-                                    startService(Intent(context, FloatingWidgetService::class.java).apply {
-                                        action = FloatingWidgetService.ACTION_HIDE_ALL
-                                    })
-                                } else {
-                                    val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
-                                    val activePreset = prefs.getString("active_preset", "BAEMIN") ?: "BAEMIN"
-                                    loadPreset(activePreset)
-                                }
-                            },
-                            onUpdateMappingVersion = { mappingVersion++ },
+                        Box {
+                            MainScreen(
+                                recordingFunction = recordingFunction,
+                                recordingClickType = recordingClickType,
+                                selectedDeviceName = selectedDeviceName,
+                                selectedDeviceDescriptor = selectedDeviceDescriptor,
+                                mappingVersion = mappingVersion,
+                                isServiceRunning = isMappingEnabled,
+                                shakeTrigger = shakeDeviceSelector,
+                                onDeviceClick = { showDevicePicker = true },
+                                onStartService = {
+                                    val newStatus = !isMappingEnabled
+                                    Log.d("KeyMapper", "onStartService clicked: changing mapping state to $newStatus")
+                                    
+                                    // Prefs 즉시 업데이트 (접근성 서비스 동기화용)
+                                    context.getSharedPreferences("mappings", Context.MODE_PRIVATE).edit(commit = true) {
+                                        putBoolean("is_mapping_enabled", newStatus)
+                                    }
+
+                                    if (!newStatus) {
+                                        Log.d("KeyMapper", "Sending ACTION_HIDE_ALL to stop service")
+                                        context.startService(Intent(context, FloatingWidgetService::class.java).apply {
+                                            action = FloatingWidgetService.ACTION_HIDE_ALL
+                                        })
+                                    } else {
+                                        if (selectedDeviceDescriptor == null) {
+                                            Log.d("KeyMapper", "Start failed: No device selected")
+                                            shakeDeviceSelector++ // 깜빡임 효과 유발
+                                            Toast.makeText(context, "장치를 먼저 선택해주세요!", Toast.LENGTH_SHORT).show()
+                                            return@MainScreen
+                                        }
+                                        Log.d("KeyMapper", "Starting service via ACTION_START_SERVICE_ONLY")
+                                        context.startService(Intent(context, FloatingWidgetService::class.java).apply {
+                                            action = FloatingWidgetService.ACTION_START_SERVICE_ONLY
+                                        })
+                                        Toast.makeText(context, "배달 매핑 서비스가 시작되었습니다.", Toast.LENGTH_SHORT).show()
+                                    }
+                                },
+                                onUpdateMappingVersion = { mappingVersion++ },
                             onStartRecording = { func, type ->
+                                val prefs = context.getSharedPreferences("mappings", Context.MODE_PRIVATE)
                                 if (recordingFunction == func && recordingClickType == type) {
                                     // 이미 해당 기능의 입력 모드라면 해제 (기존 키 유지)
                                     recordingFunction = null
                                     recordingClickType = null
                                     KeyRecordingState.isRecording = false
+                                    prefs.edit { putBoolean("is_recording", false) }
                                     Toast.makeText(context, "키 입력 모드가 해제되었습니다.", Toast.LENGTH_SHORT).show()
                                 } else {
                                     recordingFunction = func
                                     recordingClickType = type
                                     KeyRecordingState.isRecording = true
+                                    prefs.edit { putBoolean("is_recording", true) }
                                     Toast.makeText(context, "${func.label}의 키 입력을 대기 중입니다...", Toast.LENGTH_SHORT).show()
                                 }
                             }
@@ -166,6 +225,7 @@ class MainActivity : ComponentActivity() {
                         if (showDevicePicker) {
                             DevicePickerDialog(
                                 devices = inputDevices,
+                                selectedDescriptor = selectedDeviceDescriptor,
                                 onDismiss = { showDevicePicker = false },
                                 onDeviceSelected = { device ->
                                     saveSelectedDevice(device)
@@ -190,6 +250,7 @@ class MainActivity : ComponentActivity() {
                                 onDismissRequest = { 
                                     conflictFunction = null
                                     KeyRecordingState.isRecording = false
+                                    getSharedPreferences("mappings", Context.MODE_PRIVATE).edit { putBoolean("is_recording", false) }
                                 },
                                 title = { Text("키 중복 확인") },
                                 text = { Text("'${conflictFunction?.label}' 기능에 이미 설정된 키입니다.\n현재 기능으로 변경하시겠습니까?") },
@@ -205,6 +266,7 @@ class MainActivity : ComponentActivity() {
                                         recordingFunction = null
                                         recordingClickType = null
                                         KeyRecordingState.isRecording = false
+                                        getSharedPreferences("mappings", Context.MODE_PRIVATE).edit { putBoolean("is_recording", false) }
                                     }) { Text("취소") }
                                 }
                             )
@@ -234,6 +296,7 @@ class MainActivity : ComponentActivity() {
                 recordingFunction = function
                 recordingClickType = ClickType.SINGLE
                 KeyRecordingState.isRecording = true
+                getSharedPreferences("mappings", Context.MODE_PRIVATE).edit { putBoolean("is_recording", true) }
                 Toast.makeText(this, "${function.label}의 키 입력을 대기 중입니다...", Toast.LENGTH_SHORT).show()
             }
         }
@@ -242,52 +305,40 @@ class MainActivity : ComponentActivity() {
         if (intent?.action == FloatingWidgetService.ACTION_UPDATE_UI) {
             mappingVersion++
         }
+
+        // 접근성 서비스로부터 전달받은 레코딩된 키 처리
+        if (intent?.action == "ACTION_KEY_RECORDED") {
+            val keyCode = intent.getIntExtra("keycode", -1)
+            Log.d("KeyMapper", "Received ACTION_KEY_RECORDED: $keyCode, func=$recordingFunction")
+            if (keyCode != -1 && recordingFunction != null && recordingClickType != null) {
+                val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
+                val prefix = selectedDeviceDescriptor ?: "GLOBAL"
+                
+                val conflict = DeliveryFunction.entries.find { 
+                    prefs.getInt("${prefix}_${it.name}_keycode", -1) == keyCode 
+                }
+
+                if (conflict != null && conflict != recordingFunction) {
+                    conflictFunction = conflict
+                    pendingKeyCode = keyCode
+                } else {
+                    executeSaveMapping(recordingFunction!!, recordingClickType!!, keyCode)
+                }
+            }
+        }
     }
 
     private fun loadPreset(presetName: String) {
         val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
         prefs.edit { putString("active_preset", presetName) }
 
-        val presetList = when(presetName) {
-            "BAEMIN" -> Presets.BAEMIN
-            "COUPANG" -> Presets.COUPANG
-            "YOGIYO" -> Presets.YOGIYO
-            else -> Presets.BAEMIN
-        }
-        val color = Presets.getColor(presetName)
-
+        // 서비스에 프리셋 로드 명령 전달 (서비스 내부에서 모든 위젯 표시 및 상태 변경 처리)
         startService(Intent(this, FloatingWidgetService::class.java).apply {
-            action = FloatingWidgetService.ACTION_HIDE_PRESETS
-        })
-
-        val prefix = selectedDeviceDescriptor ?: "GLOBAL"
-        presetList.forEach { info ->
-            val keycode = prefs.getInt("${prefix}_${info.function.name}_keycode", -1)
-            val keyInfo = if (keycode != -1) {
-                val keyName = KeyEvent.keyCodeToString(keycode).replace("KEYCODE_", "")
-                "$keycode ($keyName)"
-            } else null
-
-            val intent = Intent(this, FloatingWidgetService::class.java).apply {
-                action = FloatingWidgetService.ACTION_SHOW_WIDGET
-                putExtra("preset_name", presetName)
-                putExtra("function_name", info.function.name)
-                putExtra("icon", info.icon)
-                putExtra("tooltip", info.tooltip)
-                putExtra("x", info.x)
-                putExtra("y", info.y)
-                putExtra("color", color)
-                if (keyInfo != null) putExtra("key_info", keyInfo)
-            }
-            startService(intent)
-        }
-        
-        startService(Intent(this, FloatingWidgetService::class.java).apply {
-            action = FloatingWidgetService.ACTION_SHOW_WIDGET
-            putExtra("is_settings", true)
+            action = FloatingWidgetService.ACTION_LOAD_PRESET
+            putExtra("preset_name", presetName)
         })
         
-        mappingVersion++ // 프리셋 로드 시에도 UI 갱신
+        mappingVersion++ // UI 갱신 트리거
     }
 
     private fun saveCustomPackage(preset: String, pkgName: String) {
@@ -295,7 +346,14 @@ class MainActivity : ComponentActivity() {
         prefs.edit { putString("${preset}_custom_pkg", pkgName) }
     }
 
+    override fun onDestroy() {
+        val inputManager = getSystemService(Context.INPUT_SERVICE) as InputManager
+        inputManager.unregisterInputDeviceListener(deviceListener)
+        super.onDestroy()
+    }
+
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
+        Log.d("KeyMapper", "MainActivity.onKeyDown: keyCode=$keyCode, isRecording=${recordingFunction != null}")
         if (recordingFunction != null && recordingClickType != null) {
             val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
             val prefix = selectedDeviceDescriptor ?: "GLOBAL"
@@ -316,7 +374,7 @@ class MainActivity : ComponentActivity() {
             executeSaveMapping(recordingFunction!!, recordingClickType!!, keyCode)
             return true
         }
-        return super.onKeyDown(keyCode, event)
+        return false
     }
 
     private fun executeSaveMapping(func: DeliveryFunction, type: ClickType, keyCode: Int) {
@@ -327,6 +385,7 @@ class MainActivity : ComponentActivity() {
         recordingFunction = null
         recordingClickType = null
         KeyRecordingState.isRecording = false
+        getSharedPreferences("mappings", Context.MODE_PRIVATE).edit { putBoolean("is_recording", false) }
 
         val intent = Intent(this, FloatingWidgetService::class.java).apply {
             action = FloatingWidgetService.ACTION_UPDATE_KEY
@@ -406,7 +465,7 @@ class MainActivity : ComponentActivity() {
         inputDevices = history.sortedByDescending { it.isConnected }
         
         selectedDeviceDescriptor = prefs.getString("selected_device_descriptor", null)
-        selectedDeviceName = history.find { it.descriptor == selectedDeviceDescriptor }?.name ?: "모든 장치 (전역 감시)"
+        selectedDeviceName = history.find { it.descriptor == selectedDeviceDescriptor }?.name ?: "장치를 추가하세요"
         mappingVersion++
     }
 
@@ -415,7 +474,7 @@ class MainActivity : ComponentActivity() {
         if (device == null) {
             prefs.edit { remove("selected_device_descriptor") }
             selectedDeviceDescriptor = null
-            selectedDeviceName = "모든 장치 (전역 감시)"
+            selectedDeviceName = "장치를 추가하세요"
         } else {
             prefs.edit { putString("selected_device_descriptor", device.descriptor) }
             selectedDeviceDescriptor = device.descriptor
@@ -615,6 +674,7 @@ fun MainScreen(
     selectedDeviceDescriptor: String?,
     mappingVersion: Int,
     isServiceRunning: Boolean,
+    shakeTrigger: Int,
     onDeviceClick: () -> Unit,
     onStartService: () -> Unit,
     onUpdateMappingVersion: () -> Unit,
@@ -623,6 +683,21 @@ fun MainScreen(
     val context = LocalContext.current
     val prefs = context.getSharedPreferences("mappings", Context.MODE_PRIVATE)
     var transparency by remember { mutableStateOf(prefs.getFloat("toolbar_transparency", 1.0f)) }
+
+    // 장치 선택 강조 애니메이션 (깜빡임)
+    val shakeColor by animateColorAsState(
+        targetValue = if (shakeTrigger > 0 && shakeTrigger % 2 != 0) Color.Red.copy(alpha = 0.3f) 
+                     else MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f),
+        animationSpec = repeatable(
+            iterations = 3,
+            animation = tween(durationMillis = 200),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "shakeColor"
+    )
+
+    // 실제 깜빡임을 위해 shakeTrigger가 변경될 때마다 애니메이션을 리셋하거나 특정 로직 수행 가능
+    // 여기서는 단순 색상 변화로 구현
 
     Scaffold(
         topBar = {
@@ -639,7 +714,8 @@ fun MainScreen(
             // 장치 선택 섹션
             Card(
                 modifier = Modifier.fillMaxWidth().clickable { onDeviceClick() },
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f))
+                colors = CardDefaults.cardColors(containerColor = if (shakeTrigger > 0) shakeColor else MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)),
+                border = if (shakeTrigger > 0 && shakeTrigger % 2 != 0) BorderStroke(2.dp, Color.Red) else null
             ) {
                 Row(
                     modifier = Modifier.padding(12.dp).fillMaxWidth(),
@@ -799,11 +875,18 @@ fun MainScreen(
 
                                     Surface(
                                         onClick = { onStartRecording(function, type) },
+                                        enabled = !isServiceRunning, // 실제 배달 모드일 때만 비활성화
                                         modifier = Modifier.size(36.dp),
                                         shape = CircleShape,
                                         color = if (isRecording) Color.Red 
-                                                else if (isMapped) MaterialTheme.colorScheme.primaryContainer 
-                                                else MaterialTheme.colorScheme.surfaceVariant,
+                                                else if (isMapped) {
+                                                    if (isServiceRunning) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                                                    else MaterialTheme.colorScheme.primaryContainer
+                                                }
+                                                else {
+                                                    if (isServiceRunning) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                                                    else MaterialTheme.colorScheme.surfaceVariant
+                                                },
                                         tonalElevation = 2.dp
                                     ) {
                                         Box(contentAlignment = Alignment.Center) {
@@ -855,6 +938,7 @@ fun MainScreen(
 @Composable
 fun DevicePickerDialog(
     devices: List<MainActivity.InputDeviceInfo>,
+    selectedDescriptor: String?,
     onDismiss: () -> Unit,
     onDeviceSelected: (MainActivity.InputDeviceInfo?) -> Unit
 ) {
@@ -863,37 +947,44 @@ fun DevicePickerDialog(
         title = { Text("입력 장치 선택") },
         text = {
             LazyColumn {
-                item {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onDeviceSelected(null) }
-                            .padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("모든 장치 (전역 감시)", style = MaterialTheme.typography.bodyLarge)
-                    }
-                    HorizontalDivider()
-                }
                 items(devices) { device ->
+                    val isSelected = device.descriptor == selectedDescriptor
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable { onDeviceSelected(device) }
                             .padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Column {
+                        Column(modifier = Modifier.weight(1f)) {
                             val statusColor = if (device.isConnected) Color(0xFF4CAF50) else Color.Gray
-                            val statusText = if (device.isConnected) "연결됨" else "연결 안 됨"
-                            Text(text = device.name, style = MaterialTheme.typography.bodyLarge)
+                            val statusText = when {
+                                isSelected && device.isConnected -> "사용 중 (연결됨)"
+                                isSelected && !device.isConnected -> "연결 대기 중..."
+                                device.isConnected -> "연결됨"
+                                else -> "연결 안 됨"
+                            }
+                            
+                            Text(text = device.name, style = MaterialTheme.typography.bodyLarge, 
+                                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal)
+                            
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Box(modifier = Modifier.size(8.dp).background(statusColor, CircleShape))
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text(text = statusText, style = MaterialTheme.typography.bodySmall, color = statusColor)
+                                Text(text = statusText, style = MaterialTheme.typography.bodySmall, 
+                                     color = if (isSelected && !device.isConnected) MaterialTheme.colorScheme.error else statusColor)
                                 Spacer(modifier = Modifier.width(8.dp))
-                                Text(text = device.descriptor, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                                Text(text = device.descriptor.take(12) + "...", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                             }
+                        }
+                        
+                        if (isSelected) {
+                            Icon(
+                                imageVector = Icons.Default.Check,
+                                contentDescription = "선택됨",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
                         }
                     }
                 }
@@ -962,6 +1053,7 @@ fun MainScreenPreview() {
             selectedDeviceDescriptor = null,
             mappingVersion = 0,
             isServiceRunning = false,
+            shakeTrigger = 0,
             onDeviceClick = {},
             onStartService = {},
             onUpdateMappingVersion = {},

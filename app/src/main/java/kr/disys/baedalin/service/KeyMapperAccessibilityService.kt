@@ -16,6 +16,9 @@ import kr.disys.baedalin.KeyRecordingState
 import kr.disys.baedalin.model.ClickType
 import kr.disys.baedalin.model.DeliveryFunction
 import kr.disys.baedalin.model.Presets
+import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.collect
+import android.content.SharedPreferences
 
 class KeyMapperAccessibilityService : AccessibilityService() {
 
@@ -28,6 +31,14 @@ class KeyMapperAccessibilityService : AccessibilityService() {
     private var pendingClickRunnable: Runnable? = null
     private var longPressRunnable: Runnable? = null
     private var isLongPressed = false
+    
+    private val serviceScope = CoroutineScope(Dispatchers.Main + Job())
+    
+    private val prefsListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+        if (key == "is_recording" || key == "is_mapping_enabled") {
+            updateKeyFilterState()
+        }
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -35,46 +46,102 @@ class KeyMapperAccessibilityService : AccessibilityService() {
     }
 
     override fun onServiceConnected() {
-        Log.d("KeyMapper", "Service Connected - Setting up config")
-        val info = AccessibilityServiceInfo().apply {
-            eventTypes = AccessibilityEvent.TYPES_ALL_MASK
-            feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC
-            notificationTimeout = 100
-            flags = AccessibilityServiceInfo.FLAG_REQUEST_FILTER_KEY_EVENTS or 
-                    AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS or
-                    AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS
+        Log.d("KeyMapper", "KeyMapperAccessibilityService connected")
+        updateKeyFilterState()
+        
+        getSharedPreferences("mappings", Context.MODE_PRIVATE)
+            .registerOnSharedPreferenceChangeListener(prefsListener)
+            
+        serviceScope.launch {
+            FloatingWidgetService.isInterceptionActive.collect {
+                updateKeyFilterState()
+            }
         }
-        this.serviceInfo = info
-        Log.d("KeyMapper", "Service Config Applied: ${info.flags}")
+    }
+
+    private fun updateKeyFilterState() {
+        val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
+        val isMappingEnabled = prefs.getBoolean("is_mapping_enabled", false)
+        val isRecording = prefs.getBoolean("is_recording", false)
+        val isInterceptionActive = FloatingWidgetService.isInterceptionActive.value
+        
+        val info = serviceInfo ?: AccessibilityServiceInfo()
+        
+        if (isMappingEnabled || isRecording) {
+            // 중요: 윈도우 변화 감지는 서비스가 활성화된 동안 항상 켜두어야 배달 앱 진입을 감지할 수 있음
+            info.eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or AccessibilityEvent.TYPE_WINDOWS_CHANGED
+            info.feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC
+            info.notificationTimeout = 100
+            
+            // 키 가로채기 플래그는 실제 위젯이 떠 있거나 레코딩 중일 때만 활성화
+            val shouldFilterKeys = isRecording || (isMappingEnabled && isInterceptionActive)
+            var targetFlags = AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS or
+                            AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS
+            
+            if (shouldFilterKeys) {
+                targetFlags = targetFlags or AccessibilityServiceInfo.FLAG_REQUEST_FILTER_KEY_EVENTS
+                Log.d("KeyMapper", "Key Filter: ACTIVE (Window Detection + Key Filtering)")
+            } else {
+                // 키 필터링만 끄고 윈도우 감지는 유지 (Bypass 상태)
+                Log.d("KeyMapper", "Key Filter: WINDOW_ONLY (Window Detection active, Keys bypassed)")
+            }
+            
+            info.flags = targetFlags
+        } else {
+            // 완전 중지 상태 (STEALTH)
+            info.eventTypes = 0
+            info.feedbackType = 0
+            info.notificationTimeout = 0
+            info.flags = 0
+            Log.d("KeyMapper", "Key Filter: STEALTH (Fully Disabled)")
+        }
+        
+        serviceInfo = info
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        serviceScope.cancel()
+        getSharedPreferences("mappings", Context.MODE_PRIVATE)
+            .unregisterOnSharedPreferenceChangeListener(prefsListener)
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event?.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
             val packageName = event.packageName?.toString() ?: return
             
-            // 1. 자신의 앱 패키지이거나 시스템 관련 패키지는 무시 (이때는 상태 변경 금지)
-            if (packageName == "kr.disys.baedalin" || 
-                packageName == "com.android.systemui" || 
-                packageName == "android") {
-                return
-            }
+            val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
+            val isMappingEnabled = prefs.getBoolean("is_mapping_enabled", false)
+            val isRunning = FloatingWidgetService.isRunning.value
+            
+            // 모든 윈도우 상태 변화 로그 (깜빡임 원인 파악용)
+            Log.d("KeyMapper", "Window changed: $packageName, enabled=$isMappingEnabled, running=$isRunning")
+
+            if (!isMappingEnabled) return
 
             val preset = Presets.getPresetFromPackage(packageName)
             
-            if (FloatingWidgetService.isRunning.value) {
+            if (isRunning) {
                 if (preset != null) {
+                    Log.d("KeyMapper", "Delivery App Detected: $packageName -> Loading $preset")
                     val intent = Intent(this, FloatingWidgetService::class.java).apply {
                         action = FloatingWidgetService.ACTION_LOAD_PRESET
                         putExtra("preset_name", preset)
                     }
                     startService(intent)
                 } else {
-                    // 2. 확실히 다른 앱(유튜브, 홈 화면 등)으로 나갔을 때만 숨김
+                    // 배달 앱이 아닌 경우 숨기되, 시스템 UI나 자사 앱은 무시하여 현재 상태(표시 중)를 유지함
+                    if (packageName == "com.android.systemui" || 
+                        packageName == "android" || 
+                        packageName == "kr.disys.baedalin") return
+                    
                     val intent = Intent(this, FloatingWidgetService::class.java).apply {
                         action = FloatingWidgetService.ACTION_HIDE_PRESETS
                     }
                     startService(intent)
                 }
+            } else {
+                Log.d("KeyMapper", "Window changed but FloatingWidgetService not running")
             }
         }
     }
@@ -82,18 +149,56 @@ class KeyMapperAccessibilityService : AccessibilityService() {
     override fun onInterrupt() {}
 
     override fun onKeyEvent(event: KeyEvent): Boolean {
-        if (!FloatingWidgetService.isRunning.value || KeyRecordingState.isRecording) {
+        val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
+        val isMappingEnabled = prefs.getBoolean("is_mapping_enabled", false)
+        val isRecording = KeyRecordingState.isRecording || prefs.getBoolean("is_recording", false)
+        val isInterceptionActive = FloatingWidgetService.isInterceptionActive.value
+
+        // 모든 키 이벤트 흐름 추적을 위해 최상단 로그 추가
+        if (event.action == KeyEvent.ACTION_DOWN) {
+            Log.d("KeyMapper", "[DEBUG] onKeyEvent IN: code=${event.keyCode}, enabled=$isMappingEnabled, active=$isInterceptionActive")
+        }
+
+        // 1. 레코딩 모드 처리 (최우선)
+        if (isRecording) {
+            if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
+                Log.d("KeyMapper", "[DEBUG] RECORDING MODE: KeyCode=${event.keyCode} captured.")
+                val intent = Intent(this, kr.disys.baedalin.MainActivity::class.java).apply {
+                    action = "ACTION_KEY_RECORDED"
+                    putExtra("keycode", event.keyCode)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+                }
+                startActivity(intent)
+            }
+            return true 
+        }
+        
+        // 2. 서비스 중지 상태면 즉시 바이패스
+        if (!isMappingEnabled) {
+            if (event.action == KeyEvent.ACTION_DOWN) {
+                Log.d("KeyMapper", "[DEBUG] BYPASS: isMappingEnabled is FALSE. Letting system handle code=${event.keyCode}")
+            }
+            return false
+        }
+
+        // 3. 위젯이 숨겨진 상태(비활성 앱)면 바이패스
+        if (!isInterceptionActive) {
+            Log.d("KeyMapper", "[DEBUG] BYPASS: isInterceptionActive is FALSE. keyCode=${event.keyCode}")
+            return false
+        }
+
+        Log.d("KeyMapper", "[DEBUG] onKeyEvent: keyCode=${event.keyCode}, action=${event.action}")
+
+        val targetDescriptor = prefs.getString("selected_device_descriptor", null)
+        if (targetDescriptor == null) {
+            Log.d("KeyMapper", "[DEBUG] BYPASS: No target device selected.")
             return false
         }
         
-        val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
-        val targetDescriptor = prefs.getString("selected_device_descriptor", null)
-        
-        if (targetDescriptor != null) {
-            val device = InputDevice.getDevice(event.deviceId)
-            if (device == null || device.descriptor != targetDescriptor) {
-                return false
-            }
+        val device = InputDevice.getDevice(event.deviceId)
+        if (device == null || device.descriptor != targetDescriptor) {
+            Log.d("KeyMapper", "[DEBUG] BYPASS: Device mismatch or null. target=$targetDescriptor")
+            return false
         }
         
         val keyCode = event.keyCode
@@ -101,8 +206,12 @@ class KeyMapperAccessibilityService : AccessibilityService() {
         val prefix = targetDescriptor ?: "GLOBAL"
         val isMapped = isKeyMapped(keyCode, prefix)
         
-        if (!isMapped) return super.onKeyEvent(event)
+        if (!isMapped) {
+            Log.d("KeyMapper", "[DEBUG] BYPASS: Key $keyCode is NOT mapped for $prefix")
+            return false
+        }
 
+        Log.d("KeyMapper", "[DEBUG] INTERCEPT: Key $keyCode is MAPPED. action=${event.action}")
         if (action == KeyEvent.ACTION_DOWN) {
             if (event.repeatCount > 0) return true
             if (keyCode != lastKeyCode) {
@@ -150,6 +259,12 @@ class KeyMapperAccessibilityService : AccessibilityService() {
 
     private fun handleAction(keyCode: Int, clickType: ClickType, prefix: String): Boolean {
         val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
+        val isMappingEnabled = prefs.getBoolean("is_mapping_enabled", false)
+        if (!isMappingEnabled) {
+            Log.d("KeyMapper", "[DEBUG] handleAction aborted: isMappingEnabled is FALSE")
+            return false
+        }
+        
         val activePreset = prefs.getString("active_preset", "DEFAULT") ?: "DEFAULT"
         
         Log.d("KeyMapper", "handleAction: keyCode=$keyCode, clickType=$clickType, prefix=$prefix, activePreset=$activePreset")
