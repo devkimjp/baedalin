@@ -83,6 +83,7 @@ class MainActivity : ComponentActivity() {
     private var selectedDeviceName by mutableStateOf("장치를 추가하세요")
     private var inputDevices by mutableStateOf<List<InputDeviceInfo>>(emptyList())
     private var showDevicePicker by mutableStateOf(false)
+    private var shakeDeviceSelector by mutableIntStateOf(0)
     
     // 매핑 변경 시 UI를 즉시 갱신하기 위한 상태
     private var mappingVersion by mutableIntStateOf(0)
@@ -129,7 +130,6 @@ class MainActivity : ComponentActivity() {
 
                 var isAccessibilityEnabled by remember { mutableStateOf(false) }
                 var isOverlayEnabled by remember { mutableStateOf(false) }
-                var shakeDeviceSelector by remember { mutableStateOf(0) }
 
                 val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
                 DisposableEffect(lifecycleOwner) {
@@ -170,6 +170,7 @@ class MainActivity : ComponentActivity() {
                                 recordingClickType = recordingClickType,
                                 selectedDeviceName = selectedDeviceName,
                                 selectedDeviceDescriptor = selectedDeviceDescriptor,
+                                inputDevices = inputDevices,
                                 mappingVersion = mappingVersion,
                                 isServiceRunning = isMappingEnabled,
                                 shakeTrigger = shakeDeviceSelector,
@@ -465,7 +466,8 @@ class MainActivity : ComponentActivity() {
         inputDevices = history.sortedByDescending { it.isConnected }
         
         selectedDeviceDescriptor = prefs.getString("selected_device_descriptor", null)
-        selectedDeviceName = history.find { it.descriptor == selectedDeviceDescriptor }?.name ?: "장치를 추가하세요"
+        val selectedDevice = history.find { it.descriptor == selectedDeviceDescriptor }
+        selectedDeviceName = selectedDevice?.name ?: "장치를 추가하세요"
         mappingVersion++
     }
 
@@ -479,6 +481,7 @@ class MainActivity : ComponentActivity() {
             prefs.edit { putString("selected_device_descriptor", device.descriptor) }
             selectedDeviceDescriptor = device.descriptor
             selectedDeviceName = device.name
+            shakeDeviceSelector = 0 // 장치 선택 시 빨간색 알람 해제
         }
         Toast.makeText(this, "감시 장치 설정: $selectedDeviceName", Toast.LENGTH_SHORT).show()
         mappingVersion++
@@ -672,6 +675,7 @@ fun MainScreen(
     recordingClickType: ClickType?,
     selectedDeviceName: String,
     selectedDeviceDescriptor: String?,
+    inputDevices: List<MainActivity.InputDeviceInfo>,
     mappingVersion: Int,
     isServiceRunning: Boolean,
     shakeTrigger: Int,
@@ -724,7 +728,18 @@ fun MainScreen(
                 ) {
                     Column {
                         Text("감시할 입력 장치", style = MaterialTheme.typography.labelMedium)
-                        Text(selectedDeviceName, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (selectedDeviceDescriptor != null) {
+                                val isConnected = inputDevices.find { it.descriptor == selectedDeviceDescriptor }?.isConnected ?: false
+                                Box(
+                                    modifier = Modifier
+                                        .size(10.dp)
+                                        .background(if (isConnected) Color(0xFF4CAF50) else Color.Gray, CircleShape)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                            }
+                            Text(selectedDeviceName, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
+                        }
                     }
                     Icon(imageVector = Icons.Default.Settings, contentDescription = null)
                 }
@@ -1051,6 +1066,7 @@ fun MainScreenPreview() {
             recordingClickType = null,
             selectedDeviceName = "테스트 장치",
             selectedDeviceDescriptor = null,
+            inputDevices = emptyList(),
             mappingVersion = 0,
             isServiceRunning = false,
             shakeTrigger = 0,
