@@ -139,9 +139,6 @@ class KeyMapperAccessibilityService : AccessibilityService() {
                         return
                     }
                     
-                    // 배달 앱을 완전히 벗어날 때만 이동 모드 강제 해제 (Lock)
-                    FloatingWidgetService.forceLockMode()
-                    
                     val intent = Intent(this, FloatingWidgetService::class.java).apply {
                         action = FloatingWidgetService.ACTION_HIDE_PRESETS
                     }
