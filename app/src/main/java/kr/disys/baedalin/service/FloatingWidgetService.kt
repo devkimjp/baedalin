@@ -37,7 +37,6 @@ class FloatingWidgetService : Service() {
     private val ICON_SIZE = 100 
     private var settingsParams: WindowManager.LayoutParams? = null
 
-    private var isMoveMode: Boolean = false
     private var currentPreset: String = "DEFAULT"
 
     private var customWidgetCounter = 1
@@ -163,6 +162,7 @@ class FloatingWidgetService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        instance = this
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         _isRunning.value = true
     }
@@ -256,8 +256,10 @@ class FloatingWidgetService : Service() {
     }
 
     private fun toggleMoveMode() {
-        isMoveMode = !isMoveMode
-        val toastMsg = if (isMoveMode) {
+        val currentMode = _isMoveMode.value
+        _isMoveMode.value = !currentMode
+        
+        val toastMsg = if (_isMoveMode.value) {
             showScreenBorder()
             "이동 모드 활성화 (위젯을 옮길 수 있습니다)"
         } else {
@@ -270,13 +272,20 @@ class FloatingWidgetService : Service() {
         overlayViews.forEach { (name, view) ->
             if (name != "SYSTEM_SETTINGS") {
                 val params = view.layoutParams as WindowManager.LayoutParams
-                if (isMoveMode) {
+                if (_isMoveMode.value) {
                     params.flags = params.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE.inv()
+                    view.findViewById<View>(R.id.drag_handle)?.visibility = View.VISIBLE
                 } else {
                     params.flags = params.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+                    view.findViewById<View>(R.id.drag_handle)?.visibility = View.GONE
                 }
                 windowManager.updateViewLayout(view, params)
             }
+        }
+        
+        // 툴바 아이콘 업데이트
+        btnMoveView?.let { v ->
+            (v as ImageView).setImageResource(if (_isMoveMode.value) R.drawable.ic_toolbar_unlock_v7 else R.drawable.ic_toolbar_lock_v7)
         }
     }
 
@@ -392,8 +401,8 @@ class FloatingWidgetService : Service() {
         val btnAdd = createToolbarIcon(R.drawable.ic_toolbar_add) { _ -> addNumberedWidget(prefs) }
         val btnMove = createToolbarIcon(R.drawable.ic_toolbar_lock_v7) { v -> 
             toggleMoveMode() 
-            (v as ImageView).setImageResource(if (isMoveMode) R.drawable.ic_toolbar_unlock_v7 else R.drawable.ic_toolbar_lock_v7)
         }
+        btnMoveView = btnMove
         val btnHide = createToolbarIcon(R.drawable.ic_toolbar_hide) { v -> 
             togglePresetsVisibility() 
             (v as ImageView).setImageResource(if (isPresetsHidden) R.drawable.ic_toolbar_hide_off else R.drawable.ic_toolbar_hide)
@@ -462,7 +471,7 @@ class FloatingWidgetService : Service() {
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or 
             WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or 
             WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
-            (if (isMoveMode) 0 else WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE),
+            (if (_isMoveMode.value) 0 else WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE),
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.START
@@ -522,6 +531,17 @@ class FloatingWidgetService : Service() {
         }
         container.addView(circleView)
 
+        // 이동 모드 시 나타날 드래그 핸들 추가
+        val dragHandle = View(this).apply {
+            id = R.id.drag_handle
+            layoutParams = LinearLayout.LayoutParams(ICON_SIZE / 2, 10).apply {
+                setMargins(0, 5, 0, 0)
+            }
+            setBackgroundColor(Color.LTGRAY)
+            visibility = if (_isMoveMode.value) View.VISIBLE else View.GONE
+        }
+        container.addView(dragHandle)
+
         if (keyInfo != null) {
             val keyView = TextView(this).apply {
                 text = keyInfo
@@ -542,7 +562,7 @@ class FloatingWidgetService : Service() {
             private var lastClickTime = 0L
 
             override fun onTouch(v: View, event: MotionEvent): Boolean {
-                if (!isMoveMode) return false
+                if (!_isMoveMode.value) return false
                 val p = container.layoutParams as WindowManager.LayoutParams
                 when (event.action) {
                     MotionEvent.ACTION_DOWN -> {
@@ -615,6 +635,7 @@ class FloatingWidgetService : Service() {
     }
 
     override fun onDestroy() {
+        instance = null
         hideScreenBorder()
         overlayViews.values.forEach { view ->
             try {
@@ -635,6 +656,22 @@ class FloatingWidgetService : Service() {
 
         private val _isInterceptionActive = MutableStateFlow(false)
         val isInterceptionActive: StateFlow<Boolean> = _isInterceptionActive
+
+        private val _isMoveMode = MutableStateFlow(false)
+        val isMoveMode: StateFlow<Boolean> = _isMoveMode
+
+        private var instance: FloatingWidgetService? = null
+
+        fun forceLockMode() {
+            instance?.let { service ->
+                if (_isMoveMode.value) {
+                    Handler(Looper.getMainLooper()).post {
+                        service.toggleMoveMode()
+                    }
+                }
+            }
+        }
+
         const val ACTION_SHOW_WIDGET = "ACTION_SHOW_WIDGET"
         const val ACTION_HIDE_WIDGET = "ACTION_HIDE_WIDGET"
         const val ACTION_HIDE_ALL = "ACTION_HIDE_ALL"
@@ -646,6 +683,7 @@ class FloatingWidgetService : Service() {
         const val ACTION_UPDATE_TRANSPARENCY = "ACTION_UPDATE_TRANSPARENCY"
         const val ACTION_START_SERVICE_ONLY = "ACTION_START_SERVICE_ONLY"
     }
+
 
     private fun launchApp(packageName: String) {
         val launchIntent = packageManager.getLaunchIntentForPackage(packageName)

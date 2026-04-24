@@ -229,6 +229,12 @@ class KeyMapperAccessibilityService : AccessibilityService() {
             
             pendingClickRunnable = Runnable {
                 val type = if (clickCount >= 2) ClickType.DOUBLE else ClickType.SINGLE
+                
+                // 이동 모드(Unlock) 중 매핑된 키 입력 시 자동 잠금 및 터치 실행
+                if (FloatingWidgetService.isMoveMode.value) {
+                    FloatingWidgetService.forceLockMode()
+                }
+                
                 handleAction(keyCode, type, prefix)
                 clickCount = 0
             }.also { handler.postDelayed(it, doubleClickTimeout) }
