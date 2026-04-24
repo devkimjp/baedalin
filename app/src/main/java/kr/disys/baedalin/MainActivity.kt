@@ -121,6 +121,8 @@ class MainActivity : ComponentActivity() {
                         if (key == "is_mapping_enabled") {
                             isMappingEnabled = p.getBoolean("is_mapping_enabled", false)
                         }
+                        // 매핑 관련 데이터가 변경되면 UI 갱신 (mappingVersion 증가)
+                        mappingVersion++
                     }
                     prefs.registerOnSharedPreferenceChangeListener(listener)
                     onDispose {
@@ -688,6 +690,36 @@ fun MainScreen(
     val prefs = context.getSharedPreferences("mappings", Context.MODE_PRIVATE)
     var transparency by remember { mutableStateOf(prefs.getFloat("toolbar_transparency", 1.0f)) }
 
+    // 매핑 정보가 하나라도 있는지 체크
+    val hasAnyMapping = remember(mappingVersion, selectedDeviceDescriptor) {
+        var found = false
+        val devicePrefix = selectedDeviceDescriptor ?: "GLOBAL"
+        
+        // 1. 장치/글로벌 기반 매핑 확인 (개별 기능 설정)
+        DeliveryFunction.entries.forEach { function ->
+            if (prefs.getInt("${devicePrefix}_${function.name}_keycode", -1) != -1) found = true
+        }
+        
+        // 2. 프리셋 기반 매핑 확인 (툴바 위젯)
+        if (!found) {
+            val presets = listOf("BAEMIN", "COUPANG", "YOGIYO")
+            presets.forEach { preset ->
+                // 기본 위젯 확인
+                Presets.BAEMIN.forEach { info ->
+                    if (prefs.getInt("${preset}_${info.function.name}_SINGLE", -1) != -1) found = true
+                }
+                // 커스텀 위젯 확인
+                if (!found) {
+                    val active = prefs.getString("${preset}_active_custom_widgets", "") ?: ""
+                    active.split(",").filter { it.isNotBlank() }.forEach { label ->
+                        if (prefs.getInt("${preset}_CUSTOM_${label}_SINGLE", -1) != -1) found = true
+                    }
+                }
+            }
+        }
+        found
+    }
+
     // 장치 선택 강조 애니메이션 (깜빡임)
     val shakeColor by animateColorAsState(
         targetValue = if (shakeTrigger > 0 && shakeTrigger % 2 != 0) Color.Red.copy(alpha = 0.3f) 
@@ -925,13 +957,16 @@ fun MainScreen(
             // 서비스 시작/중지 버튼 (맨 하단 고정)
             Button(
                 onClick = onStartService,
+                enabled = hasAnyMapping || isServiceRunning, // 실행 중일 때는 중지를 위해 항상 활성화, 아니면 매핑이 있어야 활성화
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(64.dp),
                 shape = RoundedCornerShape(16.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = if (isServiceRunning) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
-                    contentColor = if (isServiceRunning) MaterialTheme.colorScheme.onError else MaterialTheme.colorScheme.onPrimary
+                    containerColor = if (isServiceRunning) MaterialTheme.colorScheme.error 
+                                    else if (!hasAnyMapping) Color.Gray 
+                                    else MaterialTheme.colorScheme.primary,
+                    contentColor = if (isServiceRunning) MaterialTheme.colorScheme.onError else Color.White
                 ),
                 elevation = ButtonDefaults.buttonElevation(defaultElevation = 4.dp)
             ) {
@@ -941,7 +976,9 @@ fun MainScreen(
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = if (isServiceRunning) "서비스 중지" else "서비스 시작",
+                    text = if (isServiceRunning) "서비스 중지" 
+                           else if (!hasAnyMapping) "매핑 정보 없음" 
+                           else "서비스 시작",
                     fontSize = 18.sp,
                     fontWeight = FontWeight.ExtraBold
                 )

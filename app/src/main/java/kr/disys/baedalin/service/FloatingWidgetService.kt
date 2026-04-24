@@ -7,6 +7,7 @@ import android.content.Intent
 import android.view.KeyEvent
 import android.graphics.Color
 import android.graphics.PixelFormat
+import android.graphics.PorterDuff
 import android.graphics.drawable.GradientDrawable
 import android.os.IBinder
 import android.view.Gravity
@@ -43,6 +44,7 @@ class FloatingWidgetService : Service() {
     private var lastAddedX = 200
     private var lastAddedY = 250
     private var isToolbarFolded = false
+    private var preferredFoldedState = false
     private var isPresetsHidden = false
     private var screenBorderView: View? = null
 
@@ -256,6 +258,19 @@ class FloatingWidgetService : Service() {
     }
 
     private fun toggleMoveMode() {
+        val currentApp = KeyMapperAccessibilityService.currentPackageName
+        val preset = Presets.getPresetFromPackage(currentApp)
+        val isTargetApp = preset != null || 
+                         currentApp.contains("woowahan") || 
+                         currentApp.contains("coupang") || 
+                         currentApp == "kr.disys.baedalin"
+
+        // 타겟 앱이 아니면 조작 차단
+        if (!isTargetApp && currentApp.isNotBlank()) {
+            showCustomToast("배민/쿠팡 앱 내에서만 잠금 해제를 할 수 있습니다.")
+            return
+        }
+
         val currentMode = _isMoveMode.value
         _isMoveMode.value = !currentMode
         
@@ -283,9 +298,47 @@ class FloatingWidgetService : Service() {
             }
         }
         
-        // 툴바 아이콘 업데이트
-        btnMoveView?.let { v ->
-            (v as ImageView).setImageResource(if (_isMoveMode.value) R.drawable.ic_toolbar_unlock_v7 else R.drawable.ic_toolbar_lock_v7)
+        updateToolbarState() // 상태 변경 후 아이콘 갱신
+    }
+
+    // 툴바 아이콘의 활성/비활성 상태(색상, 투명도)를 실시간 업데이트
+    fun updateToolbarState() {
+        Handler(Looper.getMainLooper()).post {
+            val currentApp = KeyMapperAccessibilityService.currentPackageName
+            val preset = Presets.getPresetFromPackage(currentApp)
+            val isTargetApp = preset != null || 
+                             currentApp.contains("woowahan") || 
+                             currentApp.contains("coupang") || 
+                             currentApp == "kr.disys.baedalin"
+
+            btnMoveView?.let { v ->
+                val iv = v as ImageView
+                if (isTargetApp) {
+                    iv.alpha = 1.0f
+                    iv.colorFilter = null
+                    iv.setImageResource(if (_isMoveMode.value) R.drawable.ic_toolbar_unlock_v7 else R.drawable.ic_toolbar_lock_v7)
+                    
+                    // 배달 앱 진입 시 이전 사용자 설정 상태로 복구 (추가된 로직)
+                    if (isToolbarFolded != preferredFoldedState) {
+                        setToolbarFolded(preferredFoldedState)
+                    }
+                } else {
+                    iv.alpha = 0.3f // 비활성 상태 시 시각적으로 흐리게 표현
+                    iv.setColorFilter(Color.GRAY, PorterDuff.Mode.SRC_IN)
+                    iv.setImageResource(R.drawable.ic_toolbar_lock_v7)
+                    
+                    // 배달 앱 이탈 시 툴바를 자동으로 접음
+                    if (!isToolbarFolded) {
+                        setToolbarFolded(true)
+                    }
+
+                    // 앱 이탈 시 강제로 잠금 모드로 전환 (안전장치)
+                    if (_isMoveMode.value) {
+                        _isMoveMode.value = false
+                        hideScreenBorder()
+                    }
+                }
+            }
         }
     }
 
@@ -437,7 +490,9 @@ class FloatingWidgetService : Service() {
             Toast.makeText(this@FloatingWidgetService, "쿠팡 실행 및 프리셋 활성화", Toast.LENGTH_SHORT).show()
         }
         val btnFold = createToolbarIcon(R.drawable.ic_toolbar_fold) { v -> 
-            setToolbarFolded(!isToolbarFolded)
+            val newState = !isToolbarFolded
+            preferredFoldedState = newState // 사용자가 직접 변경한 상태를 기억
+            setToolbarFolded(newState)
         }
 
         this.btnAddView = btnAdd
@@ -660,7 +715,7 @@ class FloatingWidgetService : Service() {
         private val _isMoveMode = MutableStateFlow(false)
         val isMoveMode: StateFlow<Boolean> = _isMoveMode
 
-        private var instance: FloatingWidgetService? = null
+        var instance: FloatingWidgetService? = null
 
         fun forceLockMode() {
             instance?.let { service ->

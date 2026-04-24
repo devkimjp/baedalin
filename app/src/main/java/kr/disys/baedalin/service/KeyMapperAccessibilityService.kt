@@ -109,12 +109,12 @@ class KeyMapperAccessibilityService : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event?.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
             val packageName = event.packageName?.toString() ?: return
+            currentPackageName = packageName // 정적 변수 업데이트
             
             val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
             val isMappingEnabled = prefs.getBoolean("is_mapping_enabled", false)
             val isRunning = FloatingWidgetService.isRunning.value
             
-            // 모든 윈도우 상태 변화 로그 (깜빡임 원인 파악용)
             Log.d("KeyMapper", "Window changed: $packageName, enabled=$isMappingEnabled, running=$isRunning")
 
             if (!isMappingEnabled) return
@@ -130,20 +130,33 @@ class KeyMapperAccessibilityService : AccessibilityService() {
                     }
                     startService(intent)
                 } else {
-                    // 배달 앱이 아닌 경우 숨기되, 시스템 UI나 자사 앱은 무시하여 현재 상태(표시 중)를 유지함
+                    // 배달 앱이 아닌 경우 숨기기
                     if (packageName == "com.android.systemui" || 
                         packageName == "android" || 
-                        packageName == "kr.disys.baedalin") return
+                        packageName == "kr.disys.baedalin") {
+                        // 시스템 UI나 본인 앱에서는 아이콘 상태만 최신화
+                        FloatingWidgetService.instance?.updateToolbarState()
+                        return
+                    }
+                    
+                    // 배달 앱을 완전히 벗어날 때만 이동 모드 강제 해제 (Lock)
+                    FloatingWidgetService.forceLockMode()
                     
                     val intent = Intent(this, FloatingWidgetService::class.java).apply {
                         action = FloatingWidgetService.ACTION_HIDE_PRESETS
                     }
                     startService(intent)
                 }
-            } else {
-                Log.d("KeyMapper", "Window changed but FloatingWidgetService not running")
+                
+                // 어떤 경우든 앱이 바뀌면 아이콘 상태 갱신
+                FloatingWidgetService.instance?.updateToolbarState()
             }
         }
+    }
+
+    companion object {
+        var currentPackageName: String = ""
+            private set
     }
 
     override fun onInterrupt() {}
