@@ -427,12 +427,12 @@ class FloatingWidgetService : Service() {
         this.btnCoupangView = btnCoupang
         this.btnFoldView = btnFold as ImageView
 
-        // 요청하신 순서대로 아이콘 배치 (잠금, 배민, 쿠팡, 종료, 접기)
+        // 요청하신 순서대로 아이콘 배치 (접기, 잠금, 배민, 쿠팡, 종료)
+        toolbarContainer.addView(btnFold)
         toolbarContainer.addView(btnMove)
         toolbarContainer.addView(btnBaemin)
         toolbarContainer.addView(btnCoupang)
         toolbarContainer.addView(btnClose)
-        toolbarContainer.addView(btnFold)
 
         root.addView(toolbarContainer)
         windowManager.addView(root, params)
