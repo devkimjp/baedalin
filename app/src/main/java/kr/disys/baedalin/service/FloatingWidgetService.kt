@@ -19,6 +19,8 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import android.view.ViewOutlineProvider
+import android.graphics.Outline
 import androidx.core.content.edit
 import kr.disys.baedalin.MainActivity
 import kr.disys.baedalin.R
@@ -370,16 +372,17 @@ class FloatingWidgetService : Service() {
                 layoutParams = LinearLayout.LayoutParams(size, size).apply {
                     setMargins(0, 0, 0, 0) // 간격을 좁히기 위해 마진 제거
                 }
-                setPadding(15, 15, 15, 15) // 패딩도 약간 줄임
+                setPadding(15, 15, 15, 15) // 패딩 추가
+                
                 setOnClickListener { v -> onClick(v) }
                 setOnTouchListener(unifiedTouchListener)
             }
         }
 
         val btnAdd = createToolbarIcon(R.drawable.ic_toolbar_add) { _ -> addNumberedWidget(prefs) }
-        val btnMove = createToolbarIcon(R.drawable.ic_toolbar_lock) { v -> 
+        val btnMove = createToolbarIcon(R.drawable.ic_toolbar_lock_v7) { v -> 
             toggleMoveMode() 
-            (v as ImageView).setImageResource(if (isMoveMode) R.drawable.ic_toolbar_unlock else R.drawable.ic_toolbar_lock)
+            (v as ImageView).setImageResource(if (isMoveMode) R.drawable.ic_toolbar_unlock_v7 else R.drawable.ic_toolbar_lock_v7)
         }
         val btnHide = createToolbarIcon(R.drawable.ic_toolbar_hide) { v -> 
             togglePresetsVisibility() 
