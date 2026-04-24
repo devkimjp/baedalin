@@ -21,6 +21,8 @@ import android.widget.TextView
 import android.widget.Toast
 import android.view.ViewOutlineProvider
 import android.graphics.Outline
+import android.os.Handler
+import android.os.Looper
 import androidx.core.content.edit
 import kr.disys.baedalin.MainActivity
 import kr.disys.baedalin.R
@@ -43,6 +45,7 @@ class FloatingWidgetService : Service() {
     private var lastAddedY = 250
     private var isToolbarFolded = false
     private var isPresetsHidden = false
+    private var screenBorderView: View? = null
 
     // 툴바 버튼 참조 저장용
     private var btnAddView: View? = null
@@ -254,8 +257,15 @@ class FloatingWidgetService : Service() {
 
     private fun toggleMoveMode() {
         isMoveMode = !isMoveMode
-        val toastMsg = if (isMoveMode) "이동 모드 활성화" else "LOCK 모드 활성화"
-        Toast.makeText(this, toastMsg, Toast.LENGTH_SHORT).show()
+        val toastMsg = if (isMoveMode) {
+            showScreenBorder()
+            "이동 모드 활성화 (위젯을 옮길 수 있습니다)"
+        } else {
+            hideScreenBorder()
+            "잠금 모드 활성화 (위젯 위치 고정)"
+        }
+        
+        showCustomToast(toastMsg)
 
         overlayViews.forEach { (name, view) ->
             if (name != "SYSTEM_SETTINGS") {
@@ -605,8 +615,15 @@ class FloatingWidgetService : Service() {
     }
 
     override fun onDestroy() {
-        super.onDestroy()
+        hideScreenBorder()
+        overlayViews.values.forEach { view ->
+            try {
+                windowManager.removeView(view)
+            } catch (e: Exception) {}
+        }
+        overlayViews.clear()
         _isRunning.value = false
+        super.onDestroy()
     }
 
     companion object {
@@ -642,6 +659,90 @@ class FloatingWidgetService : Service() {
             }
         } else {
             Toast.makeText(this, "앱이 설치되어 있지 않습니다: $packageName", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun showScreenBorder() {
+        Log.d("KeyMapper", "showScreenBorder called")
+        if (screenBorderView != null) return
+
+        val params = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+            WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+            WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+            PixelFormat.TRANSLUCENT
+        )
+
+        screenBorderView = View(this).apply {
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                setStroke(10, Color.RED) // 10px 두께의 빨간 테두리
+                setColor(Color.TRANSPARENT) // 배경은 투명
+            }
+        }
+
+        try {
+            windowManager.addView(screenBorderView, params)
+        } catch (e: Exception) {
+            Log.e("KeyMapper", "Failed to add screen border", e)
+        }
+    }
+
+    private fun hideScreenBorder() {
+        Log.d("KeyMapper", "hideScreenBorder called")
+        screenBorderView?.let {
+            try {
+                if (it.parent != null) {
+                    windowManager.removeViewImmediate(it)
+                    Log.d("KeyMapper", "screenBorderView removed successfully")
+                }
+            } catch (e: Exception) {
+                Log.e("KeyMapper", "Failed to remove screen border", e)
+            } finally {
+                screenBorderView = null
+            }
+        }
+    }
+
+    private fun showCustomToast(message: String) {
+        val toastView = TextView(this).apply {
+            text = message
+            setTextColor(Color.WHITE)
+            setBackground(GradientDrawable().apply {
+                setColor(Color.parseColor("#CC000000")) // 80% 투명 검정
+                cornerRadius = 50f
+            })
+            setPadding(40, 20, 40, 20)
+            gravity = Gravity.CENTER
+            textSize = 14f
+        }
+
+        val params = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+            WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
+            PixelFormat.TRANSLUCENT
+        ).apply {
+            gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
+            y = 200 // 하단에서 200px 위
+        }
+
+        try {
+            windowManager.addView(toastView, params)
+            // 2초 후 제거
+            Handler(Looper.getMainLooper()).postDelayed({
+                try {
+                    windowManager.removeView(toastView)
+                } catch (e: Exception) {}
+            }, 2000)
+        } catch (e: Exception) {
+            Log.e("KeyMapper", "Failed to show custom toast", e)
         }
     }
 }
