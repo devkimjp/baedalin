@@ -1,0 +1,1272 @@
+{
+  "timestamp": 1777127382823,
+  "packageName": "com.woowahan.bros",
+  "nodes": {
+    "class": "FrameLayout",
+    "text": "",
+    "desc": "",
+    "clickable": false,
+    "bounds": {
+      "left": 0,
+      "top": 0,
+      "right": 1080,
+      "bottom": 2400
+    },
+    "children": [
+      {
+        "class": "LinearLayout",
+        "text": "",
+        "desc": "",
+        "clickable": false,
+        "bounds": {
+          "left": 0,
+          "top": 0,
+          "right": 1080,
+          "bottom": 2274
+        },
+        "children": [
+          {
+            "class": "FrameLayout",
+            "text": "",
+            "desc": "",
+            "clickable": false,
+            "bounds": {
+              "left": 0,
+              "top": 0,
+              "right": 1080,
+              "bottom": 2274
+            },
+            "children": [
+              {
+                "class": "LinearLayout",
+                "text": "",
+                "desc": "",
+                "clickable": false,
+                "bounds": {
+                  "left": 0,
+                  "top": 0,
+                  "right": 1080,
+                  "bottom": 2274
+                },
+                "children": [
+                  {
+                    "class": "FrameLayout",
+                    "text": "",
+                    "desc": "",
+                    "clickable": false,
+                    "bounds": {
+                      "left": 0,
+                      "top": 0,
+                      "right": 1080,
+                      "bottom": 2274
+                    },
+                    "children": [
+                      {
+                        "class": "FrameLayout",
+                        "text": "",
+                        "desc": "",
+                        "clickable": false,
+                        "bounds": {
+                          "left": 0,
+                          "top": 0,
+                          "right": 1080,
+                          "bottom": 2274
+                        },
+                        "children": [
+                          {
+                            "class": "ViewGroup",
+                            "text": "",
+                            "desc": "",
+                            "clickable": false,
+                            "bounds": {
+                              "left": 0,
+                              "top": 0,
+                              "right": 1080,
+                              "bottom": 2274
+                            },
+                            "children": [
+                              {
+                                "class": "ViewGroup",
+                                "text": "",
+                                "desc": "",
+                                "clickable": false,
+                                "bounds": {
+                                  "left": 0,
+                                  "top": 0,
+                                  "right": 1080,
+                                  "bottom": 2274
+                                },
+                                "children": [
+                                  {
+                                    "class": "ViewGroup",
+                                    "text": "",
+                                    "desc": "",
+                                    "clickable": false,
+                                    "bounds": {
+                                      "left": 0,
+                                      "top": 0,
+                                      "right": 1080,
+                                      "bottom": 2274
+                                    },
+                                    "children": [
+                                      {
+                                        "class": "ViewGroup",
+                                        "text": "",
+                                        "desc": "",
+                                        "clickable": false,
+                                        "bounds": {
+                                          "left": 0,
+                                          "top": 0,
+                                          "right": 1080,
+                                          "bottom": 2274
+                                        },
+                                        "children": [
+                                          {
+                                            "class": "ViewGroup",
+                                            "text": "",
+                                            "desc": "",
+                                            "clickable": false,
+                                            "bounds": {
+                                              "left": 0,
+                                              "top": 0,
+                                              "right": 1080,
+                                              "bottom": 2274
+                                            },
+                                            "children": [
+                                              {
+                                                "class": "ViewGroup",
+                                                "text": "",
+                                                "desc": "",
+                                                "clickable": false,
+                                                "bounds": {
+                                                  "left": 0,
+                                                  "top": 0,
+                                                  "right": 1080,
+                                                  "bottom": 2274
+                                                }
+                                              },
+                                              {
+                                                "class": "ViewGroup",
+                                                "text": "",
+                                                "desc": "",
+                                                "clickable": false,
+                                                "bounds": {
+                                                  "left": 0,
+                                                  "top": 0,
+                                                  "right": 1080,
+                                                  "bottom": 2274
+                                                },
+                                                "children": [
+                                                  {
+                                                    "class": "FrameLayout",
+                                                    "text": "",
+                                                    "desc": "",
+                                                    "clickable": false,
+                                                    "bounds": {
+                                                      "left": 0,
+                                                      "top": 0,
+                                                      "right": 1080,
+                                                      "bottom": 2274
+                                                    },
+                                                    "children": [
+                                                      {
+                                                        "class": "ViewGroup",
+                                                        "text": "",
+                                                        "desc": "",
+                                                        "clickable": false,
+                                                        "bounds": {
+                                                          "left": 0,
+                                                          "top": 0,
+                                                          "right": 1080,
+                                                          "bottom": 2274
+                                                        },
+                                                        "children": [
+                                                          {
+                                                            "class": "ViewGroup",
+                                                            "text": "",
+                                                            "desc": "",
+                                                            "clickable": false,
+                                                            "bounds": {
+                                                              "left": 0,
+                                                              "top": 0,
+                                                              "right": 1080,
+                                                              "bottom": 0
+                                                            }
+                                                          },
+                                                          {
+                                                            "class": "ViewGroup",
+                                                            "text": "",
+                                                            "desc": "",
+                                                            "clickable": false,
+                                                            "bounds": {
+                                                              "left": 0,
+                                                              "top": 0,
+                                                              "right": 1080,
+                                                              "bottom": 2274
+                                                            },
+                                                            "children": [
+                                                              {
+                                                                "class": "ViewGroup",
+                                                                "text": "",
+                                                                "desc": "",
+                                                                "clickable": false,
+                                                                "bounds": {
+                                                                  "left": 0,
+                                                                  "top": 0,
+                                                                  "right": 1080,
+                                                                  "bottom": 2274
+                                                                }
+                                                              },
+                                                              {
+                                                                "class": "ViewGroup",
+                                                                "text": "",
+                                                                "desc": "",
+                                                                "clickable": false,
+                                                                "bounds": {
+                                                                  "left": 0,
+                                                                  "top": 0,
+                                                                  "right": 1080,
+                                                                  "bottom": 2274
+                                                                },
+                                                                "children": [
+                                                                  {
+                                                                    "class": "ViewGroup",
+                                                                    "text": "",
+                                                                    "desc": "",
+                                                                    "clickable": false,
+                                                                    "bounds": {
+                                                                      "left": 0,
+                                                                      "top": 0,
+                                                                      "right": 1080,
+                                                                      "bottom": 2274
+                                                                    },
+                                                                    "children": [
+                                                                      {
+                                                                        "class": "ViewGroup",
+                                                                        "text": "",
+                                                                        "desc": "",
+                                                                        "clickable": false,
+                                                                        "bounds": {
+                                                                          "left": 0,
+                                                                          "top": 0,
+                                                                          "right": 1080,
+                                                                          "bottom": 2274
+                                                                        },
+                                                                        "children": [
+                                                                          {
+                                                                            "class": "View",
+                                                                            "text": "",
+                                                                            "desc": "",
+                                                                            "clickable": false,
+                                                                            "bounds": {
+                                                                              "left": 0,
+                                                                              "top": 0,
+                                                                              "right": 1080,
+                                                                              "bottom": 0
+                                                                            }
+                                                                          },
+                                                                          {
+                                                                            "class": "View",
+                                                                            "text": "",
+                                                                            "desc": "",
+                                                                            "clickable": false,
+                                                                            "bounds": {
+                                                                              "left": 0,
+                                                                              "top": 0,
+                                                                              "right": 1080,
+                                                                              "bottom": 0
+                                                                            }
+                                                                          },
+                                                                          {
+                                                                            "class": "ViewGroup",
+                                                                            "text": "",
+                                                                            "desc": "",
+                                                                            "clickable": false,
+                                                                            "bounds": {
+                                                                              "left": 0,
+                                                                              "top": 0,
+                                                                              "right": 1080,
+                                                                              "bottom": 0
+                                                                            }
+                                                                          },
+                                                                          {
+                                                                            "class": "FrameLayout",
+                                                                            "text": "",
+                                                                            "desc": "",
+                                                                            "clickable": false,
+                                                                            "bounds": {
+                                                                              "left": 0,
+                                                                              "top": 0,
+                                                                              "right": 1080,
+                                                                              "bottom": 2274
+                                                                            },
+                                                                            "children": [
+                                                                              {
+                                                                                "class": "FrameLayout",
+                                                                                "text": "",
+                                                                                "desc": "지도",
+                                                                                "clickable": false,
+                                                                                "bounds": {
+                                                                                  "left": 0,
+                                                                                  "top": 0,
+                                                                                  "right": 1080,
+                                                                                  "bottom": 2274
+                                                                                },
+                                                                                "children": [
+                                                                                  {
+                                                                                    "class": "View",
+                                                                                    "text": "",
+                                                                                    "desc": "",
+                                                                                    "clickable": false,
+                                                                                    "bounds": {
+                                                                                      "left": 0,
+                                                                                      "top": 0,
+                                                                                      "right": 1080,
+                                                                                      "bottom": 2274
+                                                                                    }
+                                                                                  },
+                                                                                  {
+                                                                                    "class": "FrameLayout",
+                                                                                    "text": "",
+                                                                                    "desc": "",
+                                                                                    "clickable": false,
+                                                                                    "bounds": {
+                                                                                      "left": 0,
+                                                                                      "top": 0,
+                                                                                      "right": 1080,
+                                                                                      "bottom": 2274
+                                                                                    },
+                                                                                    "children": [
+                                                                                      {
+                                                                                        "class": "RelativeLayout",
+                                                                                        "text": "",
+                                                                                        "desc": "",
+                                                                                        "clickable": false,
+                                                                                        "bounds": {
+                                                                                          "left": 26,
+                                                                                          "top": 286,
+                                                                                          "right": 1080,
+                                                                                          "bottom": 1114
+                                                                                        },
+                                                                                        "children": [
+                                                                                          {
+                                                                                            "class": "FrameLayout",
+                                                                                            "text": "",
+                                                                                            "desc": "",
+                                                                                            "clickable": false,
+                                                                                            "bounds": {
+                                                                                              "left": 26,
+                                                                                              "top": 297,
+                                                                                              "right": 1080,
+                                                                                              "bottom": 1109
+                                                                                            }
+                                                                                          }
+                                                                                        ]
+                                                                                      },
+                                                                                      {
+                                                                                        "class": "ImageView",
+                                                                                        "text": "",
+                                                                                        "desc": "NAVER",
+                                                                                        "clickable": true,
+                                                                                        "bounds": {
+                                                                                          "left": 923,
+                                                                                          "top": 293,
+                                                                                          "right": 1049,
+                                                                                          "bottom": 338
+                                                                                        }
+                                                                                      }
+                                                                                    ]
+                                                                                  },
+                                                                                  {
+                                                                                    "class": "ViewGroup",
+                                                                                    "text": "",
+                                                                                    "desc": "",
+                                                                                    "clickable": false,
+                                                                                    "bounds": {
+                                                                                      "left": 100000000,
+                                                                                      "top": 100000000,
+                                                                                      "right": 1080,
+                                                                                      "bottom": 2274
+                                                                                    }
+                                                                                  }
+                                                                                ]
+                                                                              }
+                                                                            ]
+                                                                          },
+                                                                          {
+                                                                            "class": "ViewGroup",
+                                                                            "text": "",
+                                                                            "desc": "신규배차_끄기버튼",
+                                                                            "clickable": true,
+                                                                            "bounds": {
+                                                                              "left": 42,
+                                                                              "top": 130,
+                                                                              "right": 344,
+                                                                              "bottom": 256
+                                                                            },
+                                                                            "children": [
+                                                                              {
+                                                                                "class": "TextView",
+                                                                                "text": "신규배차",
+                                                                                "desc": "",
+                                                                                "clickable": false,
+                                                                                "bounds": {
+                                                                                  "left": 86,
+                                                                                  "top": 169,
+                                                                                  "right": 222,
+                                                                                  "bottom": 217
+                                                                                }
+                                                                              },
+                                                                              {
+                                                                                "class": "ImageView",
+                                                                                "text": "",
+                                                                                "desc": "",
+                                                                                "clickable": false,
+                                                                                "bounds": {
+                                                                                  "left": 237,
+                                                                                  "top": 172,
+                                                                                  "right": 311,
+                                                                                  "bottom": 214
+                                                                                }
+                                                                              }
+                                                                            ]
+                                                                          },
+                                                                          {
+                                                                            "class": "HorizontalScrollView",
+                                                                            "text": "",
+                                                                            "desc": "",
+                                                                            "clickable": false,
+                                                                            "bounds": {
+                                                                              "left": 0,
+                                                                              "top": 1474,
+                                                                              "right": 1080,
+                                                                              "bottom": 1977
+                                                                            },
+                                                                            "children": [
+                                                                              {
+                                                                                "class": "ViewGroup",
+                                                                                "text": "",
+                                                                                "desc": "",
+                                                                                "clickable": false,
+                                                                                "bounds": {
+                                                                                  "left": 0,
+                                                                                  "top": 1474,
+                                                                                  "right": 1080,
+                                                                                  "bottom": 1977
+                                                                                },
+                                                                                "children": [
+                                                                                  {
+                                                                                    "class": "ViewGroup",
+                                                                                    "text": "",
+                                                                                    "desc": "",
+                                                                                    "clickable": false,
+                                                                                    "bounds": {
+                                                                                      "left": 39,
+                                                                                      "top": 1474,
+                                                                                      "right": 924,
+                                                                                      "bottom": 1977
+                                                                                    },
+                                                                                    "children": [
+                                                                                      {
+                                                                                        "class": "ViewGroup",
+                                                                                        "text": "",
+                                                                                        "desc": "",
+                                                                                        "clickable": false,
+                                                                                        "bounds": {
+                                                                                          "left": 50,
+                                                                                          "top": 1474,
+                                                                                          "right": 914,
+                                                                                          "bottom": 1951
+                                                                                        },
+                                                                                        "children": [
+                                                                                          {
+                                                                                            "class": "ViewGroup",
+                                                                                            "text": "",
+                                                                                            "desc": "배민배달, 픽업지, 리얼펍 센텀재송점, 전달지, 부산 해운대구 센텀동로 123 더샵센텀스타 **** (재송동), 배달료, 3,730원, 포인트, 16.8P",
+                                                                                            "clickable": true,
+                                                                                            "bounds": {
+                                                                                              "left": 89,
+                                                                                              "top": 1513,
+                                                                                              "right": 875,
+                                                                                              "bottom": 1912
+                                                                                            },
+                                                                                            "children": [
+                                                                                              {
+                                                                                                "class": "ViewGroup",
+                                                                                                "text": "",
+                                                                                                "desc": "",
+                                                                                                "clickable": false,
+                                                                                                "bounds": {
+                                                                                                  "left": 89,
+                                                                                                  "top": 1513,
+                                                                                                  "right": 237,
+                                                                                                  "bottom": 1571
+                                                                                                },
+                                                                                                "children": [
+                                                                                                  {
+                                                                                                    "class": "TextView",
+                                                                                                    "text": "배민배달",
+                                                                                                    "desc": "",
+                                                                                                    "clickable": false,
+                                                                                                    "bounds": {
+                                                                                                      "left": 105,
+                                                                                                      "top": 1521,
+                                                                                                      "right": 221,
+                                                                                                      "bottom": 1562
+                                                                                                    }
+                                                                                                  }
+                                                                                                ]
+                                                                                              },
+                                                                                              {
+                                                                                                "class": "TextView",
+                                                                                                "text": "픽업지",
+                                                                                                "desc": "",
+                                                                                                "clickable": false,
+                                                                                                "bounds": {
+                                                                                                  "left": 89,
+                                                                                                  "top": 1589,
+                                                                                                  "right": 206,
+                                                                                                  "bottom": 1644
+                                                                                                }
+                                                                                              },
+                                                                                              {
+                                                                                                "class": "TextView",
+                                                                                                "text": "리얼펍 센텀재송점",
+                                                                                                "desc": "",
+                                                                                                "clickable": false,
+                                                                                                "bounds": {
+                                                                                                  "left": 227,
+                                                                                                  "top": 1589,
+                                                                                                  "right": 796,
+                                                                                                  "bottom": 1644
+                                                                                                }
+                                                                                              },
+                                                                                              {
+                                                                                                "class": "TextView",
+                                                                                                "text": "전달지",
+                                                                                                "desc": "",
+                                                                                                "clickable": false,
+                                                                                                "bounds": {
+                                                                                                  "left": 89,
+                                                                                                  "top": 1660,
+                                                                                                  "right": 206,
+                                                                                                  "bottom": 1770
+                                                                                                }
+                                                                                              },
+                                                                                              {
+                                                                                                "class": "TextView",
+                                                                                                "text": "부산 해운대구 센텀동로 123 더샵센텀스타 **** (재송동)",
+                                                                                                "desc": "",
+                                                                                                "clickable": false,
+                                                                                                "bounds": {
+                                                                                                  "left": 227,
+                                                                                                  "top": 1660,
+                                                                                                  "right": 796,
+                                                                                                  "bottom": 1770
+                                                                                                }
+                                                                                              },
+                                                                                              {
+                                                                                                "class": "TextView",
+                                                                                                "text": "배달료",
+                                                                                                "desc": "",
+                                                                                                "clickable": false,
+                                                                                                "bounds": {
+                                                                                                  "left": 89,
+                                                                                                  "top": 1786,
+                                                                                                  "right": 206,
+                                                                                                  "bottom": 1841
+                                                                                                }
+                                                                                              },
+                                                                                              {
+                                                                                                "class": "TextView",
+                                                                                                "text": "3,730원",
+                                                                                                "desc": "",
+                                                                                                "clickable": false,
+                                                                                                "bounds": {
+                                                                                                  "left": 227,
+                                                                                                  "top": 1786,
+                                                                                                  "right": 374,
+                                                                                                  "bottom": 1841
+                                                                                                }
+                                                                                              },
+                                                                                              {
+                                                                                                "class": "ViewGroup",
+                                                                                                "text": "",
+                                                                                                "desc": "",
+                                                                                                "clickable": true,
+                                                                                                "bounds": {
+                                                                                                  "left": 390,
+                                                                                                  "top": 1790,
+                                                                                                  "right": 437,
+                                                                                                  "bottom": 1837
+                                                                                                },
+                                                                                                "children": [
+                                                                                                  {
+                                                                                                    "class": "ViewGroup",
+                                                                                                    "text": "",
+                                                                                                    "desc": "touchable-image-container",
+                                                                                                    "clickable": true,
+                                                                                                    "bounds": {
+                                                                                                      "left": 390,
+                                                                                                      "top": 1790,
+                                                                                                      "right": 437,
+                                                                                                      "bottom": 1837
+                                                                                                    },
+                                                                                                    "children": [
+                                                                                                      {
+                                                                                                        "class": "ImageView",
+                                                                                                        "text": "",
+                                                                                                        "desc": "",
+                                                                                                        "clickable": false,
+                                                                                                        "bounds": {
+                                                                                                          "left": 390,
+                                                                                                          "top": 1790,
+                                                                                                          "right": 437,
+                                                                                                          "bottom": 1837
+                                                                                                        }
+                                                                                                      }
+                                                                                                    ]
+                                                                                                  }
+                                                                                                ]
+                                                                                              },
+                                                                                              {
+                                                                                                "class": "TextView",
+                                                                                                "text": "포인트",
+                                                                                                "desc": "",
+                                                                                                "clickable": false,
+                                                                                                "bounds": {
+                                                                                                  "left": 89,
+                                                                                                  "top": 1857,
+                                                                                                  "right": 206,
+                                                                                                  "bottom": 1912
+                                                                                                }
+                                                                                              },
+                                                                                              {
+                                                                                                "class": "TextView",
+                                                                                                "text": "16.8P",
+                                                                                                "desc": "",
+                                                                                                "clickable": false,
+                                                                                                "bounds": {
+                                                                                                  "left": 227,
+                                                                                                  "top": 1857,
+                                                                                                  "right": 342,
+                                                                                                  "bottom": 1912
+                                                                                                }
+                                                                                              }
+                                                                                            ]
+                                                                                          },
+                                                                                          {
+                                                                                            "class": "ImageView",
+                                                                                            "text": "",
+                                                                                            "desc": "",
+                                                                                            "clickable": false,
+                                                                                            "bounds": {
+                                                                                              "left": 827,
+                                                                                              "top": 1519,
+                                                                                              "right": 869,
+                                                                                              "bottom": 1561
+                                                                                            }
+                                                                                          }
+                                                                                        ]
+                                                                                      }
+                                                                                    ]
+                                                                                  },
+                                                                                  {
+                                                                                    "class": "ViewGroup",
+                                                                                    "text": "",
+                                                                                    "desc": "",
+                                                                                    "clickable": false,
+                                                                                    "bounds": {
+                                                                                      "left": 924,
+                                                                                      "top": 1474,
+                                                                                      "right": 1080,
+                                                                                      "bottom": 1977
+                                                                                    },
+                                                                                    "children": [
+                                                                                      {
+                                                                                        "class": "ViewGroup",
+                                                                                        "text": "",
+                                                                                        "desc": "",
+                                                                                        "clickable": false,
+                                                                                        "bounds": {
+                                                                                          "left": 935,
+                                                                                          "top": 1474,
+                                                                                          "right": 1080,
+                                                                                          "bottom": 1951
+                                                                                        },
+                                                                                        "children": [
+                                                                                          {
+                                                                                            "class": "ViewGroup",
+                                                                                            "text": "",
+                                                                                            "desc": "배민배달, 픽업지, 메가커피 센텀재송점, 전달지, 부산 해운대구 재송1로14번길 18 **** (재송동), 배달료, 2,200원, touchable-image-container, 포인트, 9.6P",
+                                                                                            "clickable": true,
+                                                                                            "bounds": {
+                                                                                              "left": 974,
+                                                                                              "top": 1513,
+                                                                                              "right": 1080,
+                                                                                              "bottom": 1912
+                                                                                            },
+                                                                                            "children": [
+                                                                                              {
+                                                                                                "class": "ViewGroup",
+                                                                                                "text": "",
+                                                                                                "desc": "",
+                                                                                                "clickable": false,
+                                                                                                "bounds": {
+                                                                                                  "left": 974,
+                                                                                                  "top": 1513,
+                                                                                                  "right": 1080,
+                                                                                                  "bottom": 1571
+                                                                                                },
+                                                                                                "children": [
+                                                                                                  {
+                                                                                                    "class": "TextView",
+                                                                                                    "text": "배민배달",
+                                                                                                    "desc": "",
+                                                                                                    "clickable": false,
+                                                                                                    "bounds": {
+                                                                                                      "left": 990,
+                                                                                                      "top": 1521,
+                                                                                                      "right": 1080,
+                                                                                                      "bottom": 1562
+                                                                                                    }
+                                                                                                  }
+                                                                                                ]
+                                                                                              },
+                                                                                              {
+                                                                                                "class": "TextView",
+                                                                                                "text": "픽업지",
+                                                                                                "desc": "",
+                                                                                                "clickable": false,
+                                                                                                "bounds": {
+                                                                                                  "left": 974,
+                                                                                                  "top": 1589,
+                                                                                                  "right": 1080,
+                                                                                                  "bottom": 1644
+                                                                                                }
+                                                                                              },
+                                                                                              {
+                                                                                                "class": "TextView",
+                                                                                                "text": "메가커피 센텀재송점",
+                                                                                                "desc": "",
+                                                                                                "clickable": false,
+                                                                                                "bounds": {
+                                                                                                  "left": 1112,
+                                                                                                  "top": 1589,
+                                                                                                  "right": 1080,
+                                                                                                  "bottom": 1644
+                                                                                                }
+                                                                                              },
+                                                                                              {
+                                                                                                "class": "TextView",
+                                                                                                "text": "전달지",
+                                                                                                "desc": "",
+                                                                                                "clickable": false,
+                                                                                                "bounds": {
+                                                                                                  "left": 974,
+                                                                                                  "top": 1660,
+                                                                                                  "right": 1080,
+                                                                                                  "bottom": 1770
+                                                                                                }
+                                                                                              },
+                                                                                              {
+                                                                                                "class": "TextView",
+                                                                                                "text": "부산 해운대구 재송1로14번길 18 **** (재송동)",
+                                                                                                "desc": "",
+                                                                                                "clickable": false,
+                                                                                                "bounds": {
+                                                                                                  "left": 1112,
+                                                                                                  "top": 1660,
+                                                                                                  "right": 1080,
+                                                                                                  "bottom": 1770
+                                                                                                }
+                                                                                              },
+                                                                                              {
+                                                                                                "class": "TextView",
+                                                                                                "text": "배달료",
+                                                                                                "desc": "",
+                                                                                                "clickable": false,
+                                                                                                "bounds": {
+                                                                                                  "left": 974,
+                                                                                                  "top": 1786,
+                                                                                                  "right": 1080,
+                                                                                                  "bottom": 1841
+                                                                                                }
+                                                                                              },
+                                                                                              {
+                                                                                                "class": "TextView",
+                                                                                                "text": "2,200원",
+                                                                                                "desc": "",
+                                                                                                "clickable": false,
+                                                                                                "bounds": {
+                                                                                                  "left": 1112,
+                                                                                                  "top": 1786,
+                                                                                                  "right": 1080,
+                                                                                                  "bottom": 1841
+                                                                                                }
+                                                                                              },
+                                                                                              {
+                                                                                                "class": "ViewGroup",
+                                                                                                "text": "",
+                                                                                                "desc": "touchable-image-container",
+                                                                                                "clickable": true,
+                                                                                                "bounds": {
+                                                                                                  "left": 1275,
+                                                                                                  "top": 1790,
+                                                                                                  "right": 1080,
+                                                                                                  "bottom": 1837
+                                                                                                },
+                                                                                                "children": [
+                                                                                                  {
+                                                                                                    "class": "ViewGroup",
+                                                                                                    "text": "",
+                                                                                                    "desc": "touchable-image-container",
+                                                                                                    "clickable": true,
+                                                                                                    "bounds": {
+                                                                                                      "left": 1275,
+                                                                                                      "top": 1790,
+                                                                                                      "right": 1080,
+                                                                                                      "bottom": 1837
+                                                                                                    },
+                                                                                                    "children": [
+                                                                                                      {
+                                                                                                        "class": "ImageView",
+                                                                                                        "text": "",
+                                                                                                        "desc": "",
+                                                                                                        "clickable": false,
+                                                                                                        "bounds": {
+                                                                                                          "left": 1275,
+                                                                                                          "top": 1790,
+                                                                                                          "right": 1080,
+                                                                                                          "bottom": 1837
+                                                                                                        }
+                                                                                                      }
+                                                                                                    ]
+                                                                                                  }
+                                                                                                ]
+                                                                                              },
+                                                                                              {
+                                                                                                "class": "TextView",
+                                                                                                "text": "포인트",
+                                                                                                "desc": "",
+                                                                                                "clickable": false,
+                                                                                                "bounds": {
+                                                                                                  "left": 974,
+                                                                                                  "top": 1857,
+                                                                                                  "right": 1080,
+                                                                                                  "bottom": 1912
+                                                                                                }
+                                                                                              },
+                                                                                              {
+                                                                                                "class": "TextView",
+                                                                                                "text": "9.6P",
+                                                                                                "desc": "",
+                                                                                                "clickable": false,
+                                                                                                "bounds": {
+                                                                                                  "left": 1112,
+                                                                                                  "top": 1857,
+                                                                                                  "right": 1080,
+                                                                                                  "bottom": 1912
+                                                                                                }
+                                                                                              }
+                                                                                            ]
+                                                                                          },
+                                                                                          {
+                                                                                            "class": "ImageView",
+                                                                                            "text": "",
+                                                                                            "desc": "",
+                                                                                            "clickable": false,
+                                                                                            "bounds": {
+                                                                                              "left": 1712,
+                                                                                              "top": 1519,
+                                                                                              "right": 1080,
+                                                                                              "bottom": 1561
+                                                                                            }
+                                                                                          }
+                                                                                        ]
+                                                                                      }
+                                                                                    ]
+                                                                                  }
+                                                                                ]
+                                                                              }
+                                                                            ]
+                                                                          },
+                                                                          {
+                                                                            "class": "ViewGroup",
+                                                                            "text": "",
+                                                                            "desc": "",
+                                                                            "clickable": false,
+                                                                            "bounds": {
+                                                                              "left": 0,
+                                                                              "top": 1750,
+                                                                              "right": 1080,
+                                                                              "bottom": 2274
+                                                                            }
+                                                                          },
+                                                                          {
+                                                                            "class": "TextView",
+                                                                            "text": "총 합계",
+                                                                            "desc": "",
+                                                                            "clickable": false,
+                                                                            "bounds": {
+                                                                              "left": 235,
+                                                                              "top": 1989,
+                                                                              "right": 407,
+                                                                              "bottom": 2070
+                                                                            }
+                                                                          },
+                                                                          {
+                                                                            "class": "TextView",
+                                                                            "text": "5,930원",
+                                                                            "desc": "",
+                                                                            "clickable": false,
+                                                                            "bounds": {
+                                                                              "left": 428,
+                                                                              "top": 1989,
+                                                                              "right": 635,
+                                                                              "bottom": 2070
+                                                                            }
+                                                                          },
+                                                                          {
+                                                                            "class": "ViewGroup",
+                                                                            "text": "",
+                                                                            "desc": "",
+                                                                            "clickable": false,
+                                                                            "bounds": {
+                                                                              "left": 656,
+                                                                              "top": 2026,
+                                                                              "right": 664,
+                                                                              "bottom": 2034
+                                                                            }
+                                                                          },
+                                                                          {
+                                                                            "class": "TextView",
+                                                                            "text": "26.4P",
+                                                                            "desc": "",
+                                                                            "clickable": false,
+                                                                            "bounds": {
+                                                                              "left": 685,
+                                                                              "top": 1989,
+                                                                              "right": 845,
+                                                                              "bottom": 2070
+                                                                            }
+                                                                          },
+                                                                          {
+                                                                            "class": "ViewGroup",
+                                                                            "text": "",
+                                                                            "desc": "신규배차_모두거절버튼",
+                                                                            "clickable": true,
+                                                                            "bounds": {
+                                                                              "left": 42,
+                                                                              "top": 2107,
+                                                                              "right": 331,
+                                                                              "bottom": 2233
+                                                                            },
+                                                                            "children": [
+                                                                              {
+                                                                                "class": "ViewGroup",
+                                                                                "text": "",
+                                                                                "desc": "",
+                                                                                "clickable": false,
+                                                                                "bounds": {
+                                                                                  "left": 42,
+                                                                                  "top": 2107,
+                                                                                  "right": 305,
+                                                                                  "bottom": 2233
+                                                                                },
+                                                                                "children": [
+                                                                                  {
+                                                                                    "class": "TextView",
+                                                                                    "text": "모두 거절",
+                                                                                    "desc": "",
+                                                                                    "clickable": false,
+                                                                                    "bounds": {
+                                                                                      "left": 90,
+                                                                                      "top": 2143,
+                                                                                      "right": 256,
+                                                                                      "bottom": 2198
+                                                                                    }
+                                                                                  }
+                                                                                ]
+                                                                              }
+                                                                            ]
+                                                                          },
+                                                                          {
+                                                                            "class": "ViewGroup",
+                                                                            "text": "",
+                                                                            "desc": "신규배차_모두수락버튼",
+                                                                            "clickable": true,
+                                                                            "bounds": {
+                                                                              "left": 331,
+                                                                              "top": 2107,
+                                                                              "right": 1038,
+                                                                              "bottom": 2233
+                                                                            },
+                                                                            "children": [
+                                                                              {
+                                                                                "class": "ViewGroup",
+                                                                                "text": "",
+                                                                                "desc": "",
+                                                                                "clickable": false,
+                                                                                "bounds": {
+                                                                                  "left": 331,
+                                                                                  "top": 2107,
+                                                                                  "right": 1038,
+                                                                                  "bottom": 2233
+                                                                                },
+                                                                                "children": [
+                                                                                  {
+                                                                                    "class": "ViewGroup",
+                                                                                    "text": "",
+                                                                                    "desc": "",
+                                                                                    "clickable": false,
+                                                                                    "bounds": {
+                                                                                      "left": 331,
+                                                                                      "top": 2107,
+                                                                                      "right": 594,
+                                                                                      "bottom": 2233
+                                                                                    }
+                                                                                  },
+                                                                                  {
+                                                                                    "class": "TextView",
+                                                                                    "text": "2건 모두 수락",
+                                                                                    "desc": "",
+                                                                                    "clickable": false,
+                                                                                    "bounds": {
+                                                                                      "left": 495,
+                                                                                      "top": 2143,
+                                                                                      "right": 735,
+                                                                                      "bottom": 2198
+                                                                                    }
+                                                                                  },
+                                                                                  {
+                                                                                    "class": "ViewGroup",
+                                                                                    "text": "",
+                                                                                    "desc": "",
+                                                                                    "clickable": false,
+                                                                                    "bounds": {
+                                                                                      "left": 756,
+                                                                                      "top": 2167,
+                                                                                      "right": 764,
+                                                                                      "bottom": 2175
+                                                                                    }
+                                                                                  },
+                                                                                  {
+                                                                                    "class": "TextView",
+                                                                                    "text": "25초",
+                                                                                    "desc": "",
+                                                                                    "clickable": false,
+                                                                                    "bounds": {
+                                                                                      "left": 785,
+                                                                                      "top": 2143,
+                                                                                      "right": 874,
+                                                                                      "bottom": 2198
+                                                                                    }
+                                                                                  }
+                                                                                ]
+                                                                              }
+                                                                            ]
+                                                                          }
+                                                                        ]
+                                                                      }
+                                                                    ]
+                                                                  }
+                                                                ]
+                                                              }
+                                                            ]
+                                                          }
+                                                        ]
+                                                      }
+                                                    ]
+                                                  }
+                                                ]
+                                              },
+                                              {
+                                                "class": "ViewGroup",
+                                                "text": "",
+                                                "desc": "",
+                                                "clickable": false,
+                                                "bounds": {
+                                                  "left": 0,
+                                                  "top": 0,
+                                                  "right": 1080,
+                                                  "bottom": 256
+                                                }
+                                              }
+                                            ]
+                                          },
+                                          {
+                                            "class": "ViewGroup",
+                                            "text": "",
+                                            "desc": "",
+                                            "clickable": false,
+                                            "bounds": {
+                                              "left": 0,
+                                              "top": 0,
+                                              "right": 1080,
+                                              "bottom": 193
+                                            },
+                                            "children": [
+                                              {
+                                                "class": "ViewGroup",
+                                                "text": "",
+                                                "desc": "",
+                                                "clickable": false,
+                                                "bounds": {
+                                                  "left": 0,
+                                                  "top": 88,
+                                                  "right": 1080,
+                                                  "bottom": 193
+                                                }
+                                              }
+                                            ]
+                                          },
+                                          {
+                                            "class": "ViewGroup",
+                                            "text": "",
+                                            "desc": "",
+                                            "clickable": false,
+                                            "bounds": {
+                                              "left": 135,
+                                              "top": 219,
+                                              "right": 946,
+                                              "bottom": 392
+                                            },
+                                            "children": [
+                                              {
+                                                "class": "TextView",
+                                                "text": "일시적인 오류가 발생했어요. 잠시 후 다시 시도해주세요.",
+                                                "desc": "",
+                                                "clickable": false,
+                                                "bounds": {
+                                                  "left": 177,
+                                                  "top": 251,
+                                                  "right": 904,
+                                                  "bottom": 361
+                                                }
+                                              }
+                                            ]
+                                          },
+                                          {
+                                            "class": "ViewGroup",
+                                            "text": "",
+                                            "desc": "",
+                                            "clickable": false,
+                                            "bounds": {
+                                              "left": 42,
+                                              "top": 2045,
+                                              "right": 1038,
+                                              "bottom": 2219
+                                            },
+                                            "children": [
+                                              {
+                                                "class": "TextView",
+                                                "text": "",
+                                                "desc": "",
+                                                "clickable": false,
+                                                "bounds": {
+                                                  "left": 84,
+                                                  "top": 2077,
+                                                  "right": 875,
+                                                  "bottom": 2120
+                                                }
+                                              },
+                                              {
+                                                "class": "ViewGroup",
+                                                "text": "",
+                                                "desc": "지도앱으로 검색하기",
+                                                "clickable": true,
+                                                "bounds": {
+                                                  "left": 84,
+                                                  "top": 2125,
+                                                  "right": 500,
+                                                  "bottom": 2188
+                                                },
+                                                "children": [
+                                                  {
+                                                    "class": "TextView",
+                                                    "text": "지도앱으로 검색하기",
+                                                    "desc": "",
+                                                    "clickable": false,
+                                                    "bounds": {
+                                                      "left": 84,
+                                                      "top": 2129,
+                                                      "right": 445,
+                                                      "bottom": 2184
+                                                    }
+                                                  },
+                                                  {
+                                                    "class": "ImageView",
+                                                    "text": "",
+                                                    "desc": "",
+                                                    "clickable": false,
+                                                    "bounds": {
+                                                      "left": 458,
+                                                      "top": 2136,
+                                                      "right": 500,
+                                                      "bottom": 2178
+                                                    }
+                                                  }
+                                                ]
+                                              },
+                                              {
+                                                "class": "ViewGroup",
+                                                "text": "",
+                                                "desc": "",
+                                                "clickable": true,
+                                                "bounds": {
+                                                  "left": 943,
+                                                  "top": 2077,
+                                                  "right": 1006,
+                                                  "bottom": 2140
+                                                },
+                                                "children": [
+                                                  {
+                                                    "class": "ImageView",
+                                                    "text": "",
+                                                    "desc": "",
+                                                    "clickable": false,
+                                                    "bounds": {
+                                                      "left": 943,
+                                                      "top": 2077,
+                                                      "right": 1006,
+                                                      "bottom": 2140
+                                                    }
+                                                  }
+                                                ]
+                                              }
+                                            ]
+                                          }
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "class": "View",
+        "text": "",
+        "desc": "",
+        "clickable": false,
+        "bounds": {
+          "left": 0,
+          "top": 2274,
+          "right": 1080,
+          "bottom": 2400
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,392 @@
+{
+  "timestamp": 1777127327710,
+  "packageName": "com.coupang.mobile.eats.courier",
+  "nodes": {
+    "class": "FrameLayout",
+    "text": "",
+    "desc": "",
+    "clickable": false,
+    "bounds": {
+      "left": 0,
+      "top": 0,
+      "right": 1080,
+      "bottom": 2400
+    },
+    "children": [
+      {
+        "class": "LinearLayout",
+        "text": "",
+        "desc": "",
+        "clickable": false,
+        "bounds": {
+          "left": 0,
+          "top": 0,
+          "right": 1080,
+          "bottom": 2274
+        },
+        "children": [
+          {
+            "class": "FrameLayout",
+            "text": "",
+            "desc": "",
+            "clickable": false,
+            "bounds": {
+              "left": 0,
+              "top": 0,
+              "right": 1080,
+              "bottom": 2274
+            },
+            "children": [
+              {
+                "class": "FrameLayout",
+                "text": "",
+                "desc": "",
+                "clickable": false,
+                "bounds": {
+                  "left": 0,
+                  "top": 0,
+                  "right": 1080,
+                  "bottom": 2274
+                },
+                "children": [
+                  {
+                    "class": "View",
+                    "text": "",
+                    "desc": "",
+                    "clickable": false,
+                    "bounds": {
+                      "left": 0,
+                      "top": 0,
+                      "right": 1080,
+                      "bottom": 2274
+                    },
+                    "children": [
+                      {
+                        "class": "View",
+                        "text": "",
+                        "desc": "",
+                        "clickable": false,
+                        "bounds": {
+                          "left": 0,
+                          "top": 0,
+                          "right": 1080,
+                          "bottom": 2274
+                        },
+                        "children": [
+                          {
+                            "class": "View",
+                            "text": "",
+                            "desc": "",
+                            "clickable": false,
+                            "bounds": {
+                              "left": 0,
+                              "top": 0,
+                              "right": 1080,
+                              "bottom": 2274
+                            },
+                            "children": [
+                              {
+                                "class": "View",
+                                "text": "",
+                                "desc": "",
+                                "clickable": false,
+                                "bounds": {
+                                  "left": 0,
+                                  "top": 0,
+                                  "right": 1080,
+                                  "bottom": 2274
+                                },
+                                "children": [
+                                  {
+                                    "class": "View",
+                                    "text": "",
+                                    "desc": "",
+                                    "clickable": false,
+                                    "bounds": {
+                                      "left": 0,
+                                      "top": 0,
+                                      "right": 1080,
+                                      "bottom": 2274
+                                    },
+                                    "children": [
+                                      {
+                                        "class": "FrameLayout",
+                                        "text": "",
+                                        "desc": "지도",
+                                        "clickable": false,
+                                        "bounds": {
+                                          "left": 0,
+                                          "top": 0,
+                                          "right": 1080,
+                                          "bottom": 2274
+                                        },
+                                        "children": [
+                                          {
+                                            "class": "View",
+                                            "text": "",
+                                            "desc": "",
+                                            "clickable": false,
+                                            "bounds": {
+                                              "left": 0,
+                                              "top": 0,
+                                              "right": 1080,
+                                              "bottom": 2274
+                                            }
+                                          },
+                                          {
+                                            "class": "FrameLayout",
+                                            "text": "",
+                                            "desc": "",
+                                            "clickable": false,
+                                            "bounds": {
+                                              "left": 0,
+                                              "top": 0,
+                                              "right": 1080,
+                                              "bottom": 2274
+                                            },
+                                            "children": [
+                                              {
+                                                "class": "RelativeLayout",
+                                                "text": "",
+                                                "desc": "",
+                                                "clickable": false,
+                                                "bounds": {
+                                                  "left": 26,
+                                                  "top": 32,
+                                                  "right": 1080,
+                                                  "bottom": 2164
+                                                },
+                                                "children": [
+                                                  {
+                                                    "class": "LinearLayout",
+                                                    "text": "",
+                                                    "desc": "",
+                                                    "clickable": false,
+                                                    "bounds": {
+                                                      "left": 31,
+                                                      "top": 32,
+                                                      "right": 31,
+                                                      "bottom": 32
+                                                    }
+                                                  },
+                                                  {
+                                                    "class": "FrameLayout",
+                                                    "text": "",
+                                                    "desc": "",
+                                                    "clickable": false,
+                                                    "bounds": {
+                                                      "left": 26,
+                                                      "top": 43,
+                                                      "right": 1080,
+                                                      "bottom": 2159
+                                                    },
+                                                    "children": [
+                                                      {
+                                                        "class": "FrameLayout",
+                                                        "text": "",
+                                                        "desc": "",
+                                                        "clickable": false,
+                                                        "bounds": {
+                                                          "left": 26,
+                                                          "top": 1625,
+                                                          "right": 26,
+                                                          "bottom": 2159
+                                                        }
+                                                      }
+                                                    ]
+                                                  }
+                                                ]
+                                              },
+                                              {
+                                                "class": "LinearLayout",
+                                                "text": "",
+                                                "desc": "",
+                                                "clickable": true,
+                                                "bounds": {
+                                                  "left": 32,
+                                                  "top": 2219,
+                                                  "right": 150,
+                                                  "bottom": 2250
+                                                },
+                                                "children": [
+                                                  {
+                                                    "class": "ImageView",
+                                                    "text": "",
+                                                    "desc": "NAVER",
+                                                    "clickable": true,
+                                                    "bounds": {
+                                                      "left": 32,
+                                                      "top": 2219,
+                                                      "right": 150,
+                                                      "bottom": 2245
+                                                    }
+                                                  }
+                                                ]
+                                              }
+                                            ]
+                                          }
+                                        ]
+                                      }
+                                    ]
+                                  },
+                                  {
+                                    "class": "ImageView",
+                                    "text": "",
+                                    "desc": "",
+                                    "clickable": true,
+                                    "bounds": {
+                                      "left": 917,
+                                      "top": 1114,
+                                      "right": 1038,
+                                      "bottom": 1235
+                                    }
+                                  },
+                                  {
+                                    "class": "View",
+                                    "text": "",
+                                    "desc": "일반",
+                                    "clickable": false,
+                                    "bounds": {
+                                      "left": 513,
+                                      "top": 1357,
+                                      "right": 567,
+                                      "bottom": 1396
+                                    }
+                                  },
+                                  {
+                                    "class": "View",
+                                    "text": "",
+                                    "desc": "예뻐지는 호박죽",
+                                    "clickable": false,
+                                    "bounds": {
+                                      "left": 392,
+                                      "top": 1424,
+                                      "right": 688,
+                                      "bottom": 1484
+                                    }
+                                  },
+                                  {
+                                    "class": "View",
+                                    "text": "",
+                                    "desc": "4,170원",
+                                    "clickable": false,
+                                    "bounds": {
+                                      "left": 335,
+                                      "top": 1494,
+                                      "right": 745,
+                                      "bottom": 1607
+                                    }
+                                  },
+                                  {
+                                    "class": "ImageView",
+                                    "text": "",
+                                    "desc": "거리할증 포함",
+                                    "clickable": true,
+                                    "bounds": {
+                                      "left": 420,
+                                      "top": 1628,
+                                      "right": 660,
+                                      "bottom": 1668
+                                    }
+                                  },
+                                  {
+                                    "class": "ImageView",
+                                    "text": "",
+                                    "desc": "배달거리 2.9km(실제경로)",
+                                    "clickable": true,
+                                    "bounds": {
+                                      "left": 324,
+                                      "top": 1689,
+                                      "right": 756,
+                                      "bottom": 1728
+                                    }
+                                  },
+                                  {
+                                    "class": "View",
+                                    "text": "",
+                                    "desc": "조건에 맞거나 진행중인 미션이 없습니다",
+                                    "clickable": false,
+                                    "bounds": {
+                                      "left": 53,
+                                      "top": 1815,
+                                      "right": 626,
+                                      "bottom": 1859
+                                    }
+                                  },
+                                  {
+                                    "class": "View",
+                                    "text": "",
+                                    "desc": "19%",
+                                    "clickable": false,
+                                    "bounds": {
+                                      "left": 0,
+                                      "top": 2043,
+                                      "right": 1080,
+                                      "bottom": 2054
+                                    }
+                                  },
+                                  {
+                                    "class": "View",
+                                    "text": "",
+                                    "desc": "거절",
+                                    "clickable": true,
+                                    "bounds": {
+                                      "left": 47,
+                                      "top": 2075,
+                                      "right": 221,
+                                      "bottom": 2232
+                                    }
+                                  },
+                                  {
+                                    "class": "ImageView",
+                                    "text": "",
+                                    "desc": "메뉴",
+                                    "clickable": true,
+                                    "bounds": {
+                                      "left": 937,
+                                      "top": 1357,
+                                      "right": 1028,
+                                      "bottom": 1396
+                                    }
+                                  },
+                                  {
+                                    "class": "View",
+                                    "text": "",
+                                    "desc": "주문 수락\n32초",
+                                    "clickable": true,
+                                    "bounds": {
+                                      "left": 268,
+                                      "top": 2075,
+                                      "right": 1033,
+                                      "bottom": 2232
+                                    }
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "class": "View",
+        "text": "",
+        "desc": "",
+        "clickable": false,
+        "bounds": {
+          "left": 0,
+          "top": 2274,
+          "right": 1080,
+          "bottom": 2400
+        }
+      }
+    ]
+  }
+}

@@ -28,6 +28,9 @@ import java.util.Date
 import java.util.Locale
 import org.json.JSONObject
 import org.json.JSONArray
+import androidx.core.content.edit
+import android.media.AudioManager
+import android.media.ToneGenerator
 
 class KeyMapperAccessibilityService : AccessibilityService() {
 
@@ -79,32 +82,28 @@ class KeyMapperAccessibilityService : AccessibilityService() {
         val info = serviceInfo ?: AccessibilityServiceInfo()
         
         if (isMappingEnabled || isRecording) {
-            // 중요: 윈도우 변화 감지는 서비스가 활성화된 동안 항상 켜두어야 배달 앱 진입을 감지할 수 있음
             info.eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or AccessibilityEvent.TYPE_WINDOWS_CHANGED
             info.feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC
             info.notificationTimeout = 100
             
-            // 키 가로채기 플래그는 실제 위젯이 떠 있거나 레코딩 중일 때만 활성화
             val shouldFilterKeys = isRecording || (isMappingEnabled && isInterceptionActive)
             var targetFlags = AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS or
                             AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS
             
             if (shouldFilterKeys) {
                 targetFlags = targetFlags or AccessibilityServiceInfo.FLAG_REQUEST_FILTER_KEY_EVENTS
-                Log.d("KeyMapper", "Key Filter: ACTIVE (Window Detection + Key Filtering)")
+                Log.d("KeyMapper", "Key Filter: ACTIVE")
             } else {
-                // 키 필터링만 끄고 윈도우 감지는 유지 (Bypass 상태)
-                Log.d("KeyMapper", "Key Filter: WINDOW_ONLY (Window Detection active, Keys bypassed)")
+                Log.d("KeyMapper", "Key Filter: WINDOW_ONLY")
             }
             
             info.flags = targetFlags
         } else {
-            // 완전 중지 상태 (STEALTH)
             info.eventTypes = 0
             info.feedbackType = 0
             info.notificationTimeout = 0
             info.flags = 0
-            Log.d("KeyMapper", "Key Filter: STEALTH (Fully Disabled)")
+            Log.d("KeyMapper", "Key Filter: STEALTH")
         }
         
         serviceInfo = info
@@ -120,128 +119,35 @@ class KeyMapperAccessibilityService : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event?.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
             val packageName = event.packageName?.toString() ?: return
-            currentPackageName = packageName // 정적 변수 업데이트
+            currentPackageName = packageName
             
             val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
             val isMappingEnabled = prefs.getBoolean("is_mapping_enabled", false)
             val isRunning = FloatingWidgetService.isRunning.value
             
-            Log.d("KeyMapper", "Window changed: $packageName, enabled=$isMappingEnabled, running=$isRunning")
-
             if (!isMappingEnabled) return
 
             val preset = Presets.getPresetFromPackage(packageName)
             
             if (isRunning) {
                 if (preset != null) {
-                    Log.d("KeyMapper", "Delivery App Detected: $packageName -> Loading $preset")
                     val intent = Intent(this, FloatingWidgetService::class.java).apply {
                         action = FloatingWidgetService.ACTION_LOAD_PRESET
                         putExtra("preset_name", preset)
                     }
                     startService(intent)
                 } else {
-                    // 배달 앱이 아닌 경우 숨기기
-                    if (packageName == "com.android.systemui" || 
-                        packageName == "android" || 
-                        packageName == "kr.disys.baedalin") {
-                        // 시스템 UI나 본인 앱에서는 아이콘 상태만 최신화
-                        FloatingWidgetService.instance?.updateToolbarState()
-                        return
+                    if (packageName != "com.android.systemui" && 
+                        packageName != "android" && 
+                        packageName != "kr.disys.baedalin") {
+                        val intent = Intent(this, FloatingWidgetService::class.java).apply {
+                            action = FloatingWidgetService.ACTION_HIDE_PRESETS
+                        }
+                        startService(intent)
                     }
-                    
-                    val intent = Intent(this, FloatingWidgetService::class.java).apply {
-                        action = FloatingWidgetService.ACTION_HIDE_PRESETS
-                    }
-                    startService(intent)
                 }
-                
-                // 어떤 경우든 앱이 바뀌면 아이콘 상태 갱신
                 FloatingWidgetService.instance?.updateToolbarState()
             }
-        }
-    }
-
-    private fun handleAutoDetect() {
-        val currentApp = currentPackageName
-        val preset = Presets.getPresetFromPackage(currentApp)
-        
-        if (preset == null) {
-            Log.d("KeyMapper", "Auto-Detect: Not in a supported delivery app ($currentApp)")
-            return
-        }
-
-        Log.d("KeyMapper", "Auto-Detect: Starting for $preset in $currentApp")
-        
-        val rootNode = rootInActiveWindow ?: return
-        val results = mutableListOf<String>()
-
-        // 1. 수락 버튼 검색
-        val acceptKeywords = listOf("수락", "배차", "확인", "Accept", "Confirm")
-        findNodeByText(rootNode, acceptKeywords)?.let { node ->
-            val rect = Rect()
-            node.getBoundsInScreen(rect)
-            val centerX = rect.centerX()
-            val centerY = rect.centerY()
-            saveCoordinate(preset, DeliveryFunction.ACCEPT.name, centerX, centerY)
-            results.add("수락")
-            Log.d("KeyMapper", "Auto-Detect: Found ACCEPT at ($centerX, $centerY)")
-        }
-
-        // 2. 거절 버튼 검색
-        val rejectKeywords = listOf("거절", "Reject", "Dismiss")
-        findNodeByText(rootNode, rejectKeywords)?.let { node ->
-            val rect = Rect()
-            node.getBoundsInScreen(rect)
-            val centerX = rect.centerX()
-            val centerY = rect.centerY()
-            saveCoordinate(preset, DeliveryFunction.REJECT.name, centerX, centerY)
-            results.add("거절")
-            Log.d("KeyMapper", "Auto-Detect: Found REJECT at ($centerX, $centerY)")
-        }
-
-        if (results.isNotEmpty()) {
-            val msg = results.joinToString(", ")
-            // FloatingWidgetService에 알림
-            val intent = Intent(this, FloatingWidgetService::class.java).apply {
-                action = FloatingWidgetService.ACTION_LOAD_PRESET
-                putExtra("preset_name", preset)
-            }
-            startService(intent)
-            
-            // 토스트 알림을 위해 서비스로 브로드캐스트 또는 인텐트 전송
-            Log.d("KeyMapper", "Auto-Detect SUCCESS: $msg")
-        } else {
-            Log.d("KeyMapper", "Auto-Detect FAILED: No buttons found")
-        }
-        
-        rootNode.recycle()
-    }
-
-    private fun findNodeByText(root: AccessibilityNodeInfo, keywords: List<String>): AccessibilityNodeInfo? {
-        val queue = mutableListOf<AccessibilityNodeInfo>()
-        queue.add(root)
-        
-        while (queue.isNotEmpty()) {
-            val node = queue.removeAt(0)
-            
-            val text = node.text?.toString() ?: node.contentDescription?.toString() ?: ""
-            if (keywords.any { text.contains(it, ignoreCase = true) }) {
-                return node
-            }
-            
-            for (i in 0 until node.childCount) {
-                node.getChild(i)?.let { queue.add(it) }
-            }
-        }
-        return null
-    }
-
-    private fun saveCoordinate(preset: String, function: String, x: Int, y: Int) {
-        val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
-        prefs.edit {
-            putInt("${preset}_${function}_x", x - 50) // FloatingWidgetService의 오프셋 보정 (ICON_SIZE/2)
-            putInt("${preset}_${function}_y", y - 90) // FloatingWidgetService의 오프셋 보정 (ICON_SIZE/2 + 40)
         }
     }
 
@@ -259,9 +165,8 @@ class KeyMapperAccessibilityService : AccessibilityService() {
             
             FileWriter(file).use { it.write(json.toString(2)) }
             
-            Log.d("KeyMapper", "UI Snapshot saved: ${file.absolutePath}")
+            playSuccessSound()
             
-            // FloatingWidgetService에 성공 알림
             val intent = Intent(this, FloatingWidgetService::class.java).apply {
                 action = "ACTION_SNAPSHOT_COMPLETE"
                 putExtra("success", true)
@@ -311,9 +216,27 @@ class KeyMapperAccessibilityService : AccessibilityService() {
         return json
     }
 
+    private fun playSuccessSound() {
+        try {
+            val toneG = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 100)
+            toneG.startTone(ToneGenerator.TONE_PROP_BEEP, 200)
+            handler.postDelayed({ toneG.release() }, 2000)
+        } catch (e: Exception) {
+            Log.e("KeyMapper", "Failed to play sound", e)
+        }
+    }
+
     companion object {
         var currentPackageName: String = ""
             private set
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        val action = intent?.action
+        if (action == "ACTION_UI_SNAPSHOT") {
+            captureUISnapshot()
+        }
+        return super.onStartCommand(intent, flags, startId)
     }
 
     override fun onInterrupt() {}
@@ -324,15 +247,8 @@ class KeyMapperAccessibilityService : AccessibilityService() {
         val isRecording = KeyRecordingState.isRecording || prefs.getBoolean("is_recording", false)
         val isInterceptionActive = FloatingWidgetService.isInterceptionActive.value
 
-        // 모든 키 이벤트 흐름 추적을 위해 최상단 로그 추가
-        if (event.action == KeyEvent.ACTION_DOWN) {
-            Log.d("KeyMapper", "[DEBUG] onKeyEvent IN: code=${event.keyCode}, enabled=$isMappingEnabled, active=$isInterceptionActive")
-        }
-
-        // 1. 레코딩 모드 처리 (최우선)
         if (isRecording) {
             if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
-                Log.d("KeyMapper", "[DEBUG] RECORDING MODE: KeyCode=${event.keyCode} captured.")
                 val intent = Intent(this, kr.disys.baedalin.MainActivity::class.java).apply {
                     action = "ACTION_KEY_RECORDED"
                     putExtra("keycode", event.keyCode)
@@ -343,56 +259,24 @@ class KeyMapperAccessibilityService : AccessibilityService() {
             return true 
         }
 
-        // 자동 인식 요청 처리
-        if (action == "ACTION_AUTO_DETECT") {
-            handleAutoDetect()
-            return true
-        }
-
-        if (action == "ACTION_UI_SNAPSHOT") {
-            captureUISnapshot()
-            return true
-        }
-        
-        // 2. 서비스 중지 상태면 즉시 바이패스
-        if (!isMappingEnabled) {
-            if (event.action == KeyEvent.ACTION_DOWN) {
-                Log.d("KeyMapper", "[DEBUG] BYPASS: isMappingEnabled is FALSE. Letting system handle code=${event.keyCode}")
-            }
+        if (!isMappingEnabled || !isInterceptionActive) {
             return false
         }
-
-        // 3. 위젯이 숨겨진 상태(비활성 앱)면 바이패스
-        if (!isInterceptionActive) {
-            Log.d("KeyMapper", "[DEBUG] BYPASS: isInterceptionActive is FALSE. keyCode=${event.keyCode}")
-            return false
-        }
-
-        Log.d("KeyMapper", "[DEBUG] onKeyEvent: keyCode=${event.keyCode}, action=${event.action}")
 
         val targetDescriptor = prefs.getString("selected_device_descriptor", null)
-        if (targetDescriptor == null) {
-            Log.d("KeyMapper", "[DEBUG] BYPASS: No target device selected.")
-            return false
-        }
-        
         val device = InputDevice.getDevice(event.deviceId)
         if (device == null || device.descriptor != targetDescriptor) {
-            Log.d("KeyMapper", "[DEBUG] BYPASS: Device mismatch or null. target=$targetDescriptor")
             return false
         }
         
         val keyCode = event.keyCode
         val action = event.action
         val prefix = targetDescriptor ?: "GLOBAL"
-        val isMapped = isKeyMapped(keyCode, prefix)
         
-        if (!isMapped) {
-            Log.d("KeyMapper", "[DEBUG] BYPASS: Key $keyCode is NOT mapped for $prefix")
+        if (!isKeyMapped(keyCode, prefix)) {
             return false
         }
 
-        Log.d("KeyMapper", "[DEBUG] INTERCEPT: Key $keyCode is MAPPED. action=${event.action}")
         if (action == KeyEvent.ACTION_DOWN) {
             if (event.repeatCount > 0) return true
             if (keyCode != lastKeyCode) {
@@ -405,57 +289,36 @@ class KeyMapperAccessibilityService : AccessibilityService() {
 
         if (action == KeyEvent.ACTION_UP) {
             clickCount++
-            
             pendingClickRunnable?.let { handler.removeCallbacks(it) }
-            
             pendingClickRunnable = Runnable {
                 val type = if (clickCount >= 2) ClickType.DOUBLE else ClickType.SINGLE
-                
-                // 이동 모드(Unlock) 중 매핑된 키 입력 시 자동 잠금 및 터치 실행
                 if (FloatingWidgetService.isMoveMode.value) {
                     FloatingWidgetService.forceLockMode()
                 }
-                
                 handleAction(keyCode, type, prefix)
                 clickCount = 0
             }.also { handler.postDelayed(it, doubleClickTimeout) }
-            
             return true
         }
 
         return super.onKeyEvent(event)
     }
 
-    private fun cancelAllTimers() {
-        handler.removeCallbacksAndMessages(null)
-        pendingClickRunnable = null
-        longPressRunnable = null
-    }
-
     private fun isKeyMapped(keyCode: Int, prefix: String): Boolean {
         val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
-        var found = false
         DeliveryFunction.entries.forEach { function ->
-            val storedKey = prefs.getInt("${prefix}_${function.name}_keycode", -1)
-            if (storedKey == keyCode) {
-                found = true
+            if (prefs.getInt("${prefix}_${function.name}_keycode", -1) == keyCode) {
+                return true
             }
         }
-        return found
+        return false
     }
 
     private fun handleAction(keyCode: Int, clickType: ClickType, prefix: String): Boolean {
         val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
-        val isMappingEnabled = prefs.getBoolean("is_mapping_enabled", false)
-        if (!isMappingEnabled) {
-            Log.d("KeyMapper", "[DEBUG] handleAction aborted: isMappingEnabled is FALSE")
-            return false
-        }
+        if (!prefs.getBoolean("is_mapping_enabled", false)) return false
         
         val activePreset = prefs.getString("active_preset", "DEFAULT") ?: "DEFAULT"
-        
-        Log.d("KeyMapper", "handleAction: keyCode=$keyCode, clickType=$clickType, prefix=$prefix, activePreset=$activePreset")
-        
         val function = DeliveryFunction.entries.find { func ->
             val mappedKey = prefs.getInt("${prefix}_${func.name}_keycode", -1)
             val mappedClick = prefs.getString("${prefix}_${func.name}_clicktype", ClickType.SINGLE.name)
@@ -469,51 +332,34 @@ class KeyMapperAccessibilityService : AccessibilityService() {
 
             when (function) {
                 DeliveryFunction.ZOOM_OUT -> {
-                    Log.d("KeyMapper", "PERFORMING ZOOM_OUT: Double-tap and Drag UP")
                     val gestureBuilder = GestureDescription.Builder()
-
-                    // 1. 첫 번째 탭 (빠르게 떼기)
                     val tapPath = Path()
                     tapPath.moveTo(centerX, centerY)
                     gestureBuilder.addStroke(GestureDescription.StrokeDescription(tapPath, 0, 50))
-
-                    // 2. 두 번째 탭 후 위로 드래그 (축소)
                     val swipePath = Path()
                     swipePath.moveTo(centerX, centerY)
-                    swipePath.lineTo(centerX, centerY - 200f) // 위로 이동
+                    swipePath.lineTo(centerX, centerY - 200f)
                     gestureBuilder.addStroke(GestureDescription.StrokeDescription(swipePath, 100, 200))
-
                     dispatchGesture(gestureBuilder.build(), null, null)
                     return true
                 }
-
                 DeliveryFunction.ZOOM_IN -> {
-                    Log.d("KeyMapper", "PERFORMING ZOOM_IN: Double-tap and Drag DOWN")
                     val gestureBuilder = GestureDescription.Builder()
-
-                    // 1. 첫 번째 탭
                     val tapPath = Path()
                     tapPath.moveTo(centerX, centerY)
                     gestureBuilder.addStroke(GestureDescription.StrokeDescription(tapPath, 0, 50))
-
-                    // 2. 두 번째 탭 후 아래로 드래그 (확대)
                     val swipePath = Path()
                     swipePath.moveTo(centerX, centerY)
-                    swipePath.lineTo(centerX, centerY + 200f) // 아래로 이동
+                    swipePath.lineTo(centerX, centerY + 200f)
                     gestureBuilder.addStroke(GestureDescription.StrokeDescription(swipePath, 100, 200))
-
                     dispatchGesture(gestureBuilder.build(), null, null)
                     return true
                 }
                 else -> {
                     val x = prefs.getInt("${activePreset}_${function.name}_x", -1).toFloat()
                     val y = prefs.getInt("${activePreset}_${function.name}_y", -1).toFloat()
-                    
                     if (x != -1f && y != -1f) {
-                        val tapX = x + 50f
-                        val tapY = y + 90f
-                        Log.d("KeyMapper", "PERFORMING ACTION: ${function.name} at ($tapX, $tapY)")
-                        performTap(tapX, tapY)
+                        performTap(x + 50f, y + 90f)
                         return true
                     }
                 }
@@ -528,21 +374,5 @@ class KeyMapperAccessibilityService : AccessibilityService() {
         val gestureBuilder = GestureDescription.Builder()
         gestureBuilder.addStroke(GestureDescription.StrokeDescription(path, 0, 50))
         dispatchGesture(gestureBuilder.build(), null, null)
-    }
-
-    private fun performSwipe(startX: Float, startY: Float, endX: Float, endY: Float, duration: Long = 100) {
-        val path = Path()
-        path.moveTo(startX, startY)
-        path.lineTo(endX, endY)
-        val gestureBuilder = GestureDescription.Builder()
-        gestureBuilder.addStroke(GestureDescription.StrokeDescription(path, 0, duration))
-        dispatchGesture(gestureBuilder.build(), null, null)
-    }
-
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent?.action == "ACTION_AUTO_DETECT") {
-            handleAutoDetect()
-        }
-        return super.onStartCommand(intent, flags, startId)
     }
 }

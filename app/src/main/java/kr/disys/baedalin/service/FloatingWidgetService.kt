@@ -56,7 +56,6 @@ class FloatingWidgetService : Service() {
     private var btnSaveView: View? = null
     private var btnBaeminView: View? = null
     private var btnCoupangView: View? = null
-        private var btnAutoView: View? = null
     private var btnSnapshotView: View? = null
     private var btnFoldView: ImageView? = null
 
@@ -157,7 +156,6 @@ class FloatingWidgetService : Service() {
         btnSaveView?.visibility = visibility
         btnBaeminView?.visibility = visibility
         btnCoupangView?.visibility = visibility
-        btnAutoView?.visibility = visibility
         btnSnapshotView?.visibility = visibility
         
         val iconRes = if (isToolbarFolded) R.drawable.ic_toolbar_unfold else R.drawable.ic_toolbar_fold
@@ -471,19 +469,15 @@ class FloatingWidgetService : Service() {
             launchApp(pkg)
             loadPresetInternal("BAEMIN")
             setPresetsVisibility(false) 
-            Toast.makeText(this@FloatingWidgetService, "배? ?행 ??리???성??, Toast.LENGTH_SHORT).show()
+            Toast.makeText(this@FloatingWidgetService, "배민 실행 및 프리셋 활성화", Toast.LENGTH_SHORT).show()
         }
         val btnCoupang = createToolbarIcon(R.drawable.ic_toolbar_coupang) { _ -> 
             val pkg = Presets.getPackageName("COUPANG")
             launchApp(pkg)
             loadPresetInternal("COUPANG")
             setPresetsVisibility(false) 
-            Toast.makeText(this@FloatingWidgetService, "쿠팡 ?행 ??리???성??, Toast.LENGTH_SHORT).show()
+            Toast.makeText(this@FloatingWidgetService, "쿠팡 실행 및 프리셋 활성화", Toast.LENGTH_SHORT).show()
         }
-        val btnAuto = createToolbarIcon(R.drawable.ic_toolbar_auto) { _ -> 
-            autoDetectCoordinates()
-        }
-        btnAutoView = btnAuto
 
         val btnSnapshot = createToolbarIcon(R.drawable.ic_toolbar_snapshot) { _ -> 
             takeUISnapshot()
@@ -509,7 +503,6 @@ class FloatingWidgetService : Service() {
         toolbarContainer.addView(btnMove)
         toolbarContainer.addView(btnBaemin)
         toolbarContainer.addView(btnCoupang)
-        toolbarContainer.addView(btnAuto)
         toolbarContainer.addView(btnSnapshot)
         toolbarContainer.addView(btnClose)
 
@@ -836,29 +829,6 @@ class FloatingWidgetService : Service() {
                 } catch (e: Exception) {}
             }, 2000)
         } catch (e: Exception) {}
-    }
-
-    private fun autoDetectCoordinates() {
-        val currentApp = KeyMapperAccessibilityService.currentPackageName
-        val preset = Presets.getPresetFromPackage(currentApp)
-        
-        if (preset == null) {
-            Toast.makeText(this, "배달 ??배?/쿠팡/?기?? ?면?서 ?행?주?요.", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        Toast.makeText(this, getString(R.string.auto_detect_start), Toast.LENGTH_SHORT).show()
-        
-        // KeyMapperAccessibilityService???동 ?식 ?청
-        val intent = Intent(this, KeyMapperAccessibilityService::class.java).apply {
-            action = "ACTION_AUTO_DETECT"
-        }
-        try {
-            startService(intent)
-        } catch (e: Exception) {
-            Log.e("KeyMapper", "Failed to start KeyMapper service for auto-detect", e)
-            Toast.makeText(this, getString(R.string.auto_detect_not_ready), Toast.LENGTH_SHORT).show()
-        }
     }
 
     private fun takeUISnapshot() {
