@@ -419,9 +419,11 @@ class KeyMapperAccessibilityService : AccessibilityService() {
                             node.contentDescription?.contains("경로") == true ||
                             node.contentDescription?.contains("지도") == true ||
                             node.contentDescription?.contains("길찾기") == true ||
+                            node.contentDescription?.contains("자동확대") == true ||
                             node.text?.contains("경로") == true ||
                             node.text?.contains("지도") == true ||
-                            node.text?.contains("길찾기") == true
+                            node.text?.contains("길찾기") == true ||
+                            node.text?.contains("자동확대") == true
                         }
                     }
                     else -> null
