@@ -234,10 +234,6 @@ class KeyMapperAccessibilityService : AccessibilityService() {
         }
     }
 
-    companion object {
-        var currentPackageName: String = ""
-            private set
-    }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val action = intent?.action
@@ -486,6 +482,8 @@ class KeyMapperAccessibilityService : AccessibilityService() {
     }
 
     companion object {
+        var currentPackageName: String = ""
+            private set
         const val ACTION_FLASH_WIDGET = "ACTION_FLASH_WIDGET"
     }
 }
