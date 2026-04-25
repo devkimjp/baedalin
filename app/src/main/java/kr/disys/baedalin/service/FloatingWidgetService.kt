@@ -228,6 +228,14 @@ class FloatingWidgetService : Service() {
                     putBoolean("is_mapping_enabled", true) 
                 }
             }
+            ACTION_FLASH_WIDGET -> {
+                val functionName = intent.getStringExtra("function_name")
+                val x = intent.getFloatExtra("x", -1f)
+                val y = intent.getFloatExtra("y", -1f)
+                if (functionName != null && x != -1f && y != -1f) {
+                    flashWidget(functionName, x.toInt(), y.toInt())
+                }
+            }
         }
         return START_NOT_STICKY
     }
@@ -252,8 +260,9 @@ class FloatingWidgetService : Service() {
         setPresetsVisibility(false)
         setToolbarFolded(false)
 
+        // 위젯을 상시로 보여주지 않기 위해 showWidget 호출을 주석 처리하거나 제거합니다.
+        /*
         val prefix = prefs.getString("selected_device_descriptor", "GLOBAL") ?: "GLOBAL"
-        
         presetList.forEach { info ->
             val keycode = prefs.getInt("${prefix}_${info.function.name}_keycode", -1)
             val keyInfo = if (keycode != -1) {
@@ -263,9 +272,10 @@ class FloatingWidgetService : Service() {
             
             showWidget(info.function.name, info.icon, info.tooltip, info.x, info.y, color, keyInfo)
         }
+        */
 
         // ???리?의 커스? ?젯??로드
-        loadStoredCustomWidgets()
+        // loadStoredCustomWidgets()
     }
 
     private fun toggleMoveMode() {
@@ -732,6 +742,7 @@ class FloatingWidgetService : Service() {
         const val ACTION_UPDATE_UI = "ACTION_UPDATE_UI"
         const val ACTION_UPDATE_TRANSPARENCY = "ACTION_UPDATE_TRANSPARENCY"
         const val ACTION_START_SERVICE_ONLY = "ACTION_START_SERVICE_ONLY"
+        const val ACTION_FLASH_WIDGET = "ACTION_FLASH_WIDGET"
     }
 
 
@@ -837,5 +848,25 @@ class FloatingWidgetService : Service() {
         }
         startService(intent)
         Toast.makeText(this, "현재 화면 분석 중...", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun flashWidget(functionName: String, x: Int, y: Int) {
+        val presetList = when(currentPreset) {
+            "BAEMIN" -> Presets.BAEMIN
+            "COUPANG" -> Presets.COUPANG
+            "YOGIYO" -> Presets.YOGIYO
+            else -> Presets.BAEMIN
+        }
+        
+        val info = presetList.find { it.function.name == functionName } ?: return
+        val color = Presets.getColor(currentPreset)
+        
+        // 위젯 표시
+        showWidget(functionName, info.icon, info.tooltip, x, y, color)
+        
+        // 1초 후 제거
+        Handler(Looper.getMainLooper()).postDelayed({
+            hideWidget(functionName)
+        }, 1000)
     }
 }

@@ -340,27 +340,19 @@ class KeyMapperAccessibilityService : AccessibilityService() {
 
             when (function) {
                 DeliveryFunction.ZOOM_OUT -> {
-                    val gestureBuilder = GestureDescription.Builder()
-                    val tapPath = Path()
-                    tapPath.moveTo(centerX, centerY)
-                    gestureBuilder.addStroke(GestureDescription.StrokeDescription(tapPath, 0, 50))
-                    val swipePath = Path()
-                    swipePath.moveTo(centerX, centerY)
-                    swipePath.lineTo(centerX, centerY - 200f)
-                    gestureBuilder.addStroke(GestureDescription.StrokeDescription(swipePath, 100, 200))
-                    dispatchGesture(gestureBuilder.build(), null, null)
+                    val x = prefs.getInt("${activePreset}_${function.name}_x", -1).toFloat()
+                    val y = prefs.getInt("${activePreset}_${function.name}_y", -1).toFloat()
+                    if (x != -1f && y != -1f) {
+                        sendFlashIntent(function.name, x, y)
+                    }
                     return true
                 }
                 DeliveryFunction.ZOOM_IN -> {
-                    val gestureBuilder = GestureDescription.Builder()
-                    val tapPath = Path()
-                    tapPath.moveTo(centerX, centerY)
-                    gestureBuilder.addStroke(GestureDescription.StrokeDescription(tapPath, 0, 50))
-                    val swipePath = Path()
-                    swipePath.moveTo(centerX, centerY)
-                    swipePath.lineTo(centerX, centerY + 200f)
-                    gestureBuilder.addStroke(GestureDescription.StrokeDescription(swipePath, 100, 200))
-                    dispatchGesture(gestureBuilder.build(), null, null)
+                    val x = prefs.getInt("${activePreset}_${function.name}_x", -1).toFloat()
+                    val y = prefs.getInt("${activePreset}_${function.name}_y", -1).toFloat()
+                    if (x != -1f && y != -1f) {
+                        sendFlashIntent(function.name, x, y)
+                    }
                     return true
                 }
                 else -> {
@@ -369,7 +361,7 @@ class KeyMapperAccessibilityService : AccessibilityService() {
                         val dynamicRect = resolveDynamicCoordinate(function)
                         if (dynamicRect != null) {
                             Log.d("KeyMapper", "Auto-detected coordinate for ${function.name}: ${dynamicRect.centerX()}, ${dynamicRect.centerY()}")
-                            performTap(dynamicRect.centerX().toFloat(), dynamicRect.centerY().toFloat())
+                            sendFlashIntent(function.name, dynamicRect.centerX().toFloat(), dynamicRect.centerY().toFloat())
                             return true
                         }
                         Log.d("KeyMapper", "Auto-detection failed for ${function.name}, falling back to preset")
@@ -378,7 +370,8 @@ class KeyMapperAccessibilityService : AccessibilityService() {
                     val x = prefs.getInt("${activePreset}_${function.name}_x", -1).toFloat()
                     val y = prefs.getInt("${activePreset}_${function.name}_y", -1).toFloat()
                     if (x != -1f && y != -1f) {
-                        performTap(x + 50f, y + 90f)
+                        Log.d("KeyMapper", "Executing action: ${function.name} at ($x, $y)")
+                        sendFlashIntent(function.name, x, y)
                         return true
                     }
                 }
@@ -455,11 +448,17 @@ class KeyMapperAccessibilityService : AccessibilityService() {
         return null
     }
 
-    private fun performTap(x: Float, y: Float) {
-        val path = Path()
-        path.moveTo(x, y)
-        val gestureBuilder = GestureDescription.Builder()
-        gestureBuilder.addStroke(GestureDescription.StrokeDescription(path, 0, 50))
-        dispatchGesture(gestureBuilder.build(), null, null)
+    private fun sendFlashIntent(functionName: String, x: Float, y: Float) {
+        val intent = Intent(this, FloatingWidgetService::class.java).apply {
+            action = ACTION_FLASH_WIDGET
+            putExtra("function_name", functionName)
+            putExtra("x", x)
+            putExtra("y", y)
+        }
+        startService(intent)
+    }
+
+    companion object {
+        const val ACTION_FLASH_WIDGET = "ACTION_FLASH_WIDGET"
     }
 }
