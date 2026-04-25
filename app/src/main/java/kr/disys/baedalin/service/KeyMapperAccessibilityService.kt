@@ -413,6 +413,17 @@ class KeyMapperAccessibilityService : AccessibilityService() {
                             node.text == "거절" || node.text == "거절하기" || node.text == "확인"
                         }
                     }
+                    DeliveryFunction.PATH -> {
+                        // 경로보기 또는 지도 관련 버튼 확인
+                        findRectByCriteria(root) { node ->
+                            node.contentDescription?.contains("경로") == true ||
+                            node.contentDescription?.contains("지도") == true ||
+                            node.contentDescription?.contains("길찾기") == true ||
+                            node.text?.contains("경로") == true ||
+                            node.text?.contains("지도") == true ||
+                            node.text?.contains("길찾기") == true
+                        }
+                    }
                     else -> null
                 }
             }
