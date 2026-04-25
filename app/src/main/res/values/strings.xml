@@ -1,4 +1,10 @@
 <resources>
     <string name="app_name">달마링</string>
     <string name="accessibility_service_label">달마링 키매퍼 서비스</string>
+    <string name="auto_detect_start">자동 인식을 시작합니다. 배달 앱 화면을 열어주세요.</string>
+    <string name="auto_detect_success">좌표 자동 인식 성공: %1$s</string>
+    <string name="auto_detect_failed">자동 인식에 실패했습니다. 수동으로 설정해주세요.</string>
+    <string name="auto_detect_not_ready">접근성 서비스가 비활성화되어 있어 자동 인식을 사용할 수 없습니다.</string>
+    <string name="ui_snapshot_success">화면 정보가 JSON으로 저장되었습니다.</string>
+    <string name="ui_snapshot_failed">화면 정보 저장에 실패했습니다.</string>
 </resources>

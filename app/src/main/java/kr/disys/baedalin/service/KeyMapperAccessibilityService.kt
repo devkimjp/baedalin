@@ -19,6 +19,15 @@ import kr.disys.baedalin.model.Presets
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.collect
 import android.content.SharedPreferences
+import android.view.accessibility.AccessibilityNodeInfo
+import android.graphics.Rect
+import java.io.File
+import java.io.FileWriter
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import org.json.JSONObject
+import org.json.JSONArray
 
 class KeyMapperAccessibilityService : AccessibilityService() {
 
@@ -33,6 +42,8 @@ class KeyMapperAccessibilityService : AccessibilityService() {
     private var isLongPressed = false
     
     private val serviceScope = CoroutineScope(Dispatchers.Main + Job())
+    
+    private val logDateFormat = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault())
     
     private val prefsListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
         if (key == "is_recording" || key == "is_mapping_enabled") {
@@ -151,6 +162,155 @@ class KeyMapperAccessibilityService : AccessibilityService() {
         }
     }
 
+    private fun handleAutoDetect() {
+        val currentApp = currentPackageName
+        val preset = Presets.getPresetFromPackage(currentApp)
+        
+        if (preset == null) {
+            Log.d("KeyMapper", "Auto-Detect: Not in a supported delivery app ($currentApp)")
+            return
+        }
+
+        Log.d("KeyMapper", "Auto-Detect: Starting for $preset in $currentApp")
+        
+        val rootNode = rootInActiveWindow ?: return
+        val results = mutableListOf<String>()
+
+        // 1. 수락 버튼 검색
+        val acceptKeywords = listOf("수락", "배차", "확인", "Accept", "Confirm")
+        findNodeByText(rootNode, acceptKeywords)?.let { node ->
+            val rect = Rect()
+            node.getBoundsInScreen(rect)
+            val centerX = rect.centerX()
+            val centerY = rect.centerY()
+            saveCoordinate(preset, DeliveryFunction.ACCEPT.name, centerX, centerY)
+            results.add("수락")
+            Log.d("KeyMapper", "Auto-Detect: Found ACCEPT at ($centerX, $centerY)")
+        }
+
+        // 2. 거절 버튼 검색
+        val rejectKeywords = listOf("거절", "Reject", "Dismiss")
+        findNodeByText(rootNode, rejectKeywords)?.let { node ->
+            val rect = Rect()
+            node.getBoundsInScreen(rect)
+            val centerX = rect.centerX()
+            val centerY = rect.centerY()
+            saveCoordinate(preset, DeliveryFunction.REJECT.name, centerX, centerY)
+            results.add("거절")
+            Log.d("KeyMapper", "Auto-Detect: Found REJECT at ($centerX, $centerY)")
+        }
+
+        if (results.isNotEmpty()) {
+            val msg = results.joinToString(", ")
+            // FloatingWidgetService에 알림
+            val intent = Intent(this, FloatingWidgetService::class.java).apply {
+                action = FloatingWidgetService.ACTION_LOAD_PRESET
+                putExtra("preset_name", preset)
+            }
+            startService(intent)
+            
+            // 토스트 알림을 위해 서비스로 브로드캐스트 또는 인텐트 전송
+            Log.d("KeyMapper", "Auto-Detect SUCCESS: $msg")
+        } else {
+            Log.d("KeyMapper", "Auto-Detect FAILED: No buttons found")
+        }
+        
+        rootNode.recycle()
+    }
+
+    private fun findNodeByText(root: AccessibilityNodeInfo, keywords: List<String>): AccessibilityNodeInfo? {
+        val queue = mutableListOf<AccessibilityNodeInfo>()
+        queue.add(root)
+        
+        while (queue.isNotEmpty()) {
+            val node = queue.removeAt(0)
+            
+            val text = node.text?.toString() ?: node.contentDescription?.toString() ?: ""
+            if (keywords.any { text.contains(it, ignoreCase = true) }) {
+                return node
+            }
+            
+            for (i in 0 until node.childCount) {
+                node.getChild(i)?.let { queue.add(it) }
+            }
+        }
+        return null
+    }
+
+    private fun saveCoordinate(preset: String, function: String, x: Int, y: Int) {
+        val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
+        prefs.edit {
+            putInt("${preset}_${function}_x", x - 50) // FloatingWidgetService의 오프셋 보정 (ICON_SIZE/2)
+            putInt("${preset}_${function}_y", y - 90) // FloatingWidgetService의 오프셋 보정 (ICON_SIZE/2 + 40)
+        }
+    }
+
+    private fun captureUISnapshot() {
+        val root = rootInActiveWindow ?: return
+        try {
+            val timestamp = logDateFormat.format(Date())
+            val dir = getExternalFilesDir(null) ?: filesDir
+            val file = File(dir, "ui_snapshot_$timestamp.json")
+            
+            val json = JSONObject()
+            json.put("timestamp", System.currentTimeMillis())
+            json.put("packageName", root.packageName)
+            json.put("nodes", dumpNodeToJson(root))
+            
+            FileWriter(file).use { it.write(json.toString(2)) }
+            
+            Log.d("KeyMapper", "UI Snapshot saved: ${file.absolutePath}")
+            
+            // FloatingWidgetService에 성공 알림
+            val intent = Intent(this, FloatingWidgetService::class.java).apply {
+                action = "ACTION_SNAPSHOT_COMPLETE"
+                putExtra("success", true)
+                putExtra("path", file.absolutePath)
+            }
+            startService(intent)
+            
+        } catch (e: Exception) {
+            Log.e("KeyMapper", "Snapshot failed", e)
+            val intent = Intent(this, FloatingWidgetService::class.java).apply {
+                action = "ACTION_SNAPSHOT_COMPLETE"
+                putExtra("success", false)
+            }
+            startService(intent)
+        } finally {
+            root.recycle()
+        }
+    }
+
+    private fun dumpNodeToJson(node: AccessibilityNodeInfo): JSONObject {
+        val json = JSONObject()
+        val rect = Rect()
+        node.getBoundsInScreen(rect)
+        
+        json.put("class", node.className?.toString()?.split(".")?.last() ?: "View")
+        json.put("text", node.text?.toString() ?: "")
+        json.put("desc", node.contentDescription?.toString() ?: "")
+        json.put("clickable", node.isClickable)
+        json.put("bounds", JSONObject().apply {
+            put("left", rect.left)
+            put("top", rect.top)
+            put("right", rect.right)
+            put("bottom", rect.bottom)
+        })
+
+        if (node.childCount > 0) {
+            val children = JSONArray()
+            for (i in 0 until node.childCount) {
+                node.getChild(i)?.let { child ->
+                    children.put(dumpNodeToJson(child))
+                    child.recycle()
+                }
+            }
+            json.put("children", children)
+        }
+        
+        return json
+    }
+
     companion object {
         var currentPackageName: String = ""
             private set
@@ -181,6 +341,17 @@ class KeyMapperAccessibilityService : AccessibilityService() {
                 startActivity(intent)
             }
             return true 
+        }
+
+        // 자동 인식 요청 처리
+        if (action == "ACTION_AUTO_DETECT") {
+            handleAutoDetect()
+            return true
+        }
+
+        if (action == "ACTION_UI_SNAPSHOT") {
+            captureUISnapshot()
+            return true
         }
         
         // 2. 서비스 중지 상태면 즉시 바이패스
@@ -366,5 +537,12 @@ class KeyMapperAccessibilityService : AccessibilityService() {
         val gestureBuilder = GestureDescription.Builder()
         gestureBuilder.addStroke(GestureDescription.StrokeDescription(path, 0, duration))
         dispatchGesture(gestureBuilder.build(), null, null)
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == "ACTION_AUTO_DETECT") {
+            handleAutoDetect()
+        }
+        return super.onStartCommand(intent, flags, startId)
     }
 }
