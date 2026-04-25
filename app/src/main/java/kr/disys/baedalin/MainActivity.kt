@@ -114,6 +114,7 @@ class MainActivity : ComponentActivity() {
                 var isMappingEnabled by remember { 
                     mutableStateOf(prefs.getBoolean("is_mapping_enabled", false)) 
                 }
+                // showResetDialog는 MainScreen 내부로 이동함
                 
                 // SharedPreferences 변경 리스너 등록
                 DisposableEffect(prefs) {
@@ -204,6 +205,10 @@ class MainActivity : ComponentActivity() {
                                         })
                                         Toast.makeText(context, "배달 매핑 서비스가 시작되었습니다.", Toast.LENGTH_SHORT).show()
                                     }
+                                    isMappingEnabled = newStatus
+                                },
+                                onResetSettings = {
+                                    isMappingEnabled = false
                                 },
                                 onUpdateMappingVersion = { mappingVersion++ },
                             onStartRecording = { func, type ->
@@ -683,12 +688,14 @@ fun MainScreen(
     shakeTrigger: Int,
     onDeviceClick: () -> Unit,
     onStartService: () -> Unit,
+    onResetSettings: () -> Unit, // 추가
     onUpdateMappingVersion: () -> Unit,
     onStartRecording: (DeliveryFunction, ClickType) -> Unit
 ) {
     val context = LocalContext.current
     val prefs = context.getSharedPreferences("mappings", Context.MODE_PRIVATE)
     var transparency by remember { mutableStateOf(prefs.getFloat("toolbar_transparency", 1.0f)) }
+    var showResetDialog by remember { mutableStateOf(false) } // 내부로 이동
 
     // 매핑 정보가 하나라도 있는지 체크
     val hasAnyMapping = remember(mappingVersion, selectedDeviceDescriptor) {
@@ -874,6 +881,64 @@ fun MainScreen(
                     },
                     valueRange = 0.2f..1.0f,
                     modifier = Modifier.fillMaxWidth()
+                )
+            }
+
+            HorizontalDivider()
+
+            // 초기화 구역 추가
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("데이터 초기화", style = MaterialTheme.typography.titleMedium)
+                Button(
+                    onClick = { showResetDialog = true }, // 대화상자 표시
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("초기화", color = Color.White)
+                }
+            }
+
+            // 초기화 확인 대화상자 구현
+            if (showResetDialog) {
+                AlertDialog(
+                    onDismissRequest = { showResetDialog = false },
+                    title = { Text("데이터 초기화") },
+                    text = { Text("좌표값과 키매핑정보를 모두 초기화 합니다.") },
+                    confirmButton = {
+                        TextButton(
+                            onClick = {
+                                showResetDialog = false
+                                // 1. 데이터 삭제
+                                prefs.edit { 
+                                    clear() 
+                                    putBoolean("is_mapping_enabled", false) // 명시적으로 false 설정
+                                    commit()
+                                }
+                                
+                                // 2. 서비스 중지 (실행 중일 경우)
+                                val intent = Intent(context, FloatingWidgetService::class.java).apply {
+                                    action = FloatingWidgetService.ACTION_HIDE_ALL
+                                }
+                                context.startService(intent)
+                                
+                                // 3. UI 상태 갱신
+                                onResetSettings()
+                                onUpdateMappingVersion()
+                                
+                                Toast.makeText(context, "모든 설정이 초기화되었습니다.", Toast.LENGTH_SHORT).show()
+                            }
+                        ) {
+                            Text("확인", color = MaterialTheme.colorScheme.error)
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showResetDialog = false }) {
+                            Text("취소")
+                        }
+                    }
                 )
             }
 
@@ -1109,6 +1174,7 @@ fun MainScreenPreview() {
             shakeTrigger = 0,
             onDeviceClick = {},
             onStartService = {},
+            onResetSettings = {},
             onUpdateMappingVersion = {},
             onStartRecording = { _, _ -> }
         )

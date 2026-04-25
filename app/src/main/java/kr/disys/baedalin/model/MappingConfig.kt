@@ -32,20 +32,20 @@ data class PresetInfo(val function: DeliveryFunction, val icon: String, val tool
 object Presets {
     val BAEMIN = listOf(
         PresetInfo(DeliveryFunction.CALL_CHECK, "✆", "콜확인(배민)", 517, 320),
-        PresetInfo(DeliveryFunction.REJECT, "Ⓡ", "거절", 725, 2130),
-        PresetInfo(DeliveryFunction.ACCEPT, "Ⓐ", "수락", 252, 2134),
+        PresetInfo(DeliveryFunction.REJECT, "Ⓡ", "거절", 252, 2130),
+        PresetInfo(DeliveryFunction.ACCEPT, "Ⓐ", "수락", 725, 2134),
         PresetInfo(DeliveryFunction.PATH, "Ⓟ", "경로", 107, 1588)
     )
 
     val COUPANG = listOf(
-        PresetInfo(DeliveryFunction.REJECT, "Ⓡ", "거절", 725, 2130),
-        PresetInfo(DeliveryFunction.ACCEPT, "Ⓐ", "수락", 252, 2134),
+        PresetInfo(DeliveryFunction.REJECT, "Ⓡ", "거절", 252, 2130),
+        PresetInfo(DeliveryFunction.ACCEPT, "Ⓐ", "수락", 725, 2134),
         PresetInfo(DeliveryFunction.PATH, "Ⓟ", "경로", 107, 1588)
     )
 
     val YOGIYO = listOf(
-        PresetInfo(DeliveryFunction.REJECT, "Ⓡ", "거절", 725, 2130),
-        PresetInfo(DeliveryFunction.ACCEPT, "Ⓐ", "수락", 252, 2134),
+        PresetInfo(DeliveryFunction.REJECT, "Ⓡ", "거절", 252, 2130),
+        PresetInfo(DeliveryFunction.ACCEPT, "Ⓐ", "수락", 725, 2134),
         PresetInfo(DeliveryFunction.PATH, "Ⓟ", "경로", 107, 1588)
     )
     
