@@ -356,8 +356,8 @@ class KeyMapperAccessibilityService : AccessibilityService() {
                     return true
                 }
                 else -> {
-                    // 배민(Baemin)인 경우 자동 인식 시도
-                    if (activePreset == "BAEMIN") {
+                    // 배민(Baemin) 또는 쿠팡(Coupang)인 경우 자동 인식 시도
+                    if (activePreset == "BAEMIN" || activePreset == "COUPANG") {
                         val dynamicRect = resolveDynamicCoordinate(function)
                         if (dynamicRect != null) {
                             Log.d("KeyMapper", "Auto-detected coordinate for ${function.name}: ${dynamicRect.centerX()}, ${dynamicRect.centerY()}")
@@ -400,14 +400,12 @@ class KeyMapperAccessibilityService : AccessibilityService() {
                         }
                     }
                     DeliveryFunction.REJECT -> {
-                        // 거절 버튼 또는 거절 확인 팝업의 버튼 확인
                         findRectByCriteria(root) { node ->
                             node.contentDescription?.contains("신규배차_거절버튼") == true ||
                             node.text == "거절" || node.text == "거절하기" || node.text == "확인"
                         }
                     }
                     DeliveryFunction.PATH -> {
-                        // 경로보기 또는 지도 관련 버튼 확인
                         findRectByCriteria(root) { node ->
                             node.contentDescription?.contains("경로") == true ||
                             node.contentDescription?.contains("지도") == true ||
@@ -417,6 +415,35 @@ class KeyMapperAccessibilityService : AccessibilityService() {
                             node.text?.contains("지도") == true ||
                             node.text?.contains("길찾기") == true ||
                             node.text?.contains("자동확대") == true
+                        }
+                    }
+                    else -> null
+                }
+            }
+            "com.coupang.mobile.eats.courier" -> {
+                when (function) {
+                    DeliveryFunction.ACCEPT -> {
+                        findRectByCriteria(root) { node ->
+                            node.contentDescription?.contains("주문 수락") == true ||
+                            node.text?.contains("주문 수락") == true ||
+                            node.contentDescription?.contains("수락하기") == true ||
+                            node.text?.contains("수락하기") == true
+                        }
+                    }
+                    DeliveryFunction.REJECT -> {
+                        findRectByCriteria(root) { node ->
+                            node.contentDescription == "거절" || 
+                            node.text == "거절" ||
+                            node.contentDescription?.contains("거절하기") == true ||
+                            node.text?.contains("거절하기") == true
+                        }
+                    }
+                    DeliveryFunction.PATH -> {
+                        findRectByCriteria(root) { node ->
+                            node.contentDescription?.contains("실제경로") == true ||
+                            node.text?.contains("실제경로") == true ||
+                            node.contentDescription?.contains("경로") == true ||
+                            node.text?.contains("경로") == true
                         }
                     }
                     else -> null
