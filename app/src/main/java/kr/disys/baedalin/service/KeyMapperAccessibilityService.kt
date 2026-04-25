@@ -364,6 +364,17 @@ class KeyMapperAccessibilityService : AccessibilityService() {
                     return true
                 }
                 else -> {
+                    // 배민(Baemin)인 경우 자동 인식 시도
+                    if (activePreset == "BAEMIN") {
+                        val dynamicRect = resolveDynamicCoordinate(function)
+                        if (dynamicRect != null) {
+                            Log.d("KeyMapper", "Auto-detected coordinate for ${function.name}: ${dynamicRect.centerX()}, ${dynamicRect.centerY()}")
+                            performTap(dynamicRect.centerX().toFloat(), dynamicRect.centerY().toFloat())
+                            return true
+                        }
+                        Log.d("KeyMapper", "Auto-detection failed for ${function.name}, falling back to preset")
+                    }
+
                     val x = prefs.getInt("${activePreset}_${function.name}_x", -1).toFloat()
                     val y = prefs.getInt("${activePreset}_${function.name}_y", -1).toFloat()
                     if (x != -1f && y != -1f) {
@@ -374,6 +385,61 @@ class KeyMapperAccessibilityService : AccessibilityService() {
             }
         }
         return false
+    }
+
+    private fun resolveDynamicCoordinate(function: DeliveryFunction): Rect? {
+        val root = rootInActiveWindow ?: return null
+        
+        val result = when (currentPackageName) {
+            "com.woowahan.bros" -> {
+                when (function) {
+                    DeliveryFunction.CALL_CHECK -> {
+                        findRectByCriteria(root) { node ->
+                            node.viewIdResourceName?.contains("ai-mode-notification-item-0") == true ||
+                            node.contentDescription?.contains("ai-mode-notification-item-0") == true ||
+                            node.text?.contains("신규배달") == true
+                        }
+                    }
+                    DeliveryFunction.ACCEPT -> {
+                        findRectByCriteria(root) { node ->
+                            node.contentDescription?.contains("신규배차_수락버튼") == true ||
+                            node.text?.contains("배차수락") == true
+                        }
+                    }
+                    DeliveryFunction.REJECT -> {
+                        // 거절 버튼 또는 거절 확인 팝업의 버튼 확인
+                        findRectByCriteria(root) { node ->
+                            node.contentDescription?.contains("신규배차_거절버튼") == true ||
+                            node.text == "거절" || node.text == "거절하기" || node.text == "확인"
+                        }
+                    }
+                    else -> null
+                }
+            }
+            else -> null
+        }
+        
+        root.recycle()
+        return result
+    }
+
+    private fun findRectByCriteria(node: AccessibilityNodeInfo?, criteria: (AccessibilityNodeInfo) -> Boolean): Rect? {
+        if (node == null) return null
+        
+        if (criteria(node)) {
+            val rect = Rect()
+            node.getBoundsInScreen(rect)
+            return rect
+        }
+        
+        for (i in 0 until node.childCount) {
+            val child = node.getChild(i) ?: continue
+            val rect = findRectByCriteria(child, criteria)
+            child.recycle()
+            if (rect != null) return rect
+        }
+        
+        return null
     }
 
     private fun performTap(x: Float, y: Float) {
