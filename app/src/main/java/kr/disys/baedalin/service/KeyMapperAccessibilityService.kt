@@ -58,6 +58,12 @@ class KeyMapperAccessibilityService : AccessibilityService() {
                     directRecordingFunction = intent.getStringExtra("function_name")
                     Log.d("KeyMapper", "Started direct recording for: $directRecordingFunction")
                 }
+                "ACTION_CANCEL_DIRECT_RECORDING" -> {
+                    if (directRecordingFunction != null) {
+                        Log.d("KeyMapper", "Cancelled direct recording for: $directRecordingFunction")
+                        directRecordingFunction = null
+                    }
+                }
             }
         }
     }
@@ -73,6 +79,7 @@ class KeyMapperAccessibilityService : AccessibilityService() {
         Log.d("KeyMapper", "Service onCreate - Process: ${android.os.Process.myPid()}")
         val filter = IntentFilter().apply {
             addAction("ACTION_START_DIRECT_RECORDING")
+            addAction("ACTION_CANCEL_DIRECT_RECORDING")
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(serviceReceiver, filter, Context.RECEIVER_EXPORTED)
@@ -378,10 +385,7 @@ class KeyMapperAccessibilityService : AccessibilityService() {
             pendingClickRunnable = Runnable {
                 val type = if (clickCount >= 2) ClickType.DOUBLE else ClickType.SINGLE
                 
-                // 이동 모드(Unlock) 중 매핑된 키 입력 시 자동 잠금 및 터치 실행
-                if (FloatingWidgetService.isMoveMode.value) {
-                    FloatingWidgetService.forceLockMode()
-                }
+                // 이동 모드(Unlock) 중이라도 자동 잠금하지 않고 유지함 (유저 요청)
                 
                 handleAction(keyCode, type, prefix)
                 clickCount = 0

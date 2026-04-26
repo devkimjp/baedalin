@@ -606,16 +606,19 @@ class FloatingWidgetService : Service() {
                 dragHandle.visibility = View.VISIBLE
                 
                 // 이동 모드 시 진동 피드백 (선택 사항)
-                v.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+                container.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
             }
 
             private val mappingModeRunnable = Runnable {
                 longClickHandled = true
                 moveModeActiveForThis = false
-                dragHandle.visibility = View.GONE
+                // 언락 모드가 아닐 때만 핸들을 숨김
+                if (!_isMoveMode.value) {
+                    dragHandle.visibility = View.GONE
+                }
                 
                 showCustomToast("매핑할 키를 입력하세요...")
-                v.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+                container.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
                 
                 val intent = Intent("ACTION_START_DIRECT_RECORDING").apply {
                     setPackage(packageName)
@@ -629,13 +632,17 @@ class FloatingWidgetService : Service() {
                 when (event.action) {
                     MotionEvent.ACTION_DOWN -> {
                         longClickHandled = false
-                        moveModeActiveForThis = false
+                        // 현재 전역 이동 모드 상태를 따름 (언락 모드면 즉시 이동 가능)
+                        moveModeActiveForThis = _isMoveMode.value
+                        
                         dragInitialX = event.rawX
                         dragInitialY = event.rawY
                         dragOffsetX = event.rawX - p.x
                         dragOffsetY = event.rawY - p.y
                         
-                        longPressHandler.postDelayed(moveModeRunnable, 1500)
+                        if (!moveModeActiveForThis) {
+                            longPressHandler.postDelayed(moveModeRunnable, 1500)
+                        }
                         longPressHandler.postDelayed(mappingModeRunnable, 3000)
                         return true
                     }
@@ -662,19 +669,58 @@ class FloatingWidgetService : Service() {
                         longPressHandler.removeCallbacks(moveModeRunnable)
                         longPressHandler.removeCallbacks(mappingModeRunnable)
                         
-                        if (moveModeActiveForThis) {
-                            // 좌표 저장
+                        if (moveModeActiveForThis && longClickHandled) {
+                            // 이동 완료: 좌표 저장
                             prefs.edit { putInt(prefKeyX, p.x); putInt(prefKeyY, p.y) }
                             showCustomToast("위치 저장 완료")
-                            dragHandle.visibility = View.GONE
-                        } else if (!longClickHandled) {
-                            // 롱클릭(이동/매핑)이 아니면 일반 클릭 실행
-                            v.performClick()
-                            val intent = Intent("ACTION_MANUAL_CLICK").apply {
-                                setPackage(packageName)
-                                putExtra("function_name", functionName)
+                            // 언락 모드가 아닐 때만(즉, 1회성 이동일 때만) 핸들을 숨김
+                            if (!_isMoveMode.value) {
+                                dragHandle.visibility = View.GONE
                             }
-                            sendBroadcast(intent)
+                        } else if (!longClickHandled) {
+                            if (_isMoveMode.value) {
+                                // 언락 모드 중 싱글탭 → 즉시 키 매핑 시작 + 5초 카운트다운
+                                Log.d("KeyMapper", "Unlock mode single tap -> Starting key mapping for $functionName")
+                                longClickHandled = true
+                                // 언락 모드이므로 핸들을 숨기지 않음
+                                container.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+
+                                val mappingHandler = Handler(Looper.getMainLooper())
+                                var secondsLeft = 5
+
+                                // 카운트다운 실행
+                                val countdownRunnable = object : Runnable {
+                                    override fun run() {
+                                        if (secondsLeft > 0) {
+                                            showCustomToast("[$tooltip] 매핑할 키를 입력하세요... (${secondsLeft}초)")
+                                            secondsLeft--
+                                            mappingHandler.postDelayed(this, 1000)
+                                        } else {
+                                            // 5초 경과 → 매핑 취소
+                                            showCustomToast("[$tooltip] 매핑 시간 초과 (취소됨)")
+                                            val cancelIntent = Intent("ACTION_CANCEL_DIRECT_RECORDING").apply {
+                                                setPackage(packageName)
+                                            }
+                                            sendBroadcast(cancelIntent)
+                                        }
+                                    }
+                                }
+                                mappingHandler.post(countdownRunnable)
+
+                                val startIntent = Intent("ACTION_START_DIRECT_RECORDING").apply {
+                                    setPackage(packageName)
+                                    putExtra("function_name", functionName)
+                                }
+                                sendBroadcast(startIntent)
+                            } else {
+                                // 잠금 모드 중 싱글탭 → 기존 클릭 이벤트 전달
+                                v.performClick()
+                                val intent = Intent("ACTION_MANUAL_CLICK").apply {
+                                    setPackage(packageName)
+                                    putExtra("function_name", functionName)
+                                }
+                                sendBroadcast(intent)
+                            }
                         }
                         return true
                     }
@@ -798,13 +844,32 @@ class FloatingWidgetService : Service() {
             PixelFormat.TRANSLUCENT
         )
 
-        screenBorderView = View(this).apply {
-            background = GradientDrawable().apply {
+        val frameLayout = FrameLayout(this).apply {
+            setBackgroundColor(Color.TRANSPARENT)
+            val border = GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE
-                setStroke(10, Color.RED) // 10px 두께의 빨간 테두리
-                setColor(Color.TRANSPARENT) // 배경은 투명
+                setStroke(15, Color.YELLOW) // 15px 두께의 노란 테두리
+                setColor(Color.TRANSPARENT)
             }
+            foreground = border
+
+            val textView = TextView(this.context).apply {
+                text = "⚠️ 언락 모드 활성화 ⚠️\n\n위젯 1회 탭 → 즉시 키 매핑\n잠금 버튼을 누르면 종료됩니다."
+                setTextColor(Color.YELLOW)
+                textSize = 16f
+                gravity = Gravity.CENTER
+                setBackgroundColor(Color.argb(160, 0, 0, 0))
+                setPadding(40, 30, 40, 30)
+                android.graphics.Typeface.DEFAULT_BOLD.also { typeface = it }
+                setShadowLayer(8f, 0f, 0f, Color.BLACK)
+            }
+            addView(textView, FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                Gravity.CENTER
+            ))
         }
+        screenBorderView = frameLayout
 
         try {
             windowManager.addView(screenBorderView, params)
