@@ -106,8 +106,7 @@ class FloatingWidgetService : Service() {
         if (statusOverlayView == null) {
             val context = this
             val container = FrameLayout(context).apply {
-                alpha = 0f
-                animate().alpha(1f).setDuration(200).start()
+                alpha = 1f
             }
             
             val background = GradientDrawable().apply {
@@ -165,23 +164,21 @@ class FloatingWidgetService : Service() {
 
     private fun hideStatusOverlay() {
         val view = statusOverlayView ?: return
-        val hideGen = statusGeneration // 현재 세션 기록
+        val hideGen = statusGeneration 
         
         Log.d("KeyMapper", "[UI] hideStatusOverlay start (gen=$hideGen)")
-        view.animate().alpha(0f).setDuration(300).withEndAction {
-            try {
-                // 세션 ID가 일치할 때만 제거 (그 사이 새로운 메시지가 왔다면 무시)
-                if (statusOverlayView == view && statusGeneration == hideGen) {
-                    windowManager.removeView(view)
-                    statusOverlayView = null
-                    statusTextView = null
-                    currentStatusPriority = 0
-                    Log.d("KeyMapper", "[UI] Removed view (gen=$hideGen)")
-                } else {
-                    Log.d("KeyMapper", "[UI] Cancelled removal: Generation mismatch (current=$statusGeneration, hide=$hideGen)")
-                }
-            } catch (e: Exception) {}
-        }.start()
+        try {
+            // 애니메이션 없이 즉시 체크 및 제거
+            if (statusOverlayView == view && statusGeneration == hideGen) {
+                windowManager.removeView(view)
+                statusOverlayView = null
+                statusTextView = null
+                currentStatusPriority = 0
+                Log.d("KeyMapper", "[UI] Removed view immediately (gen=$hideGen)")
+            } else {
+                Log.d("KeyMapper", "[UI] Cancelled removal: Generation mismatch (current=$statusGeneration, hide=$hideGen)")
+            }
+        } catch (e: Exception) {}
     }
 
     private fun triggerVibration(durationMs: Long = 100) {
