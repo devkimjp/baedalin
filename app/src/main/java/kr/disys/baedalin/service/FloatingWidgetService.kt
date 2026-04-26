@@ -217,6 +217,10 @@ class FloatingWidgetService : Service() {
                     putBoolean("is_mapping_enabled", true) 
                 }
             }
+            ACTION_SET_TOOLBAR_VISIBILITY -> {
+                val visible = intent.getBooleanExtra("visible", true)
+                if (visible) showSettingsWidget() else hideWidget("SYSTEM_SETTINGS")
+            }
         }
         return START_NOT_STICKY
     }
@@ -592,41 +596,86 @@ class FloatingWidgetService : Service() {
             private var dragInitialY = 0f
             private var dragOffsetX = 0f
             private var dragOffsetY = 0f
-            private var lastClickTime = 0L
+            private var longClickHandled = false
+            private var moveModeActiveForThis = false
+            private val longPressHandler = Handler(Looper.getMainLooper())
+
+            private val moveModeRunnable = Runnable {
+                moveModeActiveForThis = true
+                showCustomToast("${tooltip} 이동 모드 활성화")
+                dragHandle.visibility = View.VISIBLE
+                
+                // 이동 모드 시 진동 피드백 (선택 사항)
+                v.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+            }
+
+            private val mappingModeRunnable = Runnable {
+                longClickHandled = true
+                moveModeActiveForThis = false
+                dragHandle.visibility = View.GONE
+                
+                showCustomToast("매핑할 키를 입력하세요...")
+                v.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+                
+                val intent = Intent("ACTION_START_DIRECT_RECORDING").apply {
+                    setPackage(packageName)
+                    putExtra("function_name", functionName)
+                }
+                sendBroadcast(intent)
+            }
 
             override fun onTouch(v: View, event: MotionEvent): Boolean {
-                if (!_isMoveMode.value) return false
                 val p = container.layoutParams as WindowManager.LayoutParams
                 when (event.action) {
                     MotionEvent.ACTION_DOWN -> {
-                        val currentTime = System.currentTimeMillis()
-                        if (currentTime - lastClickTime < 300) {
-                            // 더블 클릭 감지 -> MainActivity 실행 (레코딩 모드)
-                            val intent = Intent(this@FloatingWidgetService, MainActivity::class.java).apply {
-                                action = ACTION_START_RECORDING
-                                putExtra("function_name", functionName)
-                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
-                            }
-                            startActivity(intent)
-                        }
-                        lastClickTime = currentTime
-
+                        longClickHandled = false
+                        moveModeActiveForThis = false
                         dragInitialX = event.rawX
                         dragInitialY = event.rawY
                         dragOffsetX = event.rawX - p.x
                         dragOffsetY = event.rawY - p.y
+                        
+                        longPressHandler.postDelayed(moveModeRunnable, 1500)
+                        longPressHandler.postDelayed(mappingModeRunnable, 3000)
                         return true
                     }
                     MotionEvent.ACTION_MOVE -> {
-                        if (Math.abs(event.rawX - dragInitialX) > 10 || Math.abs(event.rawY - dragInitialY) > 10) {
-                            p.x = (event.rawX - dragOffsetX).toInt()
-                            p.y = (event.rawY - dragOffsetY).toInt()
-                            windowManager.updateViewLayout(container, p)
+                        val dx = Math.abs(event.rawX - dragInitialX)
+                        val dy = Math.abs(event.rawY - dragInitialY)
+                        
+                        if (dx > 15 || dy > 15) {
+                            if (moveModeActiveForThis) {
+                                p.x = (event.rawX - dragOffsetX).toInt()
+                                p.y = (event.rawY - dragOffsetY).toInt()
+                                windowManager.updateViewLayout(container, p)
+                                longClickHandled = true // 이동 중에는 매핑 모드 진입 방지
+                                longPressHandler.removeCallbacks(mappingModeRunnable)
+                            } else {
+                                // 이동 모드 전인데 움직임이 크면 롱프레스 취소
+                                longPressHandler.removeCallbacks(moveModeRunnable)
+                                longPressHandler.removeCallbacks(mappingModeRunnable)
+                            }
                         }
                         return true
                     }
                     MotionEvent.ACTION_UP -> {
-                        prefs.edit { putInt(prefKeyX, p.x); putInt(prefKeyY, p.y) }
+                        longPressHandler.removeCallbacks(moveModeRunnable)
+                        longPressHandler.removeCallbacks(mappingModeRunnable)
+                        
+                        if (moveModeActiveForThis) {
+                            // 좌표 저장
+                            prefs.edit { putInt(prefKeyX, p.x); putInt(prefKeyY, p.y) }
+                            showCustomToast("위치 저장 완료")
+                            dragHandle.visibility = View.GONE
+                        } else if (!longClickHandled) {
+                            // 롱클릭(이동/매핑)이 아니면 일반 클릭 실행
+                            v.performClick()
+                            val intent = Intent("ACTION_MANUAL_CLICK").apply {
+                                setPackage(packageName)
+                                putExtra("function_name", functionName)
+                            }
+                            sendBroadcast(intent)
+                        }
                         return true
                     }
                 }
@@ -715,6 +764,7 @@ class FloatingWidgetService : Service() {
         const val ACTION_UPDATE_UI = "ACTION_UPDATE_UI"
         const val ACTION_UPDATE_TRANSPARENCY = "ACTION_UPDATE_TRANSPARENCY"
         const val ACTION_START_SERVICE_ONLY = "ACTION_START_SERVICE_ONLY"
+        const val ACTION_SET_TOOLBAR_VISIBILITY = "ACTION_SET_TOOLBAR_VISIBILITY"
     }
 
 

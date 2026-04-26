@@ -1048,6 +1048,31 @@ fun MainScreen(
                     fontWeight = FontWeight.ExtraBold
                 )
             }
+
+            // 툴바 숨기기/보이기 임시 버튼 (서비스 실행 중에만 표시)
+            if (isServiceRunning) {
+                OutlinedButton(
+                    onClick = {
+                        val prefs = context.getSharedPreferences("mappings", Context.MODE_PRIVATE)
+                        val currentVisible = prefs.getBoolean("toolbar_visible", true)
+                        val nextVisible = !currentVisible
+                        prefs.edit { putBoolean("toolbar_visible", nextVisible) }
+                        
+                        context.startService(Intent(context, FloatingWidgetService::class.java).apply {
+                            action = FloatingWidgetService.ACTION_SET_TOOLBAR_VISIBILITY
+                            putExtra("visible", nextVisible)
+                        })
+                        onUpdateMappingVersion()
+                    },
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    val isVisible = prefs.getBoolean("toolbar_visible", true)
+                    Icon(imageVector = if (isVisible) Icons.Default.Close else Icons.Default.Settings, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(if (isVisible) "툴바 임시 숨기기" else "숨겨진 툴바 보이기")
+                }
+            }
         }
     }
 }

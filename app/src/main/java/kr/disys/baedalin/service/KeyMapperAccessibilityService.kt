@@ -19,6 +19,21 @@ import kr.disys.baedalin.model.Presets
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.collect
 import android.content.SharedPreferences
+import androidx.core.content.edit
+import android.content.BroadcastReceiver
+import android.content.IntentFilter
+import android.media.AudioManager
+import android.media.ToneGenerator
+import android.graphics.Rect
+import android.os.Build
+import android.view.accessibility.AccessibilityNodeInfo
+import org.json.JSONObject
+import org.json.JSONArray
+import java.io.File
+import java.io.FileWriter
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class KeyMapperAccessibilityService : AccessibilityService() {
 
@@ -34,6 +49,19 @@ class KeyMapperAccessibilityService : AccessibilityService() {
     
     private val serviceScope = CoroutineScope(Dispatchers.Main + Job())
     
+    private var directRecordingFunction: String? = null
+
+    private val serviceReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            when (intent.action) {
+                "ACTION_START_DIRECT_RECORDING" -> {
+                    directRecordingFunction = intent.getStringExtra("function_name")
+                    Log.d("KeyMapper", "Started direct recording for: $directRecordingFunction")
+                }
+            }
+        }
+    }
+
     private val prefsListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
         if (key == "is_recording" || key == "is_mapping_enabled") {
             updateKeyFilterState()
@@ -43,6 +71,14 @@ class KeyMapperAccessibilityService : AccessibilityService() {
     override fun onCreate() {
         super.onCreate()
         Log.d("KeyMapper", "Service onCreate - Process: ${android.os.Process.myPid()}")
+        val filter = IntentFilter().apply {
+            addAction("ACTION_START_DIRECT_RECORDING")
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(serviceReceiver, filter, Context.RECEIVER_EXPORTED)
+        } else {
+            registerReceiver(serviceReceiver, filter)
+        }
     }
 
     override fun onServiceConnected() {
@@ -145,10 +181,89 @@ class KeyMapperAccessibilityService : AccessibilityService() {
                     startService(intent)
                 }
                 
-                // 어떤 경우든 앱이 바뀌면 아이콘 상태 갱신
+            // 어떤 경우든 앱이 바뀌면 아이콘 상태 갱신
                 FloatingWidgetService.instance?.updateToolbarState()
             }
         }
+    }
+
+    private fun captureUISnapshot() {
+        val root = rootInActiveWindow ?: return
+        try {
+            val logDateFormat = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault())
+            val timestamp = logDateFormat.format(Date())
+            val dir = getExternalFilesDir(null) ?: filesDir
+            val file = File(dir, "ui_snapshot_$timestamp.json")
+            
+            val json = JSONObject()
+            json.put("timestamp", System.currentTimeMillis())
+            json.put("packageName", root.packageName)
+            json.put("nodes", dumpNodeToJson(root))
+            
+            FileWriter(file).use { it.write(json.toString(2)) }
+            
+            playSuccessSound()
+            
+            val intent = Intent(this, FloatingWidgetService::class.java).apply {
+                action = "ACTION_SNAPSHOT_COMPLETE"
+                putExtra("success", true)
+                putExtra("path", file.absolutePath)
+            }
+            startService(intent)
+            
+        } catch (e: Exception) {
+            Log.e("KeyMapper", "Snapshot failed", e)
+        } finally {
+            root.recycle()
+        }
+    }
+
+    private fun dumpNodeToJson(node: AccessibilityNodeInfo): JSONObject {
+        val json = JSONObject()
+        val rect = Rect()
+        node.getBoundsInScreen(rect)
+        
+        json.put("class", node.className?.toString()?.split(".")?.last() ?: "View")
+        json.put("text", node.text?.toString() ?: "")
+        json.put("desc", node.contentDescription?.toString() ?: "")
+        json.put("id", node.viewIdResourceName ?: "")
+        json.put("clickable", node.isClickable)
+        json.put("bounds", JSONObject().apply {
+            put("left", rect.left)
+            put("top", rect.top)
+            put("right", rect.right)
+            put("bottom", rect.bottom)
+        })
+
+        if (node.childCount > 0) {
+            val children = JSONArray()
+            for (i in 0 until node.childCount) {
+                node.getChild(i)?.let { child ->
+                    children.put(dumpNodeToJson(child))
+                    child.recycle()
+                }
+            }
+            json.put("children", children)
+        }
+        return json
+    }
+
+    private fun playSuccessSound() {
+        try {
+            val toneG = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 100)
+            toneG.startTone(ToneGenerator.TONE_PROP_BEEP, 200)
+            handler.postDelayed({ toneG.release() }, 2000)
+        } catch (e: Exception) {
+            Log.e("KeyMapper", "Failed to play sound", e)
+        }
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        val action = intent?.action
+        if (action == "ACTION_UI_SNAPSHOT") {
+            captureUISnapshot()
+        }
+        return super.onStartCommand(intent, flags, startId)
     }
 
     companion object {
@@ -170,6 +285,29 @@ class KeyMapperAccessibilityService : AccessibilityService() {
         }
 
         // 1. 레코딩 모드 처리 (최우선)
+        if (directRecordingFunction != null) {
+            if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
+                val keyCode = event.keyCode
+                val funcName = directRecordingFunction!!
+                directRecordingFunction = null // 매핑 완료 후 해제
+                
+                val function = DeliveryFunction.entries.find { it.name == funcName }
+                if (function != null) {
+                    saveDirectMapping(function, keyCode)
+                    playSuccessSound()
+                    
+                    // FloatingWidgetService에 UI 갱신 알림
+                    val updateIntent = Intent(this, FloatingWidgetService::class.java).apply {
+                        action = FloatingWidgetService.ACTION_UPDATE_KEY
+                        putExtra("function_name", funcName)
+                        putExtra("keycode", keyCode)
+                    }
+                    startService(updateIntent)
+                }
+            }
+            return true
+        }
+
         if (isRecording) {
             if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
                 Log.d("KeyMapper", "[DEBUG] RECORDING MODE: KeyCode=${event.keyCode} captured.")
@@ -259,6 +397,17 @@ class KeyMapperAccessibilityService : AccessibilityService() {
         handler.removeCallbacksAndMessages(null)
         pendingClickRunnable = null
         longPressRunnable = null
+    }
+
+    private fun saveDirectMapping(function: DeliveryFunction, keyCode: Int) {
+        val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
+        val targetDescriptor = prefs.getString("selected_device_descriptor", "GLOBAL") ?: "GLOBAL"
+        
+        prefs.edit(commit = true) {
+            putInt("${targetDescriptor}_${function.name}_keycode", keyCode)
+            putString("${targetDescriptor}_${function.name}_clicktype", ClickType.SINGLE.name)
+        }
+        Log.d("KeyMapper", "Direct mapping saved: ${function.name} -> $keyCode")
     }
 
     private fun isKeyMapped(keyCode: Int, prefix: String): Boolean {
