@@ -385,8 +385,6 @@ class KeyMapperAccessibilityService : AccessibilityService() {
             pendingClickRunnable = Runnable {
                 val type = if (clickCount >= 2) ClickType.DOUBLE else ClickType.SINGLE
                 
-                // 이동 모드(Unlock) 중이라도 자동 잠금하지 않고 유지함 (유저 요청)
-                
                 handleAction(keyCode, type, prefix)
                 clickCount = 0
             }.also { handler.postDelayed(it, doubleClickTimeout) }
