@@ -72,10 +72,12 @@ class FloatingWidgetService : Service() {
     private var currentStatusPriority = 0 // 0: None, 1: Normal, 2: Mapping, 3: Result
 
     private fun showStatusOverlay(message: String, durationMs: Long = 2000, priority: Int = 1) {
+        Log.d("KeyMapper", "[UI] showStatusOverlay: $message (priority=$priority)")
         statusHandler.removeCallbacks(hideStatusRunnable)
         
         // 현재 표시 중인 메시지의 우선순위가 더 높으면 새 메시지를 무시 (배타적 관리)
         if (priority < currentStatusPriority) {
+            Log.d("KeyMapper", "[UI] Ignored due to priority: $priority < $currentStatusPriority")
             return
         }
 
@@ -132,11 +134,14 @@ class FloatingWidgetService : Service() {
             // 기존 애니메이션 취소 및 상태 복구
             statusOverlayView?.animate()?.cancel()
             statusOverlayView?.alpha = 1f
-            statusTextView?.text = message
             
-            statusOverlayView?.animate()?.scaleX(1.05f)?.scaleY(1.05f)?.setDuration(100)?.withEndAction {
-                statusOverlayView?.animate()?.scaleX(1f)?.scaleY(1f)?.setDuration(100)?.start()
-            }?.start()
+            // 텍스트가 바뀔 때만 업데이트 및 강조 애니메이션
+            if (statusTextView?.text != message) {
+                statusTextView?.text = message
+                statusOverlayView?.animate()?.scaleX(1.05f)?.scaleY(1.05f)?.setDuration(100)?.withEndAction {
+                    statusOverlayView?.animate()?.scaleX(1f)?.scaleY(1f)?.setDuration(100)?.start()
+                }?.start()
+            }
         }
 
         statusHandler.postDelayed(hideStatusRunnable, durationMs)
