@@ -814,7 +814,7 @@ class FloatingWidgetService : Service() {
                             longPressHandler.postDelayed(moveModeRunnable, 1500)
                         }
                         if (moveModeActiveForThis) {
-                            longPressHandler.postDelayed(mappingModeRunnable, 5000)
+                            longPressHandler.postDelayed(mappingModeRunnable, 2000)
                         }
                         return true
                     }
