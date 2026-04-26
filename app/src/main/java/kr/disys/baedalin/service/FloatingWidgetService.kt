@@ -140,8 +140,8 @@ class FloatingWidgetService : Service() {
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
                 PixelFormat.TRANSLUCENT
             ).apply {
-                gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
-                y = 20
+                gravity = Gravity.CENTER
+                y = -50
             }
 
             try {
@@ -432,10 +432,10 @@ class FloatingWidgetService : Service() {
         
         val toastMsg = if (_isMoveMode.value) {
             showScreenBorder()
-            "이동 모드 활성화 (위젯 2초 롱터치)"
+            "이동 모드 활성화 (위젯을 옮길 수 있습니다)"
         } else {
             hideScreenBorder()
-            "잠금 모드 활성화"
+            "잠금 모드 활성화 (위젯 위치 고정)"
         }
         
         showCustomToast(toastMsg)
@@ -1033,7 +1033,7 @@ class FloatingWidgetService : Service() {
             foreground = border
 
             val textView = TextView(this.context).apply {
-                text = "⚠️ 언락 모드 활성화 ⚠️\n\n위젯 5초 롱터치 → 핫키 매핑\n잠금 버튼을 누르면 종료됩니다."
+                text = "⚠️ 언락 모드 활성화 ⚠️\n\n위젯 2초 롱터치 → 핫키 매핑\n잠금 버튼을 누르면 종료됩니다."
                 setTextColor(Color.YELLOW)
                 textSize = 16f
                 gravity = Gravity.CENTER
@@ -1045,8 +1045,10 @@ class FloatingWidgetService : Service() {
             addView(textView, FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.WRAP_CONTENT,
                 FrameLayout.LayoutParams.WRAP_CONTENT,
-                Gravity.CENTER
-            ))
+                Gravity.TOP or Gravity.CENTER_HORIZONTAL
+            ).apply {
+                topMargin = 20
+            })
         }
         screenBorderView = frameLayout
 
