@@ -144,6 +144,7 @@ class FloatingWidgetService : Service() {
 
     private fun hideStatusOverlay() {
         val view = statusOverlayView ?: return
+        Log.d("KeyMapper", "[UI] hideStatusOverlay start (priority=$currentStatusPriority)")
         view.animate().alpha(0f).setDuration(300).withEndAction {
             try {
                 if (statusOverlayView == view) {
@@ -151,6 +152,7 @@ class FloatingWidgetService : Service() {
                     statusOverlayView = null
                     statusTextView = null
                     currentStatusPriority = 0
+                    Log.d("KeyMapper", "[UI] statusOverlayView removed and priority reset")
                 }
             } catch (e: Exception) {}
         }.start()
@@ -353,6 +355,7 @@ class FloatingWidgetService : Service() {
                 val keyCode = intent.getIntExtra("keycode", -1)
                 val keyName = intent.getStringExtra("key_name") ?: ""
                 
+                lastMappingTime = System.currentTimeMillis()
                 // 매핑 완료 메시지는 가장 높은 우선순위(3)로 표시
                 showStatusOverlay("[$label] 매핑 완료\n$keyName ($keyCode)", 3000, priority = 3)
                 loadPresetInternal(currentPreset)
@@ -770,7 +773,8 @@ class FloatingWidgetService : Service() {
                             secondsLeft--
                             mappingHandler.postDelayed(this, 1000)
                         } else {
-                            showStatusOverlay("[$tooltip] 매핑 시간 초과", 2000, priority = 3)
+                            lastMappingTime = System.currentTimeMillis()
+                            showStatusOverlay("[$tooltip] 매핑 시간 초과", 3000, priority = 3)
                             kr.disys.baedalin.KeyRecordingState.recordingFunction = null
                             // 서비스 설정 복구 트리거
                             startService(Intent(this@FloatingWidgetService, KeyMapperAccessibilityService::class.java).apply {
@@ -848,7 +852,9 @@ class FloatingWidgetService : Service() {
                             prefs.edit { putInt(prefKeyX, p.x); putInt(prefKeyY, p.y) }
                             
                             // 매핑 중이 아닐 때만 '위치 저장 완료' 표시 (우선순위 1)
-                            if (kr.disys.baedalin.KeyRecordingState.recordingFunction == null) {
+                            // 단, 최근 1초 이내에 매핑 결과(성공/초과)가 표시되었다면 생략 (깜빡임 방지)
+                            if (kr.disys.baedalin.KeyRecordingState.recordingFunction == null &&
+                                System.currentTimeMillis() - lastMappingTime > 1000) {
                                 showStatusOverlay("위치 저장 완료", 1000, priority = 1)
                             }
                             
