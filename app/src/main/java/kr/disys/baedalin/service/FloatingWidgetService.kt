@@ -140,8 +140,8 @@ class FloatingWidgetService : Service() {
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
                 PixelFormat.TRANSLUCENT
             ).apply {
-                gravity = Gravity.CENTER
-                y = -50
+                gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
+                y = 20
             }
 
             try {
@@ -432,10 +432,10 @@ class FloatingWidgetService : Service() {
         
         val toastMsg = if (_isMoveMode.value) {
             showScreenBorder()
-            "이동 모드 활성화 (위젯을 옮길 수 있습니다)"
+            "이동 모드 활성화 (위젯 2초 롱터치)"
         } else {
             hideScreenBorder()
-            "잠금 모드 활성화 (위젯 위치 고정)"
+            "잠금 모드 활성화"
         }
         
         showCustomToast(toastMsg)
