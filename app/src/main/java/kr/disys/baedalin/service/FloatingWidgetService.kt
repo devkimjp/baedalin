@@ -70,73 +70,83 @@ class FloatingWidgetService : Service() {
     private var lastMappingTime = 0L
     private var isShowingSuccessMessage = false
     private var currentStatusPriority = 0 // 0: None, 1: Normal, 2: Mapping, 3: Result
+    private var statusGeneration = 0 // 애니메이션 레이스 컨디션 방지용 세션 ID
 
     private fun showStatusOverlay(message: String, durationMs: Long = 2000, priority: Int = 1) {
-        Log.d("KeyMapper", "[UI] showStatusOverlay: $message (priority=$priority)")
+        Log.d("KeyMapper", "[UI] showStatusOverlay: $message (priority=$priority, currentPriority=$currentStatusPriority)")
         statusHandler.removeCallbacks(hideStatusRunnable)
         
-        // 현재 표시 중인 메시지의 우선순위가 더 높으면 새 메시지를 무시 (배타적 관리)
+        // 우선순위 체크
         if (priority < currentStatusPriority) {
-            Log.d("KeyMapper", "[UI] Ignored due to priority: $priority < $currentStatusPriority")
+            Log.d("KeyMapper", "[UI] Ignored: priority $priority < $currentStatusPriority")
             return
         }
 
         currentStatusPriority = priority
+        statusGeneration++ // 새로운 세션 시작
+        val currentGen = statusGeneration
 
-        // 새로운 메시지가 오면 기존 알림창을 즉시 제거 (애니메이션 충돌 방지)
-        statusOverlayView?.let { oldView ->
+        if (statusOverlayView == null) {
+            val context = this
+            val container = FrameLayout(context).apply {
+                alpha = 0f
+                animate().alpha(1f).setDuration(200).start()
+            }
+            
+            val background = GradientDrawable().apply {
+                setColor(0xDD000000.toInt())
+                cornerRadius = 60f
+                setStroke(4, Color.parseColor("#FFD700"))
+            }
+            container.background = background
+            container.setPadding(80, 50, 80, 50)
+            container.elevation = 20f
+
+            statusTextView = TextView(context).apply {
+                text = message
+                setTextColor(Color.WHITE)
+                textSize = 20f
+                gravity = Gravity.CENTER
+                setLineSpacing(0f, 1.2f)
+                setTypeface(null, android.graphics.Typeface.BOLD)
+                setShadowLayer(4f, 2f, 2f, Color.BLACK)
+            }
+            container.addView(statusTextView)
+
+            val params = WindowManager.LayoutParams(
+                WindowManager.LayoutParams.WRAP_CONTENT,
+                WindowManager.LayoutParams.WRAP_CONTENT,
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O)
+                    WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+                else
+                    WindowManager.LayoutParams.TYPE_PHONE,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
+                PixelFormat.TRANSLUCENT
+            ).apply {
+                gravity = Gravity.CENTER
+                y = -50
+            }
+
             try {
-                windowManager.removeView(oldView)
-            } catch (e: Exception) {}
-            statusOverlayView = null
-            statusTextView = null
-        }
-
-        val context = this
-        val container = FrameLayout(context).apply {
-            alpha = 0f
-            animate().alpha(1f).setDuration(200).start()
-        }
-        
-        val background = GradientDrawable().apply {
-            setColor(0xDD000000.toInt()) // Deep dark semi-transparent
-            cornerRadius = 60f
-            setStroke(4, Color.parseColor("#FFD700")) // Gold/Yellow border
-        }
-        container.background = background
-        container.setPadding(80, 50, 80, 50)
-        container.elevation = 20f
-
-        statusTextView = TextView(context).apply {
-            text = message
-            setTextColor(Color.WHITE)
-            textSize = 20f
-            gravity = Gravity.CENTER
-            setLineSpacing(0f, 1.2f)
-            setTypeface(null, android.graphics.Typeface.BOLD)
-            setShadowLayer(4f, 2f, 2f, Color.BLACK)
-        }
-        container.addView(statusTextView)
-
-        val params = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O)
-                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-            else
-                WindowManager.LayoutParams.TYPE_PHONE,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
-            PixelFormat.TRANSLUCENT
-        ).apply {
-            gravity = Gravity.CENTER
-            y = -50 // Slightly above center
-        }
-
-        try {
-            windowManager.addView(container, params)
-            statusOverlayView = container
-        } catch (e: Exception) {
-            Log.e("KeyMapper", "Failed to add status overlay", e)
+                windowManager.addView(container, params)
+                statusOverlayView = container
+            } catch (e: Exception) {
+                Log.e("KeyMapper", "Failed to add status overlay", e)
+            }
+        } else {
+            // 기존 뷰 재사용 (깜빡임 방지)
+            statusOverlayView?.animate()?.cancel()
+            statusOverlayView?.alpha = 1f
+            statusOverlayView?.scaleX = 1f
+            statusOverlayView?.scaleY = 1f
+            
+            if (statusTextView?.text != message) {
+                statusTextView?.text = message
+                // 내용 변경 시에만 살짝 강조
+                statusOverlayView?.animate()?.scaleX(1.03f)?.scaleY(1.03f)?.setDuration(100)?.withEndAction {
+                    statusOverlayView?.animate()?.scaleX(1f)?.scaleY(1f)?.setDuration(100)?.start()
+                }?.start()
+            }
         }
 
         statusHandler.postDelayed(hideStatusRunnable, durationMs)
@@ -144,15 +154,20 @@ class FloatingWidgetService : Service() {
 
     private fun hideStatusOverlay() {
         val view = statusOverlayView ?: return
-        Log.d("KeyMapper", "[UI] hideStatusOverlay start (priority=$currentStatusPriority)")
+        val hideGen = statusGeneration // 현재 세션 기록
+        
+        Log.d("KeyMapper", "[UI] hideStatusOverlay start (gen=$hideGen)")
         view.animate().alpha(0f).setDuration(300).withEndAction {
             try {
-                if (statusOverlayView == view) {
+                // 세션 ID가 일치할 때만 제거 (그 사이 새로운 메시지가 왔다면 무시)
+                if (statusOverlayView == view && statusGeneration == hideGen) {
                     windowManager.removeView(view)
                     statusOverlayView = null
                     statusTextView = null
                     currentStatusPriority = 0
-                    Log.d("KeyMapper", "[UI] statusOverlayView removed and priority reset")
+                    Log.d("KeyMapper", "[UI] Removed view (gen=$hideGen)")
+                } else {
+                    Log.d("KeyMapper", "[UI] Cancelled removal: Generation mismatch (current=$statusGeneration, hide=$hideGen)")
                 }
             } catch (e: Exception) {}
         }.start()
