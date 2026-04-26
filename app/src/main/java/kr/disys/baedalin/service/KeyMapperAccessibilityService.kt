@@ -54,9 +54,28 @@ class KeyMapperAccessibilityService : AccessibilityService() {
         }
     }
 
+    private val manualClickReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: android.content.Intent?) {
+            if (intent?.action == "ACTION_MANUAL_CLICK") {
+                val functionName = intent.getStringExtra("function_name")
+                Log.d("KeyMapper", "Received manual click for: $functionName")
+                if (functionName != null) {
+                    handleActionByName(functionName)
+                }
+            }
+        }
+    }
+
     override fun onCreate() {
         super.onCreate()
         Log.d("KeyMapper", "Service onCreate - Process: ${android.os.Process.myPid()}")
+        
+        val filter = android.content.IntentFilter("ACTION_MANUAL_CLICK")
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(manualClickReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            registerReceiver(manualClickReceiver, filter)
+        }
     }
 
     override fun onServiceConnected() {
@@ -112,6 +131,7 @@ class KeyMapperAccessibilityService : AccessibilityService() {
     override fun onDestroy() {
         super.onDestroy()
         serviceScope.cancel()
+        unregisterReceiver(manualClickReceiver)
         getSharedPreferences("mappings", Context.MODE_PRIVATE)
             .unregisterOnSharedPreferenceChangeListener(prefsListener)
     }
@@ -469,6 +489,29 @@ class KeyMapperAccessibilityService : AccessibilityService() {
         }
         
         return null
+    }
+
+    private fun handleActionByName(functionName: String) {
+        val function = DeliveryFunction.entries.find { it.name == functionName } ?: return
+        val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
+        val activePreset = prefs.getString("active_preset", "DEFAULT") ?: "DEFAULT"
+        
+        // 자동 인식 또는 프리셋 좌표 실행
+        if (activePreset == "BAEMIN" || activePreset == "COUPANG") {
+            val dynamicRect = resolveDynamicCoordinate(function)
+            if (dynamicRect != null) {
+                Log.d("KeyMapper", "Manual click: Auto-detected coordinate for ${function.name}")
+                sendFlashIntent(function.name, dynamicRect.centerX().toFloat(), dynamicRect.centerY().toFloat())
+                return
+            }
+        }
+
+        val x = prefs.getInt("${activePreset}_${function.name}_x", -1).toFloat()
+        val y = prefs.getInt("${activePreset}_${function.name}_y", -1).toFloat()
+        if (x != -1f && y != -1f) {
+            Log.d("KeyMapper", "Manual click: Executing action ${function.name} at ($x, $y)")
+            sendFlashIntent(function.name, x, y)
+        }
     }
 
     private fun sendFlashIntent(functionName: String, x: Float, y: Float) {

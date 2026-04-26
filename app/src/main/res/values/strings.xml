@@ -4,4 +4,5 @@
     <string name="auto_detect_not_ready">접근성 서비스가 비활성화되어 있어 자동 인식을 사용할 수 없습니다.</string>
     <string name="ui_snapshot_success">화면 정보가 JSON으로 저장되었습니다.</string>
     <string name="ui_snapshot_failed">화면 정보 저장에 실패했습니다.</string>
+    <string name="accessibility_service_description">달마링 키서비스는 배달 앱의 화면 구성을 감지하여 맞춤형 위젯을 표시하고, 볼륨 키 등을 통한 앱 제어 기능을 제공하기 위해 접근성 권한을 사용합니다.\n\n[접근 범위 및 용도]\n1. 화면 콘텐츠 읽기: 배달 앱의 상태를 파악하여 최적의 위치에 위젯을 표시합니다.\n2. 동작 수행: 사용자의 조작을 돕기 위해 필요한 클릭 및 동작을 대행할 수 있습니다.\n3. 키 이벤트 감지: 볼륨 버튼 등의 입력을 감지하여 기능을 실행합니다.\n\n* 어떠한 개인정보도 수집하거나 저장하지 않습니다.</string>
 </resources>

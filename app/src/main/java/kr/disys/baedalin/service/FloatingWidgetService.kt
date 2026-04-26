@@ -48,7 +48,7 @@ class FloatingWidgetService : Service() {
     private var isPresetsHidden = false
     private var screenBorderView: View? = null
 
-    // ?바 버튼 참조 ??용
+    // 툴바 버튼 참조 및 관리용
     private var btnAddView: View? = null
     private var btnMoveView: View? = null
     private var btnHideView: View? = null
@@ -67,17 +67,17 @@ class FloatingWidgetService : Service() {
         val functionName = "${preset}_CUSTOM_$label"
         val color = Presets.getColor(preset)
         
-        // 1. ?젯 ?시
+        // 1. 위젯 표시
         showWidget(
             functionName = functionName,
             icon = label,
-            tooltip = "?용???젯 $label",
+            tooltip = "사용자 위젯 $label",
             targetX = lastAddedX,
             targetY = lastAddedY,
             color = color
         )
         
-        // 2. ?이?????(모드?분리)
+        // 2. 활성 위젯 목록 (모드별 분리)
         val listKey = "${preset}_active_custom_widgets"
         val currentWidgets = prefs.getString(listKey, "") ?: ""
         val newList = if (currentWidgets.isEmpty()) label else "$currentWidgets,$label"
@@ -89,7 +89,7 @@ class FloatingWidgetService : Service() {
             putInt("${preset}_last_added_y", lastAddedY + 60)
         }
 
-        // 3. 좌표 ?카운??갱신 (로컬 ?태???재 모드??맞춰 ?기??
+        // 3. 좌표 및 카운터 갱신 (로컬 상태를 현재 모드에 맞춰 동기화)
         lastAddedX += 60
         lastAddedY += 60
         if (lastAddedX > 800 || lastAddedY > 1200) {
@@ -111,8 +111,8 @@ class FloatingWidgetService : Service() {
                     showWidget(
                         functionName = "${preset}_CUSTOM_$label",
                         icon = label,
-                        tooltip = "?용???젯 $label",
-                        targetX = -1, // ??된 좌표 ?용
+                        tooltip = "사용자 위젯 $label",
+                        targetX = -1, // 저장된 좌표 사용
                         targetY = -1,
                         color = color
                     )
@@ -120,7 +120,7 @@ class FloatingWidgetService : Service() {
             }
         }
         
-        // 모드?카운???마??좌표 복구
+        // 모드별 카운터 및 마지막 좌표 복구
         lastAddedX = prefs.getInt("${preset}_last_added_x", 200)
         lastAddedY = prefs.getInt("${preset}_last_added_y", 250)
     }
@@ -137,10 +137,10 @@ class FloatingWidgetService : Service() {
             }
         }
         
-        // ?리?이 ?겨지???매핑 간섭??중?
+        // 프리셋이 숨겨지면 매핑 간섭도 중단
         _isInterceptionActive.value = !isPresetsHidden
         
-        // ?바?????이??태 ?기??
+        // 툴바의 숨기기 아이콘 상태 동기화
         (btnHideView as? ImageView)?.let { 
             it.setImageResource(if (isPresetsHidden) R.drawable.ic_toolbar_hide_off else R.drawable.ic_toolbar_hide)
         }
@@ -182,7 +182,7 @@ class FloatingWidgetService : Service() {
                     currentPreset = newPreset
                 }
                 showSettingsWidget()
-                loadStoredCustomWidgets() // ??된 커스? ?젯?도 복구
+                loadStoredCustomWidgets() // 저장된 커스텀 위젯들도 복구
             }
             ACTION_HIDE_ALL -> hideAll()
             ACTION_HIDE_PRESETS -> {
@@ -197,9 +197,9 @@ class FloatingWidgetService : Service() {
                 val preset = intent.getStringExtra("preset_name") ?: "BAEMIN"
                 Log.d("KeyMapper", "!!! RECEIVED ACTION_LOAD_PRESET for $preset !!!")
                 loadPresetInternal(preset)
-                showSettingsWidget() // ?리??로드 ???바???께 ?시
+                showSettingsWidget() // 프리셋 로드 시 툴바도 함께 표시
                 _isMappingEnabled.value = true
-                _isInterceptionActive.value = true // 매핑 ?터?트 ?성??
+                _isInterceptionActive.value = true // 매핑 인터셉트 활성화
                 getSharedPreferences("mappings", Context.MODE_PRIVATE).edit(commit = true) { putBoolean("is_mapping_enabled", true) }
                 Log.d("KeyMapper", "is_mapping_enabled successfully set to TRUE")
             }
@@ -223,7 +223,7 @@ class FloatingWidgetService : Service() {
                 Log.d("KeyMapper", "Starting service: Toolbar only")
                 showSettingsWidget()
                 _isMappingEnabled.value = true
-                _isInterceptionActive.value = false // 초기?는 좌표 ?젯 ??
+                _isInterceptionActive.value = false // 초기에는 좌표 위젯 숨김
                 getSharedPreferences("mappings", Context.MODE_PRIVATE).edit(commit = true) { 
                     putBoolean("is_mapping_enabled", true) 
                 }
@@ -256,12 +256,10 @@ class FloatingWidgetService : Service() {
 
         hidePresets()
         
-        // ?리??로드 ????/?힘 ?태 ?제
+        // 프리셋 로드 시 숨김/접힘 상태 해제
         setPresetsVisibility(false)
         setToolbarFolded(false)
 
-        // 위젯을 상시로 보여주지 않기 위해 showWidget 호출을 주석 처리하거나 제거합니다.
-        /*
         val prefix = prefs.getString("selected_device_descriptor", "GLOBAL") ?: "GLOBAL"
         presetList.forEach { info ->
             val keycode = prefs.getInt("${prefix}_${info.function.name}_keycode", -1)
@@ -272,10 +270,9 @@ class FloatingWidgetService : Service() {
             
             showWidget(info.function.name, info.icon, info.tooltip, info.x, info.y, color, keyInfo)
         }
-        */
 
-        // ???리?의 커스? ?젯??로드
-        // loadStoredCustomWidgets()
+        // 프리셋의 커스텀 위젯들 로드
+        loadStoredCustomWidgets()
     }
 
     private fun toggleMoveMode() {
@@ -284,10 +281,10 @@ class FloatingWidgetService : Service() {
         
         val toastMsg = if (_isMoveMode.value) {
             showScreenBorder()
-            "?동 모드 ?성??(?젯???? ???습?다)"
+            "이동 모드 활성화 (위젯을 드래그할 수 있습니다)"
         } else {
             hideScreenBorder()
-            "?금 모드 ?성??(?젯 ?치 고정)"
+            "잠금 모드 활성화 (위젯 위치 고정)"
         }
         
         showCustomToast(toastMsg)
@@ -306,10 +303,10 @@ class FloatingWidgetService : Service() {
             }
         }
         
-        updateToolbarState() // ?태 변????이?갱신
+        updateToolbarState() // 상태 변경에 따른 아이콘 갱신
     }
 
-    // ?바 ?이콘의 ?성/비활???태(?상, ?명????시??데?트
+    // 툴바 아이콘의 활성/비활성 상태(색상, 투명도 등)를 실시간 업데이트
     fun updateToolbarState() {
         Handler(Looper.getMainLooper()).post {
             val currentApp = KeyMapperAccessibilityService.currentPackageName
@@ -321,18 +318,18 @@ class FloatingWidgetService : Service() {
 
             btnMoveView?.let { v ->
                 val iv = v as ImageView
-                // ?물??버튼? ?? ?성 ?태??시
+                // 자물쇠 버튼은 항상 활성 상태로 표시
                 iv.alpha = 1.0f
                 iv.colorFilter = null
                 iv.setImageResource(if (_isMoveMode.value) R.drawable.ic_toolbar_unlock_v7 else R.drawable.ic_toolbar_lock_v7)
 
                 if (!isTargetApp) {
-                    // 배달 ???탈 ???바??동?로 ?음
+                    // 배달 앱 이탈 시 툴바 자동 접음
                     if (!isToolbarFolded) {
                         setToolbarFolded(true)
                     }
                 } else {
-                    // 배달 ??진입 ???전 ?용???정 ?태?복구
+                    // 배달 앱 진입 시 이전에 사용자가 설정한 상태를 복구
                     if (isToolbarFolded != preferredFoldedState) {
                         setToolbarFolded(preferredFoldedState)
                     }
@@ -380,7 +377,7 @@ class FloatingWidgetService : Service() {
             background = shape
             elevation = 8f
             
-            // ??된 ?명???용
+            // 설정된 투명도 적용
             val alpha = prefs.getFloat("toolbar_transparency", 1.0f)
             this.alpha = alpha
         }
@@ -441,9 +438,9 @@ class FloatingWidgetService : Service() {
                 scaleType = ImageView.ScaleType.FIT_CENTER
                 val size = 100 
                 layoutParams = LinearLayout.LayoutParams(size, size).apply {
-                    setMargins(0, 0, 0, 0) // 간격??좁히??해 마진 ?거
+                    setMargins(0, 0, 0, 0) // 간격을 좁히기 위해 마진 제거
                 }
-                setPadding(15, 15, 15, 15) // ?딩 추?
+                setPadding(15, 15, 15, 15) // 패딩 추가
                 
                 setOnClickListener { v -> onClick(v) }
                 setOnTouchListener(unifiedTouchListener)
@@ -472,7 +469,7 @@ class FloatingWidgetService : Service() {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
             }
             startActivity(intentAction)
-            Toast.makeText(this@FloatingWidgetService, "변경사?? ??되?습?다.", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this@FloatingWidgetService, "변경사항이 적용되었습니다.", Toast.LENGTH_SHORT).show()
         }
         val btnBaemin = createToolbarIcon(R.drawable.ic_toolbar_baemin) { _ -> 
             val pkg = Presets.getPackageName("BAEMIN")
@@ -495,7 +492,7 @@ class FloatingWidgetService : Service() {
         btnSnapshotView = btnSnapshot
         val btnFold = createToolbarIcon(R.drawable.ic_toolbar_fold) { v -> 
             val newState = !isToolbarFolded
-            preferredFoldedState = newState // ?용?? 직접 변경한 ?태?기억
+            preferredFoldedState = newState // 사용자가 직접 변경한 상태를 기억
             setToolbarFolded(newState)
         }
 
@@ -508,7 +505,7 @@ class FloatingWidgetService : Service() {
         this.btnCoupangView = btnCoupang
         this.btnFoldView = btnFold as ImageView
 
-        // ?청?신 ?서???이?배치 (?기, ?금, 배?, 쿠팡, 종료)
+        // 상단부터 아이콘 순서대로 배치 (접기, 잠금, 배민, 쿠팡, 스냅샷, 종료)
         toolbarContainer.addView(btnFold)
         toolbarContainer.addView(btnMove)
         toolbarContainer.addView(btnBaemin)
@@ -530,8 +527,7 @@ class FloatingWidgetService : Service() {
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or 
             WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or 
-            WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
-            (if (_isMoveMode.value) 0 else WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE),
+            WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.START
@@ -545,7 +541,7 @@ class FloatingWidgetService : Service() {
         val offsetX = ICON_SIZE / 2
         val offsetY = ICON_SIZE / 2 + 40
 
-        // ??된 좌표가 ?으?불러?고, ?으??리??좌표 ?용
+        // 저장된 좌표가 있으면 불러오고, 없으면 프리셋 좌표 사용
         val savedX = prefs.getInt(prefKeyX, -1)
         val savedY = prefs.getInt(prefKeyY, -1)
 
@@ -555,7 +551,7 @@ class FloatingWidgetService : Service() {
         } else if (targetX != -1 && targetY != -1) {
             params.x = targetX - offsetX
             params.y = targetY - offsetY
-            // 처음 ?시????기본 좌표????
+            // 처음 표시 시 기본 좌표로 저장
             prefs.edit { putInt(prefKeyX, params.x); putInt(prefKeyY, params.y) }
         } else {
             params.x = 100
@@ -591,7 +587,7 @@ class FloatingWidgetService : Service() {
         }
         container.addView(circleView)
 
-        // ?동 모드 ???????래??들 추?
+        // 이동 모드 시 드래그 핸들 추가
         val dragHandle = View(this).apply {
             id = R.id.drag_handle
             layoutParams = LinearLayout.LayoutParams(ICON_SIZE / 2, 10).apply {
@@ -622,21 +618,33 @@ class FloatingWidgetService : Service() {
             private var lastClickTime = 0L
 
             override fun onTouch(v: View, event: MotionEvent): Boolean {
-                if (!_isMoveMode.value) return false
                 val p = container.layoutParams as WindowManager.LayoutParams
                 when (event.action) {
                     MotionEvent.ACTION_DOWN -> {
                         val currentTime = System.currentTimeMillis()
+                        
+                        // 더블 클릭 감지 (이동 모드 상관없이 작동 가능)
                         if (currentTime - lastClickTime < 300) {
-                            // ?블 ?릭 감? -> MainActivity ?행 (?코??모드)
+                            // 더블 클릭 감지 -> MainActivity 실행 (레코딩 모드)
                             val intent = Intent(this@FloatingWidgetService, MainActivity::class.java).apply {
                                 action = ACTION_START_RECORDING
                                 putExtra("function_name", functionName)
                                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
                             }
                             startActivity(intent)
+                            return true
                         }
                         lastClickTime = currentTime
+
+                        if (!_isMoveMode.value) {
+                            // 일반 모드에서 단일 클릭 시 해당 기능 실행 (수동 터치 지원)
+                            val intent = Intent("ACTION_MANUAL_CLICK").apply {
+                                setPackage(packageName)
+                                putExtra("function_name", functionName)
+                            }
+                            sendBroadcast(intent)
+                            return true
+                        }
 
                         dragInitialX = event.rawX
                         dragInitialY = event.rawY
@@ -645,7 +653,7 @@ class FloatingWidgetService : Service() {
                         return true
                     }
                     MotionEvent.ACTION_MOVE -> {
-                        if (Math.abs(event.rawX - dragInitialX) > 10 || Math.abs(event.rawY - dragInitialY) > 10) {
+                        if (_isMoveMode.value && (Math.abs(event.rawX - dragInitialX) > 10 || Math.abs(event.rawY - dragInitialY) > 10)) {
                             p.x = (event.rawX - dragOffsetX).toInt()
                             p.y = (event.rawY - dragOffsetY).toInt()
                             windowManager.updateViewLayout(container, p)
@@ -653,7 +661,9 @@ class FloatingWidgetService : Service() {
                         return true
                     }
                     MotionEvent.ACTION_UP -> {
-                        prefs.edit { putInt(prefKeyX, p.x); putInt(prefKeyY, p.y) }
+                        if (_isMoveMode.value) {
+                            prefs.edit { putInt(prefKeyX, p.x); putInt(prefKeyY, p.y) }
+                        }
                         return true
                     }
                 }
@@ -754,10 +764,10 @@ class FloatingWidgetService : Service() {
                 startActivity(launchIntent)
             } catch (e: Exception) {
                 Log.e("KeyMapper", "Failed to launch app: $packageName", e)
-                Toast.makeText(this, "?을 ?행?????습?다.", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "앱을 실행하지 못했습니다.", Toast.LENGTH_SHORT).show()
             }
         } else {
-            Toast.makeText(this, "?이 ?치?어 ?? ?습?다: $packageName", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "앱이 설치되어 있지 않습니다: $packageName", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -779,8 +789,8 @@ class FloatingWidgetService : Service() {
         screenBorderView = View(this).apply {
             background = GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE
-                setStroke(10, Color.RED) // 10px ?께??빨간 ?두?
-                setColor(Color.TRANSPARENT) // 배경? ?명
+                setStroke(10, Color.RED) // 10px 두께의 빨간 테두리
+                setColor(Color.TRANSPARENT) // 배경은 투명
             }
         }
 
@@ -812,7 +822,7 @@ class FloatingWidgetService : Service() {
             text = message
             setTextColor(Color.WHITE)
             setBackground(GradientDrawable().apply {
-                setColor(Color.parseColor("#CC000000")) // 80% ?명 검??
+                setColor(Color.parseColor("#CC000000")) // 80% 투명 검정
                 cornerRadius = 50f
             })
             setPadding(40, 20, 40, 20)
@@ -829,7 +839,7 @@ class FloatingWidgetService : Service() {
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
-            y = 200 // ?단?서 200px ??
+            y = 200 // 하단에서 200px 위
         }
 
         try {
