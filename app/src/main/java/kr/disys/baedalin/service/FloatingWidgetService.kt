@@ -75,13 +75,21 @@ class FloatingWidgetService : Service() {
 
     private fun showStatusOverlay(message: String, durationMs: Long = 2000, priority: Int = 1) {
         val now = System.currentTimeMillis()
-        // 동일 메시지 중복 호출 방지 (0.5초 이내 동일 메시지 무시)
-        if (message == lastMessageContent && now - lastMessageTimestamp < 500) {
+        val trimmedMsg = message.trim()
+        
+        // 동일 메시지 중복 호출 방지 (1.5초로 연장하여 더 강력하게 차단)
+        if (trimmedMsg == lastMessageContent?.trim() && now - lastMessageTimestamp < 1500) {
+            // 이미 표시 중이면 시간만 연장하고 리턴 (애니메이션 발생 안 함)
+            statusHandler.removeCallbacks(hideStatusRunnable)
+            statusHandler.postDelayed(hideStatusRunnable, durationMs)
             return
         }
         
-        Log.d("KeyMapper", "[UI] showStatusOverlay: $message (priority=$priority)")
-        lastMessageContent = message
+        Log.d("KeyMapper", "[UI] showStatusOverlay: $trimmedMsg (priority=$priority)")
+        // 호출 경로 추적용 로그 (누가 호출하는지 확인)
+        Log.d("KeyMapper", "[UI] CallStack: ${Log.getStackTraceString(Throwable())}")
+        
+        lastMessageContent = trimmedMsg
         lastMessageTimestamp = now
         
         statusHandler.removeCallbacks(hideStatusRunnable)
