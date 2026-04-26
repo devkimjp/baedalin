@@ -69,18 +69,17 @@ class FloatingWidgetService : Service() {
     private val hideStatusRunnable = Runnable { hideStatusOverlay() }
     private var lastMappingTime = 0L
     private var isShowingSuccessMessage = false
+    private var currentStatusPriority = 0 // 0: None, 1: Normal, 2: Mapping, 3: Result
 
-    private fun showStatusOverlay(message: String, durationMs: Long = 2000, isMappingMessage: Boolean = false) {
+    private fun showStatusOverlay(message: String, durationMs: Long = 2000, priority: Int = 1) {
         statusHandler.removeCallbacks(hideStatusRunnable)
         
-        // 매핑 완료 메시지가 떠 있는 동안에는 다른 어떤 메시지도 받지 않음 (배타적 관리 강화)
-        if (!isMappingMessage && (isShowingSuccessMessage || kr.disys.baedalin.KeyRecordingState.recordingFunction != null)) {
+        // 현재 표시 중인 메시지의 우선순위가 더 높으면 새 메시지를 무시 (배타적 관리)
+        if (priority < currentStatusPriority) {
             return
         }
 
-        if (isMappingMessage) {
-            isShowingSuccessMessage = true
-        }
+        currentStatusPriority = priority
 
         if (statusOverlayView == null) {
             val context = this
@@ -152,7 +151,8 @@ class FloatingWidgetService : Service() {
                 if (statusOverlayView == view) {
                     statusOverlayView = null
                     statusTextView = null
-                    isShowingSuccessMessage = false // 상태 초기화
+                    isShowingSuccessMessage = false
+                    currentStatusPriority = 0 // 우선순위 초기화
                 }
             }.start()
         }
@@ -355,8 +355,8 @@ class FloatingWidgetService : Service() {
                 val keyCode = intent.getIntExtra("keycode", -1)
                 val keyName = intent.getStringExtra("key_name") ?: ""
                 
-                // 매핑 완료 메시지는 가장 높은 우선순위로 표시
-                showStatusOverlay("[$label] 매핑 완료\n$keyName ($keyCode)", 3000, isMappingMessage = true)
+                // 매핑 완료 메시지는 가장 높은 우선순위(3)로 표시
+                showStatusOverlay("[$label] 매핑 완료\n$keyName ($keyCode)", 3000, priority = 3)
                 loadPresetInternal(currentPreset)
             }
         }
@@ -768,11 +768,11 @@ class FloatingWidgetService : Service() {
                         if (kr.disys.baedalin.KeyRecordingState.recordingFunction == null) return
 
                         if (secondsLeft > 0) {
-                            showStatusOverlay("[$tooltip]\n매핑할 키를 입력하세요... (${secondsLeft}초)", 1500, isMappingMessage = true)
+                            showStatusOverlay("[$tooltip]\n매핑할 키를 입력하세요... (${secondsLeft}초)", 1500, priority = 2)
                             secondsLeft--
                             mappingHandler.postDelayed(this, 1000)
                         } else {
-                            showStatusOverlay("[$tooltip] 매핑 시간 초과", 2000, isMappingMessage = true)
+                            showStatusOverlay("[$tooltip] 매핑 시간 초과", 2000, priority = 3)
                             kr.disys.baedalin.KeyRecordingState.recordingFunction = null
                             // 서비스 설정 복구 트리거
                             startService(Intent(this@FloatingWidgetService, KeyMapperAccessibilityService::class.java).apply {
@@ -849,9 +849,9 @@ class FloatingWidgetService : Service() {
                             // 이동 완료 시 좌표 저장
                             prefs.edit { putInt(prefKeyX, p.x); putInt(prefKeyY, p.y) }
                             
-                            // 매핑 중이 아닐 때만 '위치 저장 완료' 표시
+                            // 매핑 중이 아닐 때만 '위치 저장 완료' 표시 (우선순위 1)
                             if (kr.disys.baedalin.KeyRecordingState.recordingFunction == null) {
-                                showStatusOverlay("위치 저장 완료", 1000)
+                                showStatusOverlay("위치 저장 완료", 1000, priority = 1)
                             }
                             
                             // 언락 모드가 아닐 때만(즉, 1회성 이동일 때만) 핸들을 숨김
