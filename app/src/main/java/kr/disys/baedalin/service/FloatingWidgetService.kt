@@ -68,22 +68,31 @@ class FloatingWidgetService : Service() {
     private val statusHandler = Handler(Looper.getMainLooper())
     private val hideStatusRunnable = Runnable { hideStatusOverlay() }
     private var lastMappingTime = 0L
-    private var isShowingSuccessMessage = false
-    private var currentStatusPriority = 0 // 0: None, 1: Normal, 2: Mapping, 3: Result
-    private var statusGeneration = 0 // 애니메이션 레이스 컨디션 방지용 세션 ID
+    private var currentStatusPriority = 0 
+    private var statusGeneration = 0 
+    private var lastMessageContent: String? = null
+    private var lastMessageTimestamp = 0L
 
     private fun showStatusOverlay(message: String, durationMs: Long = 2000, priority: Int = 1) {
-        Log.d("KeyMapper", "[UI] showStatusOverlay: $message (priority=$priority, currentPriority=$currentStatusPriority)")
+        val now = System.currentTimeMillis()
+        // 동일 메시지 중복 호출 방지 (0.5초 이내 동일 메시지 무시)
+        if (message == lastMessageContent && now - lastMessageTimestamp < 500) {
+            return
+        }
+        
+        Log.d("KeyMapper", "[UI] showStatusOverlay: $message (priority=$priority)")
+        lastMessageContent = message
+        lastMessageTimestamp = now
+        
         statusHandler.removeCallbacks(hideStatusRunnable)
         
         // 우선순위 체크
         if (priority < currentStatusPriority) {
-            Log.d("KeyMapper", "[UI] Ignored: priority $priority < $currentStatusPriority")
             return
         }
 
         currentStatusPriority = priority
-        statusGeneration++ // 새로운 세션 시작
+        statusGeneration++
         val currentGen = statusGeneration
 
         if (statusOverlayView == null) {
@@ -94,7 +103,7 @@ class FloatingWidgetService : Service() {
             }
             
             val background = GradientDrawable().apply {
-                setColor(0xDD000000.toInt())
+                setColor(0xEE000000.toInt()) // 투명도 약간 줄여서 더 묵직하게
                 cornerRadius = 60f
                 setStroke(4, Color.parseColor("#FFD700"))
             }
@@ -130,11 +139,9 @@ class FloatingWidgetService : Service() {
             try {
                 windowManager.addView(container, params)
                 statusOverlayView = container
-            } catch (e: Exception) {
-                Log.e("KeyMapper", "Failed to add status overlay", e)
-            }
+            } catch (e: Exception) {}
         } else {
-            // 기존 뷰 재사용 (깜빡임 방지)
+            // 기존 뷰 재사용 (깜빡임 차단)
             statusOverlayView?.animate()?.cancel()
             statusOverlayView?.alpha = 1f
             statusOverlayView?.scaleX = 1f
@@ -142,10 +149,6 @@ class FloatingWidgetService : Service() {
             
             if (statusTextView?.text != message) {
                 statusTextView?.text = message
-                // 내용 변경 시에만 살짝 강조
-                statusOverlayView?.animate()?.scaleX(1.03f)?.scaleY(1.03f)?.setDuration(100)?.withEndAction {
-                    statusOverlayView?.animate()?.scaleX(1f)?.scaleY(1f)?.setDuration(100)?.start()
-                }?.start()
             }
         }
 
