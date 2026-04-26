@@ -18,6 +18,7 @@ import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.media.AudioAttributes
 import android.widget.TextView
 import android.widget.Toast
 import android.view.ViewOutlineProvider
@@ -67,13 +68,18 @@ class FloatingWidgetService : Service() {
     private val statusHandler = Handler(Looper.getMainLooper())
     private val hideStatusRunnable = Runnable { hideStatusOverlay() }
     private var lastMappingTime = 0L
+    private var isShowingSuccessMessage = false
 
     private fun showStatusOverlay(message: String, durationMs: Long = 2000, isMappingMessage: Boolean = false) {
         statusHandler.removeCallbacks(hideStatusRunnable)
         
-        // 매핑 모드 중인데 일반 메시지(이동 완료 등)가 들어오면 무시 (배타적 관리)
-        if (!isMappingMessage && kr.disys.baedalin.KeyRecordingState.recordingFunction != null) {
+        // 매핑 완료 메시지가 떠 있는 동안에는 다른 어떤 메시지도 받지 않음 (배타적 관리 강화)
+        if (!isMappingMessage && (isShowingSuccessMessage || kr.disys.baedalin.KeyRecordingState.recordingFunction != null)) {
             return
+        }
+
+        if (isMappingMessage) {
+            isShowingSuccessMessage = true
         }
 
         if (statusOverlayView == null) {
@@ -146,17 +152,37 @@ class FloatingWidgetService : Service() {
                 if (statusOverlayView == view) {
                     statusOverlayView = null
                     statusTextView = null
+                    isShowingSuccessMessage = false // 상태 초기화
                 }
             }.start()
         }
     }
 
     private fun triggerVibration(durationMs: Long = 100) {
-        val vibrator = getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            vibrator.vibrate(VibrationEffect.createOneShot(durationMs, VibrationEffect.DEFAULT_AMPLITUDE))
-        } else {
-            vibrator.vibrate(durationMs)
+        try {
+            val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val vibratorManager = getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? android.os.VibratorManager
+                vibratorManager?.defaultVibrator
+            } else {
+                @Suppress("DEPRECATION")
+                getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+            }
+
+            if (vibrator != null && vibrator.hasVibrator()) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    // USAGE_ASSISTANCE_ACCESSIBILITY를 사용하여 무음 모드 등에서도 더 신뢰성 있게 진동 전달
+                    val attrs = AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_ASSISTANCE_ACCESSIBILITY)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                        .build()
+                    vibrator.vibrate(VibrationEffect.createOneShot(durationMs, VibrationEffect.DEFAULT_AMPLITUDE), attrs)
+                } else {
+                    @Suppress("DEPRECATION")
+                    vibrator.vibrate(durationMs)
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("KeyMapper", "Vibration failed", e)
         }
     }
 
