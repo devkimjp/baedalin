@@ -18,6 +18,7 @@ import kr.disys.baedalin.model.DeliveryFunction
 import kr.disys.baedalin.model.Presets
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.collect
+import android.widget.Toast
 import android.content.SharedPreferences
 import androidx.core.content.edit
 import android.content.BroadcastReceiver
@@ -49,19 +50,19 @@ class KeyMapperAccessibilityService : AccessibilityService() {
     
     private val serviceScope = CoroutineScope(Dispatchers.Main + Job())
     
-    private var directRecordingFunction: String? = null
 
     private val serviceReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             when (intent.action) {
                 "ACTION_START_DIRECT_RECORDING" -> {
-                    directRecordingFunction = intent.getStringExtra("function_name")
-                    Log.d("KeyMapper", "Started direct recording for: $directRecordingFunction")
+                    kr.disys.baedalin.KeyRecordingState.recordingFunction = intent.getStringExtra("function_name")
+                    Log.d("KeyMapper", "Started direct recording for: ${kr.disys.baedalin.KeyRecordingState.recordingFunction}")
+                    updateKeyFilterState()
                 }
                 "ACTION_CANCEL_DIRECT_RECORDING" -> {
-                    if (directRecordingFunction != null) {
-                        Log.d("KeyMapper", "Cancelled direct recording for: $directRecordingFunction")
-                        directRecordingFunction = null
+                    if (kr.disys.baedalin.KeyRecordingState.recordingFunction != null) {
+                        Log.d("KeyMapper", "Cancelled direct recording for: ${kr.disys.baedalin.KeyRecordingState.recordingFunction}")
+                        kr.disys.baedalin.KeyRecordingState.recordingFunction = null
                     }
                 }
             }
@@ -82,7 +83,7 @@ class KeyMapperAccessibilityService : AccessibilityService() {
             addAction("ACTION_CANCEL_DIRECT_RECORDING")
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(serviceReceiver, filter, Context.RECEIVER_EXPORTED)
+            registerReceiver(serviceReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
         } else {
             registerReceiver(serviceReceiver, filter)
         }
@@ -96,8 +97,15 @@ class KeyMapperAccessibilityService : AccessibilityService() {
             .registerOnSharedPreferenceChangeListener(prefsListener)
             
         serviceScope.launch {
-            FloatingWidgetService.isInterceptionActive.collect {
-                updateKeyFilterState()
+            launch {
+                FloatingWidgetService.isInterceptionActive.collect {
+                    updateKeyFilterState()
+                }
+            }
+            launch {
+                FloatingWidgetService.isMoveMode.collect {
+                    updateKeyFilterState()
+                }
             }
         }
     }
@@ -110,23 +118,24 @@ class KeyMapperAccessibilityService : AccessibilityService() {
         
         val info = serviceInfo ?: AccessibilityServiceInfo()
         
-        if (isMappingEnabled || isRecording) {
+        if (isMappingEnabled || isRecording || kr.disys.baedalin.KeyRecordingState.recordingFunction != null) {
             // 중요: 윈도우 변화 감지는 서비스가 활성화된 동안 항상 켜두어야 배달 앱 진입을 감지할 수 있음
             info.eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or AccessibilityEvent.TYPE_WINDOWS_CHANGED
             info.feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC
             info.notificationTimeout = 100
             
-            // 키 가로채기 플래그는 실제 위젯이 떠 있거나 레코딩 중일 때만 활성화
-            val shouldFilterKeys = isRecording || (isMappingEnabled && isInterceptionActive)
+            // 키 가로채기 플래그는 실제 위젯이 떠 있거나 레코딩 중, 또는 언락 모드일 때 활성화
+            val isDirectRecording = kr.disys.baedalin.KeyRecordingState.recordingFunction != null
+            val isMoveMode = FloatingWidgetService.isMoveMode.value
+            val shouldFilterKeys = isRecording || isDirectRecording || isMoveMode || (isMappingEnabled && isInterceptionActive)
             var targetFlags = AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS or
                             AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS
             
             if (shouldFilterKeys) {
                 targetFlags = targetFlags or AccessibilityServiceInfo.FLAG_REQUEST_FILTER_KEY_EVENTS
-                Log.d("KeyMapper", "Key Filter: ACTIVE (Window Detection + Key Filtering)")
+                Log.d("KeyMapper", "Key Filter: ACTIVE (Recording=$isRecording, Direct=$isDirectRecording, Move=$isMoveMode, Mapping=$isMappingEnabled, Active=$isInterceptionActive)")
             } else {
-                // 키 필터링만 끄고 윈도우 감지는 유지 (Bypass 상태)
-                Log.d("KeyMapper", "Key Filter: WINDOW_ONLY (Window Detection active, Keys bypassed)")
+                Log.d("KeyMapper", "Key Filter: WINDOW_ONLY")
             }
             
             info.flags = targetFlags
@@ -267,8 +276,13 @@ class KeyMapperAccessibilityService : AccessibilityService() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val action = intent?.action
-        if (action == "ACTION_UI_SNAPSHOT") {
-            captureUISnapshot()
+        when (action) {
+            "ACTION_UI_SNAPSHOT" -> captureUISnapshot()
+            "ACTION_START_DIRECT_RECORDING" -> {
+                kr.disys.baedalin.KeyRecordingState.recordingFunction = intent.getStringExtra("function_name")
+                Log.d("KeyMapper", "!!! STARTED DIRECT RECORDING via START_SERVICE for: ${kr.disys.baedalin.KeyRecordingState.recordingFunction} !!!")
+                updateKeyFilterState()
+            }
         }
         return super.onStartCommand(intent, flags, startId)
     }
@@ -292,25 +306,31 @@ class KeyMapperAccessibilityService : AccessibilityService() {
         }
 
         // 1. 레코딩 모드 처리 (최우선)
+        val directRecordingFunction = kr.disys.baedalin.KeyRecordingState.recordingFunction
         if (directRecordingFunction != null) {
             if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
                 val keyCode = event.keyCode
-                val funcName = directRecordingFunction!!
-                directRecordingFunction = null // 매핑 완료 후 해제
+                val funcName = directRecordingFunction
+                kr.disys.baedalin.KeyRecordingState.recordingFunction = null // 매핑 완료 후 해제
                 
+                // 기능명으로 라벨 찾기 (사전 정의된 기능 또는 커스텀 위젯)
                 val function = DeliveryFunction.entries.find { it.name == funcName }
-                if (function != null) {
-                    saveDirectMapping(function, keyCode)
-                    playSuccessSound()
-                    
-                    // FloatingWidgetService에 UI 갱신 알림
-                    val updateIntent = Intent(this, FloatingWidgetService::class.java).apply {
-                        action = FloatingWidgetService.ACTION_UPDATE_KEY
-                        putExtra("function_name", funcName)
-                        putExtra("keycode", keyCode)
-                    }
-                    startService(updateIntent)
+                val label = function?.label ?: "커스텀 $funcName"
+                
+                saveDirectMapping(funcName, keyCode)
+                playSuccessSound()
+                
+                val keyName = KeyEvent.keyCodeToString(keyCode).replace("KEYCODE_", "")
+                
+                // FloatingWidgetService에 UI 갱신 및 메시지 표시 알림
+                val updateIntent = Intent(this, FloatingWidgetService::class.java).apply {
+                    action = FloatingWidgetService.ACTION_UPDATE_KEY
+                    putExtra("function_name", funcName)
+                    putExtra("keycode", keyCode)
+                    putExtra("key_name", keyName)
+                    putExtra("label", label)
                 }
+                startService(updateIntent)
             }
             return true
         }
@@ -401,15 +421,15 @@ class KeyMapperAccessibilityService : AccessibilityService() {
         longPressRunnable = null
     }
 
-    private fun saveDirectMapping(function: DeliveryFunction, keyCode: Int) {
+    private fun saveDirectMapping(functionName: String, keyCode: Int) {
         val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
         val targetDescriptor = prefs.getString("selected_device_descriptor", "GLOBAL") ?: "GLOBAL"
         
         prefs.edit(commit = true) {
-            putInt("${targetDescriptor}_${function.name}_keycode", keyCode)
-            putString("${targetDescriptor}_${function.name}_clicktype", ClickType.SINGLE.name)
+            putInt("${targetDescriptor}_${functionName}_keycode", keyCode)
+            putString("${targetDescriptor}_${functionName}_clicktype", ClickType.SINGLE.name)
         }
-        Log.d("KeyMapper", "Direct mapping saved: ${function.name} -> $keyCode")
+        Log.d("KeyMapper", "Direct mapping saved: $functionName -> $keyCode")
     }
 
     private fun isKeyMapped(keyCode: Int, prefix: String): Boolean {

@@ -24,6 +24,9 @@ import android.view.ViewOutlineProvider
 import android.graphics.Outline
 import android.os.Handler
 import android.os.Looper
+import android.os.Vibrator
+import android.os.VibrationEffect
+import android.os.Build
 import androidx.core.content.edit
 import kr.disys.baedalin.MainActivity
 import kr.disys.baedalin.R
@@ -57,6 +60,105 @@ class FloatingWidgetService : Service() {
     private var btnBaeminView: View? = null
     private var btnCoupangView: View? = null
     private var btnFoldView: ImageView? = null
+    
+    // 중앙 알림창 관련
+    private var statusOverlayView: View? = null
+    private var statusTextView: TextView? = null
+    private val statusHandler = Handler(Looper.getMainLooper())
+    private val hideStatusRunnable = Runnable { hideStatusOverlay() }
+    private var lastMappingTime = 0L
+
+    private fun showStatusOverlay(message: String, durationMs: Long = 2000, isMappingMessage: Boolean = false) {
+        statusHandler.removeCallbacks(hideStatusRunnable)
+        
+        // 매핑 모드 중인데 일반 메시지(이동 완료 등)가 들어오면 무시 (배타적 관리)
+        if (!isMappingMessage && kr.disys.baedalin.KeyRecordingState.recordingFunction != null) {
+            return
+        }
+
+        if (statusOverlayView == null) {
+            val context = this
+            val container = FrameLayout(context).apply {
+                alpha = 0f
+                animate().alpha(1f).setDuration(300).start()
+            }
+            
+            val background = GradientDrawable().apply {
+                setColor(0xDD000000.toInt()) // Deep dark semi-transparent
+                cornerRadius = 60f
+                setStroke(4, Color.parseColor("#FFD700")) // Gold/Yellow border
+            }
+            container.background = background
+            container.setPadding(80, 50, 80, 50)
+            container.elevation = 20f
+
+            statusTextView = TextView(context).apply {
+                text = message
+                setTextColor(Color.WHITE)
+                textSize = 20f
+                gravity = Gravity.CENTER
+                setLineSpacing(0f, 1.2f)
+                setTypeface(null, android.graphics.Typeface.BOLD)
+                setShadowLayer(4f, 2f, 2f, Color.BLACK)
+            }
+            container.addView(statusTextView)
+
+            val params = WindowManager.LayoutParams(
+                WindowManager.LayoutParams.WRAP_CONTENT,
+                WindowManager.LayoutParams.WRAP_CONTENT,
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O)
+                    WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+                else
+                    WindowManager.LayoutParams.TYPE_PHONE,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
+                PixelFormat.TRANSLUCENT
+            ).apply {
+                gravity = Gravity.CENTER
+                y = -50 // Slightly above center
+            }
+
+            try {
+                windowManager.addView(container, params)
+                statusOverlayView = container
+            } catch (e: Exception) {
+                Log.e("KeyMapper", "Failed to add status overlay", e)
+            }
+        } else {
+            // 기존 애니메이션 취소 및 상태 복구
+            statusOverlayView?.animate()?.cancel()
+            statusOverlayView?.alpha = 1f
+            statusTextView?.text = message
+            
+            statusOverlayView?.animate()?.scaleX(1.05f)?.scaleY(1.05f)?.setDuration(100)?.withEndAction {
+                statusOverlayView?.animate()?.scaleX(1f)?.scaleY(1f)?.setDuration(100)?.start()
+            }?.start()
+        }
+
+        statusHandler.postDelayed(hideStatusRunnable, durationMs)
+    }
+
+    private fun hideStatusOverlay() {
+        statusOverlayView?.let { view ->
+            view.animate().alpha(0f).setDuration(300).withEndAction {
+                try {
+                    windowManager.removeView(view)
+                } catch (e: Exception) {}
+                if (statusOverlayView == view) {
+                    statusOverlayView = null
+                    statusTextView = null
+                }
+            }.start()
+        }
+    }
+
+    private fun triggerVibration(durationMs: Long = 100) {
+        val vibrator = getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            vibrator.vibrate(VibrationEffect.createOneShot(durationMs, VibrationEffect.DEFAULT_AMPLITUDE))
+        } else {
+            vibrator.vibrate(durationMs)
+        }
+    }
 
     private fun addNumberedWidget(prefs: android.content.SharedPreferences) {
         val preset = currentPreset
@@ -220,6 +322,16 @@ class FloatingWidgetService : Service() {
             ACTION_SET_TOOLBAR_VISIBILITY -> {
                 val visible = intent.getBooleanExtra("visible", true)
                 if (visible) showSettingsWidget() else hideWidget("SYSTEM_SETTINGS")
+            }
+            ACTION_UPDATE_KEY -> {
+                // 특정 위젯의 키 정보가 업데이트됨 -> UI 갱신 및 메시지 표시
+                val label = intent.getStringExtra("label") ?: "버튼"
+                val keyCode = intent.getIntExtra("keycode", -1)
+                val keyName = intent.getStringExtra("key_name") ?: ""
+                
+                // 매핑 완료 메시지는 가장 높은 우선순위로 표시
+                showStatusOverlay("[$label] 매핑 완료\n$keyName ($keyCode)", 3000, isMappingMessage = true)
+                loadPresetInternal(currentPreset)
             }
         }
         return START_NOT_STICKY
@@ -605,32 +717,20 @@ class FloatingWidgetService : Service() {
                 showCustomToast("${tooltip} 이동 모드 활성화")
                 dragHandle.visibility = View.VISIBLE
                 
-                // 이동 모드 시 진동 피드백 (선택 사항)
-                container.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
-            }
-
-            private var holdSeconds = 0
-            private val holdCountdownRunnable = object : Runnable {
-                override fun run() {
-                    holdSeconds++
-                    if (holdSeconds < 5) {
-                        showCustomToast("[$tooltip] 매핑 시작까지 ${5 - holdSeconds}초...")
-                        longPressHandler.postDelayed(this, 1000)
-                    }
-                }
+                // 이동 모드 시 진동 피드백
+                triggerVibration(50)
             }
 
             private val mappingModeRunnable = Runnable {
                 longClickHandled = true
                 moveModeActiveForThis = false
-                longPressHandler.removeCallbacks(holdCountdownRunnable)
 
                 // 언락 모드가 아닐 때만 핸들을 숨김
                 if (!_isMoveMode.value) {
                     dragHandle.visibility = View.GONE
                 }
                 
-                container.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+                triggerVibration(150)
                 
                 // 키 입력 대기 카운트다운 시작
                 val mappingHandler = Handler(Looper.getMainLooper())
@@ -638,26 +738,37 @@ class FloatingWidgetService : Service() {
 
                 val inputCountdownRunnable = object : Runnable {
                     override fun run() {
+                        // 만약 매핑이 중간에 완료되었다면 (recordingFunction이 null이 됨) 중단
+                        if (kr.disys.baedalin.KeyRecordingState.recordingFunction == null) return
+
                         if (secondsLeft > 0) {
-                            showCustomToast("[$tooltip] 매핑할 키를 입력하세요... (${secondsLeft}초)")
+                            showStatusOverlay("[$tooltip]\n매핑할 키를 입력하세요... (${secondsLeft}초)", 1500, isMappingMessage = true)
                             secondsLeft--
                             mappingHandler.postDelayed(this, 1000)
                         } else {
-                            showCustomToast("[$tooltip] 매핑 시간 초과 (취소됨)")
-                            val cancelIntent = Intent("ACTION_CANCEL_DIRECT_RECORDING").apply {
-                                setPackage(packageName)
-                            }
-                            sendBroadcast(cancelIntent)
+                            showStatusOverlay("[$tooltip] 매핑 시간 초과", 2000, isMappingMessage = true)
+                            kr.disys.baedalin.KeyRecordingState.recordingFunction = null
+                            // 서비스 설정 복구 트리거
+                            startService(Intent(this@FloatingWidgetService, KeyMapperAccessibilityService::class.java).apply {
+                                action = "ACTION_CANCEL_DIRECT_RECORDING"
+                            })
                         }
                     }
                 }
-                mappingHandler.post(inputCountdownRunnable)
-
-                val intent = Intent("ACTION_START_DIRECT_RECORDING").apply {
-                    setPackage(packageName)
+                
+                // 메모리 공유 방식으로 매핑 상태 설정 (가장 확실함)
+                kr.disys.baedalin.KeyRecordingState.recordingFunction = functionName
+                Log.d("KeyMapper", "!!! Hot Mapping Start: $functionName !!!")
+                
+                // 서비스 설정 업데이트 명령 전달
+                val recordingIntent = Intent(this@FloatingWidgetService, KeyMapperAccessibilityService::class.java).apply {
+                    action = "ACTION_START_DIRECT_RECORDING"
                     putExtra("function_name", functionName)
                 }
-                sendBroadcast(intent)
+                startService(recordingIntent)
+                
+                // UI 카운트다운 시작
+                mappingHandler.post(inputCountdownRunnable)
             }
 
             override fun onTouch(v: View, event: MotionEvent): Boolean {
@@ -677,8 +788,6 @@ class FloatingWidgetService : Service() {
                             longPressHandler.postDelayed(moveModeRunnable, 1500)
                         }
                         if (moveModeActiveForThis) {
-                            holdSeconds = 0
-                            longPressHandler.postDelayed(holdCountdownRunnable, 1000)
                             longPressHandler.postDelayed(mappingModeRunnable, 5000)
                         }
                         return true
@@ -687,13 +796,17 @@ class FloatingWidgetService : Service() {
                         val dx = Math.abs(event.rawX - dragInitialX)
                         val dy = Math.abs(event.rawY - dragInitialY)
                         
-                        if (dx > 15 || dy > 15) {
+                        // 매핑 모드가 시작되었다면 이동을 완전히 중단
+                        if (kr.disys.baedalin.KeyRecordingState.recordingFunction != null) {
+                            return true
+                        }
+
+                        if (dx > 25 || dy > 25) {
                             if (moveModeActiveForThis) {
                                 p.x = (event.rawX - dragOffsetX).toInt()
                                 p.y = (event.rawY - dragOffsetY).toInt()
                                 windowManager.updateViewLayout(container, p)
-                                longClickHandled = true // 이동 중에는 매핑 모드 진입 방지
-                                longPressHandler.removeCallbacks(mappingModeRunnable)
+                                longClickHandled = true 
                             } else {
                                 // 이동 모드 전인데 움직임이 크면 롱프레스 취소
                                 longPressHandler.removeCallbacks(moveModeRunnable)
@@ -705,24 +818,32 @@ class FloatingWidgetService : Service() {
                     MotionEvent.ACTION_UP -> {
                         longPressHandler.removeCallbacks(moveModeRunnable)
                         longPressHandler.removeCallbacks(mappingModeRunnable)
-                        longPressHandler.removeCallbacks(holdCountdownRunnable)
                         
                         if (moveModeActiveForThis && longClickHandled) {
-                            // 이동 완료: 좌표 저장
+                            // 이동 완료 시 좌표 저장
                             prefs.edit { putInt(prefKeyX, p.x); putInt(prefKeyY, p.y) }
-                            showCustomToast("위치 저장 완료")
+                            
+                            // 매핑 중이 아닐 때만 '위치 저장 완료' 표시
+                            if (kr.disys.baedalin.KeyRecordingState.recordingFunction == null) {
+                                showStatusOverlay("위치 저장 완료", 1000)
+                            }
+                            
                             // 언락 모드가 아닐 때만(즉, 1회성 이동일 때만) 핸들을 숨김
                             if (!_isMoveMode.value) {
                                 dragHandle.visibility = View.GONE
                             }
                         } else if (!longClickHandled) {
-                            // 롱터치가 아니면 모드 관계없이 일반 클릭(매뉴얼 클릭) 실행
-                            v.performClick()
-                            val intent = Intent("ACTION_MANUAL_CLICK").apply {
-                                setPackage(packageName)
-                                putExtra("function_name", functionName)
+                            // 롱터치가 발생하지 않은 일반 클릭의 경우
+                            if (!_isMoveMode.value) {
+                                v.performClick()
+                                val intent = Intent("ACTION_MANUAL_CLICK").apply {
+                                    setPackage(packageName)
+                                    putExtra("function_name", functionName)
+                                }
+                                sendBroadcast(intent)
+                            } else {
+                                // 언락 모드에서 짧게 누른 경우 아무 동작도 하지 않음
                             }
-                            sendBroadcast(intent)
                         }
                         return true
                     }
@@ -856,7 +977,7 @@ class FloatingWidgetService : Service() {
             foreground = border
 
             val textView = TextView(this.context).apply {
-                text = "⚠️ 언락 모드 활성화 ⚠️\n\n위젯 1회 탭 → 즉시 키 매핑\n잠금 버튼을 누르면 종료됩니다."
+                text = "⚠️ 언락 모드 활성화 ⚠️\n\n위젯 5초 롱터치 → 핫키 매핑\n잠금 버튼을 누르면 종료됩니다."
                 setTextColor(Color.YELLOW)
                 textSize = 16f
                 gravity = Gravity.CENTER
@@ -897,40 +1018,7 @@ class FloatingWidgetService : Service() {
     }
 
     private fun showCustomToast(message: String) {
-        val toastView = TextView(this).apply {
-            text = message
-            setTextColor(Color.WHITE)
-            setBackground(GradientDrawable().apply {
-                setColor(Color.parseColor("#CC000000")) // 80% 투명 검정
-                cornerRadius = 50f
-            })
-            setPadding(40, 20, 40, 20)
-            gravity = Gravity.CENTER
-            textSize = 14f
-        }
-
-        val params = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-            WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
-            PixelFormat.TRANSLUCENT
-        ).apply {
-            gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
-            y = 200 // 하단에서 200px 위
-        }
-
-        try {
-            windowManager.addView(toastView, params)
-            // 2초 후 제거
-            Handler(Looper.getMainLooper()).postDelayed({
-                try {
-                    windowManager.removeView(toastView)
-                } catch (e: Exception) {}
-            }, 2000)
-        } catch (e: Exception) {
-            Log.e("KeyMapper", "Failed to show custom toast", e)
-        }
+        // 모든 메시지를 중앙 알림창으로 표시 (시인성 확보)
+        showStatusOverlay(message, 2000)
     }
 }

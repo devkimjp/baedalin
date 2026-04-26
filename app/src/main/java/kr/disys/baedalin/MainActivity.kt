@@ -66,6 +66,7 @@ import androidx.compose.ui.res.painterResource
 
 object KeyRecordingState {
     var isRecording: Boolean = false
+    var recordingFunction: String? = null
 }
 
 class MainActivity : ComponentActivity() {
