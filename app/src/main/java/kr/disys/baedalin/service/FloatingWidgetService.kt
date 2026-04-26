@@ -609,17 +609,50 @@ class FloatingWidgetService : Service() {
                 container.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
             }
 
+            private var holdSeconds = 0
+            private val holdCountdownRunnable = object : Runnable {
+                override fun run() {
+                    holdSeconds++
+                    if (holdSeconds < 5) {
+                        showCustomToast("[$tooltip] 매핑 시작까지 ${5 - holdSeconds}초...")
+                        longPressHandler.postDelayed(this, 1000)
+                    }
+                }
+            }
+
             private val mappingModeRunnable = Runnable {
                 longClickHandled = true
                 moveModeActiveForThis = false
+                longPressHandler.removeCallbacks(holdCountdownRunnable)
+
                 // 언락 모드가 아닐 때만 핸들을 숨김
                 if (!_isMoveMode.value) {
                     dragHandle.visibility = View.GONE
                 }
                 
-                showCustomToast("매핑할 키를 입력하세요...")
                 container.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
                 
+                // 키 입력 대기 카운트다운 시작
+                val mappingHandler = Handler(Looper.getMainLooper())
+                var secondsLeft = 5
+
+                val inputCountdownRunnable = object : Runnable {
+                    override fun run() {
+                        if (secondsLeft > 0) {
+                            showCustomToast("[$tooltip] 매핑할 키를 입력하세요... (${secondsLeft}초)")
+                            secondsLeft--
+                            mappingHandler.postDelayed(this, 1000)
+                        } else {
+                            showCustomToast("[$tooltip] 매핑 시간 초과 (취소됨)")
+                            val cancelIntent = Intent("ACTION_CANCEL_DIRECT_RECORDING").apply {
+                                setPackage(packageName)
+                            }
+                            sendBroadcast(cancelIntent)
+                        }
+                    }
+                }
+                mappingHandler.post(inputCountdownRunnable)
+
                 val intent = Intent("ACTION_START_DIRECT_RECORDING").apply {
                     setPackage(packageName)
                     putExtra("function_name", functionName)
@@ -643,7 +676,11 @@ class FloatingWidgetService : Service() {
                         if (!moveModeActiveForThis) {
                             longPressHandler.postDelayed(moveModeRunnable, 1500)
                         }
-                        longPressHandler.postDelayed(mappingModeRunnable, 3000)
+                        if (moveModeActiveForThis) {
+                            holdSeconds = 0
+                            longPressHandler.postDelayed(holdCountdownRunnable, 1000)
+                            longPressHandler.postDelayed(mappingModeRunnable, 5000)
+                        }
                         return true
                     }
                     MotionEvent.ACTION_MOVE -> {
@@ -668,6 +705,7 @@ class FloatingWidgetService : Service() {
                     MotionEvent.ACTION_UP -> {
                         longPressHandler.removeCallbacks(moveModeRunnable)
                         longPressHandler.removeCallbacks(mappingModeRunnable)
+                        longPressHandler.removeCallbacks(holdCountdownRunnable)
                         
                         if (moveModeActiveForThis && longClickHandled) {
                             // 이동 완료: 좌표 저장
@@ -678,49 +716,13 @@ class FloatingWidgetService : Service() {
                                 dragHandle.visibility = View.GONE
                             }
                         } else if (!longClickHandled) {
-                            if (_isMoveMode.value) {
-                                // 언락 모드 중 싱글탭 → 즉시 키 매핑 시작 + 5초 카운트다운
-                                Log.d("KeyMapper", "Unlock mode single tap -> Starting key mapping for $functionName")
-                                longClickHandled = true
-                                // 언락 모드이므로 핸들을 숨기지 않음
-                                container.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
-
-                                val mappingHandler = Handler(Looper.getMainLooper())
-                                var secondsLeft = 5
-
-                                // 카운트다운 실행
-                                val countdownRunnable = object : Runnable {
-                                    override fun run() {
-                                        if (secondsLeft > 0) {
-                                            showCustomToast("[$tooltip] 매핑할 키를 입력하세요... (${secondsLeft}초)")
-                                            secondsLeft--
-                                            mappingHandler.postDelayed(this, 1000)
-                                        } else {
-                                            // 5초 경과 → 매핑 취소
-                                            showCustomToast("[$tooltip] 매핑 시간 초과 (취소됨)")
-                                            val cancelIntent = Intent("ACTION_CANCEL_DIRECT_RECORDING").apply {
-                                                setPackage(packageName)
-                                            }
-                                            sendBroadcast(cancelIntent)
-                                        }
-                                    }
-                                }
-                                mappingHandler.post(countdownRunnable)
-
-                                val startIntent = Intent("ACTION_START_DIRECT_RECORDING").apply {
-                                    setPackage(packageName)
-                                    putExtra("function_name", functionName)
-                                }
-                                sendBroadcast(startIntent)
-                            } else {
-                                // 잠금 모드 중 싱글탭 → 기존 클릭 이벤트 전달
-                                v.performClick()
-                                val intent = Intent("ACTION_MANUAL_CLICK").apply {
-                                    setPackage(packageName)
-                                    putExtra("function_name", functionName)
-                                }
-                                sendBroadcast(intent)
+                            // 롱터치가 아니면 모드 관계없이 일반 클릭(매뉴얼 클릭) 실행
+                            v.performClick()
+                            val intent = Intent("ACTION_MANUAL_CLICK").apply {
+                                setPackage(packageName)
+                                putExtra("function_name", functionName)
                             }
+                            sendBroadcast(intent)
                         }
                         return true
                     }
