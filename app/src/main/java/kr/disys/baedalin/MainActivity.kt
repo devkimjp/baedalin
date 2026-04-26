@@ -178,6 +178,7 @@ class MainActivity : ComponentActivity() {
                                 shakeTrigger = shakeDeviceSelector,
                                 onDeviceClick = { showDevicePicker = true },
                                 onStartService = {
+                                    if (recordingFunction != null) return@MainScreen
                                     val newStatus = !isMappingEnabled
                                     Log.d("KeyMapper", "onStartService clicked: changing mapping state to $newStatus")
                                     
@@ -957,7 +958,7 @@ fun MainScreen(
             // 서비스 시작/중지 버튼 (맨 하단 고정)
             Button(
                 onClick = onStartService,
-                enabled = hasAnyMapping || isServiceRunning, // 실행 중일 때는 중지를 위해 항상 활성화, 아니면 매핑이 있어야 활성화
+                enabled = (hasAnyMapping || isServiceRunning) && recordingFunction == null, // 레코딩 중에는 버튼 비활성화
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(64.dp),

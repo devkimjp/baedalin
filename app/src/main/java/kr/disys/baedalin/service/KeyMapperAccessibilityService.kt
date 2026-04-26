@@ -359,7 +359,7 @@ class KeyMapperAccessibilityService : AccessibilityService() {
                     val x = prefs.getInt("${activePreset}_${function.name}_x", -1).toFloat()
                     val y = prefs.getInt("${activePreset}_${function.name}_y", -1).toFloat()
                     if (x != -1f && y != -1f) {
-                        sendFlashIntent(function.name, x, y)
+                        performClickAt(x, y)
                     }
                     return true
                 }
@@ -367,7 +367,7 @@ class KeyMapperAccessibilityService : AccessibilityService() {
                     val x = prefs.getInt("${activePreset}_${function.name}_x", -1).toFloat()
                     val y = prefs.getInt("${activePreset}_${function.name}_y", -1).toFloat()
                     if (x != -1f && y != -1f) {
-                        sendFlashIntent(function.name, x, y)
+                        performClickAt(x, y)
                     }
                     return true
                 }
@@ -377,7 +377,7 @@ class KeyMapperAccessibilityService : AccessibilityService() {
                         val dynamicRect = resolveDynamicCoordinate(function)
                         if (dynamicRect != null) {
                             Log.d("KeyMapper", "Auto-detected coordinate for ${function.name}: ${dynamicRect.centerX()}, ${dynamicRect.centerY()}")
-                            sendFlashIntent(function.name, dynamicRect.centerX().toFloat(), dynamicRect.centerY().toFloat())
+                            performClickAt(dynamicRect.centerX().toFloat(), dynamicRect.centerY().toFloat())
                             return true
                         }
                         Log.d("KeyMapper", "Auto-detection failed for ${function.name}, falling back to preset")
@@ -387,7 +387,7 @@ class KeyMapperAccessibilityService : AccessibilityService() {
                     val y = prefs.getInt("${activePreset}_${function.name}_y", -1).toFloat()
                     if (x != -1f && y != -1f) {
                         Log.d("KeyMapper", "Executing action: ${function.name} at ($x, $y)")
-                        sendFlashIntent(function.name, x, y)
+                        performClickAt(x, y)
                         return true
                     }
                 }
@@ -501,7 +501,7 @@ class KeyMapperAccessibilityService : AccessibilityService() {
             val dynamicRect = resolveDynamicCoordinate(function)
             if (dynamicRect != null) {
                 Log.d("KeyMapper", "Manual click: Auto-detected coordinate for ${function.name}")
-                sendFlashIntent(function.name, dynamicRect.centerX().toFloat(), dynamicRect.centerY().toFloat())
+                performClickAt(dynamicRect.centerX().toFloat(), dynamicRect.centerY().toFloat())
                 return
             }
         }
@@ -510,23 +510,21 @@ class KeyMapperAccessibilityService : AccessibilityService() {
         val y = prefs.getInt("${activePreset}_${function.name}_y", -1).toFloat()
         if (x != -1f && y != -1f) {
             Log.d("KeyMapper", "Manual click: Executing action ${function.name} at ($x, $y)")
-            sendFlashIntent(function.name, x, y)
+            performClickAt(x, y)
         }
     }
 
-    private fun sendFlashIntent(functionName: String, x: Float, y: Float) {
-        val intent = Intent(this, FloatingWidgetService::class.java).apply {
-            action = ACTION_FLASH_WIDGET
-            putExtra("function_name", functionName)
-            putExtra("x", x)
-            putExtra("y", y)
-        }
-        startService(intent)
+    private fun performClickAt(x: Float, y: Float) {
+        val path = Path()
+        path.moveTo(x, y)
+        val gesture = GestureDescription.Builder()
+            .addStroke(GestureDescription.StrokeDescription(path, 0, 50))
+            .build()
+        dispatchGesture(gesture, null, null)
     }
 
     companion object {
         var currentPackageName: String = ""
             private set
-        const val ACTION_FLASH_WIDGET = "ACTION_FLASH_WIDGET"
     }
 }

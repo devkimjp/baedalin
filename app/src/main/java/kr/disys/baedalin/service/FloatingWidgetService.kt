@@ -228,14 +228,6 @@ class FloatingWidgetService : Service() {
                     putBoolean("is_mapping_enabled", true) 
                 }
             }
-            ACTION_FLASH_WIDGET -> {
-                val functionName = intent.getStringExtra("function_name")
-                val x = intent.getFloatExtra("x", -1f)
-                val y = intent.getFloatExtra("y", -1f)
-                if (functionName != null && x != -1f && y != -1f) {
-                    flashWidget(functionName, x.toInt(), y.toInt())
-                }
-            }
         }
         return START_NOT_STICKY
     }
@@ -623,9 +615,18 @@ class FloatingWidgetService : Service() {
                     MotionEvent.ACTION_DOWN -> {
                         val currentTime = System.currentTimeMillis()
                         
-                        // 더블 클릭 감지 (이동 모드 상관없이 작동 가능)
+                        if (!_isMoveMode.value) {
+                            // 일반(잠금) 모드에서는 수동 클릭 동작만 즉시 수행
+                            val intent = Intent("ACTION_MANUAL_CLICK").apply {
+                                setPackage(packageName)
+                                putExtra("function_name", functionName)
+                            }
+                            sendBroadcast(intent)
+                            return true
+                        }
+
+                        // 이동 모드(잠금 해제)인 경우에만 더블 클릭 시 레코딩 모드 진입 허용
                         if (currentTime - lastClickTime < 300) {
-                            // 더블 클릭 감지 -> MainActivity 실행 (레코딩 모드)
                             val intent = Intent(this@FloatingWidgetService, MainActivity::class.java).apply {
                                 action = ACTION_START_RECORDING
                                 putExtra("function_name", functionName)
@@ -635,17 +636,7 @@ class FloatingWidgetService : Service() {
                             return true
                         }
                         lastClickTime = currentTime
-
-                        if (!_isMoveMode.value) {
-                            // 일반 모드에서 단일 클릭 시 해당 기능 실행 (수동 터치 지원)
-                            val intent = Intent("ACTION_MANUAL_CLICK").apply {
-                                setPackage(packageName)
-                                putExtra("function_name", functionName)
-                            }
-                            sendBroadcast(intent)
-                            return true
-                        }
-
+                        
                         dragInitialX = event.rawX
                         dragInitialY = event.rawY
                         dragOffsetX = event.rawX - p.x
@@ -752,7 +743,6 @@ class FloatingWidgetService : Service() {
         const val ACTION_UPDATE_UI = "ACTION_UPDATE_UI"
         const val ACTION_UPDATE_TRANSPARENCY = "ACTION_UPDATE_TRANSPARENCY"
         const val ACTION_START_SERVICE_ONLY = "ACTION_START_SERVICE_ONLY"
-        const val ACTION_FLASH_WIDGET = "ACTION_FLASH_WIDGET"
     }
 
 
@@ -860,23 +850,4 @@ class FloatingWidgetService : Service() {
         Toast.makeText(this, "현재 화면 분석 중...", Toast.LENGTH_SHORT).show()
     }
 
-    private fun flashWidget(functionName: String, x: Int, y: Int) {
-        val presetList = when(currentPreset) {
-            "BAEMIN" -> Presets.BAEMIN
-            "COUPANG" -> Presets.COUPANG
-            "YOGIYO" -> Presets.YOGIYO
-            else -> Presets.BAEMIN
-        }
-        
-        val info = presetList.find { it.function.name == functionName } ?: return
-        val color = Presets.getColor(currentPreset)
-        
-        // 위젯 표시
-        showWidget(functionName, info.icon, info.tooltip, x, y, color)
-        
-        // 1초 후 제거
-        Handler(Looper.getMainLooper()).postDelayed({
-            hideWidget(functionName)
-        }, 1000)
-    }
 }
