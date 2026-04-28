@@ -48,8 +48,7 @@ class KeyMapperAccessibilityService : AccessibilityService() {
     private var longPressRunnable: Runnable? = null
     private var isLongPressed = false
     
-    private val serviceScope = CoroutineScope(Dispatchers.Main + Job())
-    
+    private lateinit var gestureManager: GestureManager
 
     private val serviceReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -77,6 +76,7 @@ class KeyMapperAccessibilityService : AccessibilityService() {
 
     override fun onCreate() {
         super.onCreate()
+        gestureManager = GestureManager(this)
         Log.d("KeyMapper", "Service onCreate - Process: ${android.os.Process.myPid()}")
         val filter = IntentFilter().apply {
             addAction("ACTION_START_DIRECT_RECORDING")
@@ -96,7 +96,7 @@ class KeyMapperAccessibilityService : AccessibilityService() {
         getSharedPreferences("mappings", Context.MODE_PRIVATE)
             .registerOnSharedPreferenceChangeListener(prefsListener)
             
-        serviceScope.launch {
+        CoroutineScope(Dispatchers.Main).launch {
             launch {
                 FloatingWidgetService.isInterceptionActive.collect {
                     updateKeyFilterState()
@@ -153,7 +153,6 @@ class KeyMapperAccessibilityService : AccessibilityService() {
 
     override fun onDestroy() {
         super.onDestroy()
-        serviceScope.cancel()
         getSharedPreferences("mappings", Context.MODE_PRIVATE)
             .unregisterOnSharedPreferenceChangeListener(prefsListener)
     }
@@ -204,65 +203,18 @@ class KeyMapperAccessibilityService : AccessibilityService() {
     }
 
     private fun captureUISnapshot() {
-        val root = rootInActiveWindow ?: return
-        try {
-            val logDateFormat = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault())
-            val timestamp = logDateFormat.format(Date())
-            val dir = getExternalFilesDir(null) ?: filesDir
-            val file = File(dir, "ui_snapshot_$timestamp.json")
-            
-            val json = JSONObject()
-            json.put("timestamp", System.currentTimeMillis())
-            json.put("packageName", root.packageName)
-            json.put("nodes", dumpNodeToJson(root))
-            
-            FileWriter(file).use { it.write(json.toString(2)) }
-            
+        val path = gestureManager.captureUISnapshot()
+        if (path != null) {
             playSuccessSound()
-            
             val intent = Intent(this, FloatingWidgetService::class.java).apply {
                 action = "ACTION_SNAPSHOT_COMPLETE"
                 putExtra("success", true)
-                putExtra("path", file.absolutePath)
+                putExtra("path", path)
             }
             startService(intent)
-            
-        } catch (e: Exception) {
-            Log.e("KeyMapper", "Snapshot failed", e)
-        } finally {
-            root.recycle()
         }
     }
 
-    private fun dumpNodeToJson(node: AccessibilityNodeInfo): JSONObject {
-        val json = JSONObject()
-        val rect = Rect()
-        node.getBoundsInScreen(rect)
-        
-        json.put("class", node.className?.toString()?.split(".")?.last() ?: "View")
-        json.put("text", node.text?.toString() ?: "")
-        json.put("desc", node.contentDescription?.toString() ?: "")
-        json.put("id", node.viewIdResourceName ?: "")
-        json.put("clickable", node.isClickable)
-        json.put("bounds", JSONObject().apply {
-            put("left", rect.left)
-            put("top", rect.top)
-            put("right", rect.right)
-            put("bottom", rect.bottom)
-        })
-
-        if (node.childCount > 0) {
-            val children = JSONArray()
-            for (i in 0 until node.childCount) {
-                node.getChild(i)?.let { child ->
-                    children.put(dumpNodeToJson(child))
-                    child.recycle()
-                }
-            }
-            json.put("children", children)
-        }
-        return json
-    }
 
     private fun playSuccessSound() {
         try {
@@ -469,40 +421,14 @@ class KeyMapperAccessibilityService : AccessibilityService() {
 
             when (function) {
                 DeliveryFunction.ZOOM_OUT -> {
-                    Log.d("KeyMapper", "PERFORMING ZOOM_OUT: Double-tap and Drag UP")
-                    val gestureBuilder = GestureDescription.Builder()
-
-                    // 1. 첫 번째 탭 (빠르게 떼기)
-                    val tapPath = Path()
-                    tapPath.moveTo(centerX, centerY)
-                    gestureBuilder.addStroke(GestureDescription.StrokeDescription(tapPath, 0, 50))
-
-                    // 2. 두 번째 탭 후 위로 드래그 (축소)
-                    val swipePath = Path()
-                    swipePath.moveTo(centerX, centerY)
-                    swipePath.lineTo(centerX, centerY - 200f) // 위로 이동
-                    gestureBuilder.addStroke(GestureDescription.StrokeDescription(swipePath, 100, 200))
-
-                    dispatchGesture(gestureBuilder.build(), null, null)
+                    Log.d("KeyMapper", "PERFORMING ZOOM_OUT")
+                    gestureManager.performZoom(centerX, centerY, false)
                     return true
                 }
 
                 DeliveryFunction.ZOOM_IN -> {
-                    Log.d("KeyMapper", "PERFORMING ZOOM_IN: Double-tap and Drag DOWN")
-                    val gestureBuilder = GestureDescription.Builder()
-
-                    // 1. 첫 번째 탭
-                    val tapPath = Path()
-                    tapPath.moveTo(centerX, centerY)
-                    gestureBuilder.addStroke(GestureDescription.StrokeDescription(tapPath, 0, 50))
-
-                    // 2. 두 번째 탭 후 아래로 드래그 (확대)
-                    val swipePath = Path()
-                    swipePath.moveTo(centerX, centerY)
-                    swipePath.lineTo(centerX, centerY + 200f) // 아래로 이동
-                    gestureBuilder.addStroke(GestureDescription.StrokeDescription(swipePath, 100, 200))
-
-                    dispatchGesture(gestureBuilder.build(), null, null)
+                    Log.d("KeyMapper", "PERFORMING ZOOM_IN")
+                    gestureManager.performZoom(centerX, centerY, true)
                     return true
                 }
                 else -> {
@@ -513,7 +439,7 @@ class KeyMapperAccessibilityService : AccessibilityService() {
                         val tapX = x + 50f
                         val tapY = y + 90f
                         Log.d("KeyMapper", "PERFORMING ACTION: ${function.name} at ($tapX, $tapY)")
-                        performTap(tapX, tapY)
+                        gestureManager.performTap(tapX, tapY)
                         return true
                     }
                 }
@@ -522,20 +448,4 @@ class KeyMapperAccessibilityService : AccessibilityService() {
         return false
     }
 
-    private fun performTap(x: Float, y: Float) {
-        val path = Path()
-        path.moveTo(x, y)
-        val gestureBuilder = GestureDescription.Builder()
-        gestureBuilder.addStroke(GestureDescription.StrokeDescription(path, 0, 50))
-        dispatchGesture(gestureBuilder.build(), null, null)
-    }
-
-    private fun performSwipe(startX: Float, startY: Float, endX: Float, endY: Float, duration: Long = 100) {
-        val path = Path()
-        path.moveTo(startX, startY)
-        path.lineTo(endX, endY)
-        val gestureBuilder = GestureDescription.Builder()
-        gestureBuilder.addStroke(GestureDescription.StrokeDescription(path, 0, duration))
-        dispatchGesture(gestureBuilder.build(), null, null)
-    }
 }

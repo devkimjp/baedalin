@@ -62,123 +62,15 @@ class FloatingWidgetService : Service() {
     private var btnCoupangView: View? = null
     private var btnFoldView: ImageView? = null
     
-    // 중앙 알림창 관련
-    private var statusOverlayView: View? = null
-    private var statusTextView: TextView? = null
-    private val statusHandler = Handler(Looper.getMainLooper())
-    private val hideStatusRunnable = Runnable { hideStatusOverlay() }
-    private var lastMappingTime = 0L
-    private var currentStatusPriority = 0 
-    private var statusGeneration = 0 
-    private var lastMessageContent: String? = null
-    private var lastMessageTimestamp = 0L
+    private lateinit var statusManager: StatusOverlayManager
+    private lateinit var toolbarManager: ToolbarManager
 
     private fun showStatusOverlay(message: String, durationMs: Long = 2000, priority: Int = 1) {
-        val now = System.currentTimeMillis()
-        val trimmedMsg = message.trim()
-        
-        // 동일 메시지 중복 호출 방지 (1.5초로 연장하여 더 강력하게 차단)
-        if (trimmedMsg == lastMessageContent?.trim() && now - lastMessageTimestamp < 1500) {
-            // 이미 표시 중이면 시간만 연장하고 리턴 (애니메이션 발생 안 함)
-            statusHandler.removeCallbacks(hideStatusRunnable)
-            statusHandler.postDelayed(hideStatusRunnable, durationMs)
-            return
-        }
-        
-        Log.d("KeyMapper", "[UI] showStatusOverlay: $trimmedMsg (priority=$priority)")
-        // 호출 경로 추적용 로그 (누가 호출하는지 확인)
-        Log.d("KeyMapper", "[UI] CallStack: ${Log.getStackTraceString(Throwable())}")
-        
-        lastMessageContent = trimmedMsg
-        lastMessageTimestamp = now
-        
-        statusHandler.removeCallbacks(hideStatusRunnable)
-        
-        // 우선순위 체크
-        if (priority < currentStatusPriority) {
-            return
-        }
-
-        currentStatusPriority = priority
-        statusGeneration++
-        val currentGen = statusGeneration
-
-        if (statusOverlayView == null) {
-            val context = this
-            val container = FrameLayout(context).apply {
-                alpha = 1f
-            }
-            
-            val background = GradientDrawable().apply {
-                setColor(0xEE000000.toInt()) // 투명도 약간 줄여서 더 묵직하게
-                cornerRadius = 60f
-                setStroke(4, Color.parseColor("#FFD700"))
-            }
-            container.background = background
-            container.setPadding(80, 50, 80, 50)
-            container.elevation = 20f
-
-            statusTextView = TextView(context).apply {
-                text = message
-                setTextColor(Color.WHITE)
-                textSize = 20f
-                gravity = Gravity.CENTER
-                setLineSpacing(0f, 1.2f)
-                setTypeface(null, android.graphics.Typeface.BOLD)
-                setShadowLayer(4f, 2f, 2f, Color.BLACK)
-            }
-            container.addView(statusTextView)
-
-            val params = WindowManager.LayoutParams(
-                WindowManager.LayoutParams.WRAP_CONTENT,
-                WindowManager.LayoutParams.WRAP_CONTENT,
-                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O)
-                    WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-                else
-                    WindowManager.LayoutParams.TYPE_PHONE,
-                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
-                PixelFormat.TRANSLUCENT
-            ).apply {
-                gravity = Gravity.CENTER
-                y = -50
-            }
-
-            try {
-                windowManager.addView(container, params)
-                statusOverlayView = container
-            } catch (e: Exception) {}
-        } else {
-            // 기존 뷰 재사용 (깜빡임 차단)
-            statusOverlayView?.animate()?.cancel()
-            statusOverlayView?.alpha = 1f
-            statusOverlayView?.scaleX = 1f
-            statusOverlayView?.scaleY = 1f
-            
-            if (statusTextView?.text != message) {
-                statusTextView?.text = message
-            }
-        }
-
-        statusHandler.postDelayed(hideStatusRunnable, durationMs)
+        statusManager.showStatusOverlay(message, durationMs, priority)
     }
 
     private fun hideStatusOverlay() {
-        val view = statusOverlayView ?: return
-        val hideGen = statusGeneration 
-        
-        Log.d("KeyMapper", "[UI] hideStatusOverlay start (gen=$hideGen)")
-        try {
-            // 애니메이션 없이 즉시 체크 및 제거
-            if (statusOverlayView == view && statusGeneration == hideGen) {
-                windowManager.removeView(view)
-                statusOverlayView = null
-                statusTextView = null
-                currentStatusPriority = 0
-                Log.d("KeyMapper", "[UI] Removed view immediately (gen=$hideGen)")
-            } else {
-                Log.d("KeyMapper", "[UI] Cancelled removal: Generation mismatch (current=$statusGeneration, hide=$hideGen)")
-            }
-        } catch (e: Exception) {}
+        statusManager.hideStatusOverlay()
     }
 
     private fun triggerVibration(durationMs: Long = 100) {
@@ -317,21 +209,24 @@ class FloatingWidgetService : Service() {
         super.onCreate()
         instance = this
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
+        statusManager = StatusOverlayManager(this)
         _isRunning.value = true
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        val action = intent?.action
-        Log.d("KeyMapper", "FloatingWidgetService.onStartCommand: action=$action")
+        handleAction(intent)
+        return START_NOT_STICKY
+    }
+
+    private fun handleAction(intent: Intent?) {
+        val action = intent?.action ?: return
+        Log.d("KeyMapper", "FloatingWidgetService.handleAction: action=$action")
         
         when (action) {
             ACTION_SHOW_WIDGET -> {
-                val newPreset = intent.getStringExtra("preset_name")
-                if (newPreset != null) {
-                    currentPreset = newPreset
-                }
+                intent.getStringExtra("preset_name")?.let { currentPreset = it }
                 showSettingsWidget()
-                loadStoredCustomWidgets() // 저장된 커스텀 위젯들도 복구
+                loadStoredCustomWidgets()
             }
             ACTION_HIDE_ALL -> hideAll()
             ACTION_HIDE_PRESETS -> {
@@ -339,31 +234,24 @@ class FloatingWidgetService : Service() {
                 setToolbarFolded(true)
             }
             ACTION_HIDE_WIDGET -> {
-                val name = intent.getStringExtra("function_name")
-                if (name != null) hideWidget(name)
+                intent.getStringExtra("function_name")?.let { hideWidget(it) }
             }
             ACTION_LOAD_PRESET -> {
                 val preset = intent.getStringExtra("preset_name") ?: "BAEMIN"
-                Log.d("KeyMapper", "!!! RECEIVED ACTION_LOAD_PRESET for $preset !!!")
                 loadPresetInternal(preset)
-                showSettingsWidget() // 프리셋 로드 시 툴바도 함께 표시
+                showSettingsWidget()
                 _isMappingEnabled.value = true
-                _isInterceptionActive.value = true // 매핑 인터셉트 활성화
+                _isInterceptionActive.value = true
                 getSharedPreferences("mappings", Context.MODE_PRIVATE).edit(commit = true) { putBoolean("is_mapping_enabled", true) }
-                Log.d("KeyMapper", "is_mapping_enabled successfully set to TRUE")
             }
             ACTION_UPDATE_TRANSPARENCY -> {
                 val alpha = intent.getFloatExtra("transparency", 1.0f)
-                overlayViews["SYSTEM_SETTINGS"]?.let { root ->
-                    val toolbar = (root as? FrameLayout)?.getChildAt(0)
-                    toolbar?.alpha = alpha
-                }
+                if (::toolbarManager.isInitialized) toolbarManager.updateAlpha(alpha)
             }
             ACTION_START_SERVICE_ONLY -> {
-                Log.d("KeyMapper", "Starting service: Toolbar only")
                 showSettingsWidget()
                 _isMappingEnabled.value = true
-                _isInterceptionActive.value = false // 초기에는 좌표 위젯 숨김
+                _isInterceptionActive.value = false
                 getSharedPreferences("mappings", Context.MODE_PRIVATE).edit(commit = true) { 
                     putBoolean("is_mapping_enabled", true) 
                 }
@@ -373,18 +261,13 @@ class FloatingWidgetService : Service() {
                 if (visible) showSettingsWidget() else hideWidget("SYSTEM_SETTINGS")
             }
             ACTION_UPDATE_KEY -> {
-                // 특정 위젯의 키 정보가 업데이트됨 -> UI 갱신 및 메시지 표시
                 val label = intent.getStringExtra("label") ?: "버튼"
                 val keyCode = intent.getIntExtra("keycode", -1)
                 val keyName = intent.getStringExtra("key_name") ?: ""
-                
-                lastMappingTime = System.currentTimeMillis()
-                // 매핑 완료 메시지는 가장 높은 우선순위(3)로 표시
                 showStatusOverlay("[$label] 매핑 완료\n$keyName ($keyCode)", 3000, priority = 3)
                 loadPresetInternal(currentPreset)
             }
         }
-        return START_NOT_STICKY
     }
 
     private fun loadPresetInternal(presetName: String) {
@@ -464,61 +347,18 @@ class FloatingWidgetService : Service() {
                              currentApp.contains("coupang") || 
                              currentApp == "kr.disys.baedalin"
 
-            btnMoveView?.let { v ->
-                val iv = v as ImageView
-                // 자물쇠 버튼은 항상 활성 상태로 표시
-                iv.alpha = 1.0f
-                iv.colorFilter = null
-                iv.setImageResource(if (_isMoveMode.value) R.drawable.ic_toolbar_unlock_v7 else R.drawable.ic_toolbar_lock_v7)
-
-                if (!isTargetApp) {
-                    // 배달 앱 이탈 시 툴바를 자동으로 접음
-                    if (!isToolbarFolded) {
-                        setToolbarFolded(true)
-                    }
-                } else {
-                    // 배달 앱 진입 시 이전 사용자 설정 상태로 복구
-                    if (isToolbarFolded != preferredFoldedState) {
-                        setToolbarFolded(preferredFoldedState)
-                    }
-                }
+            if (::toolbarManager.isInitialized) {
+                toolbarManager.updateMoveIcon(_isMoveMode.value)
             }
-        }
+            
+            if (!isTargetApp) {
+                if (!isToolbarFolded) setToolbarFolded(true)
+            } else {
+                if (isToolbarFolded != preferredFoldedState) setToolbarFolded(preferredFoldedState)
+            }
     }
 
     private fun showSettingsWidget() {
-        val functionName = "SYSTEM_SETTINGS"
-        if (overlayViews.containsKey(functionName)) return
-
-        val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
-
-        val params = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or 
-            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
-            WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
-            PixelFormat.TRANSLUCENT
-        ).apply {
-            gravity = Gravity.TOP or Gravity.START
-            windowAnimations = 0
-            x = prefs.getInt("${functionName}_x", 800)
-            y = prefs.getInt("${functionName}_y", 200)
-        }
-        settingsParams = params
-
-        val root = FrameLayout(this).apply {
-            setPadding(10, 10, 10, 10)
-        }
-
-        val toolbarContainer = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(8, 8, 8, 8)
-            val shape = GradientDrawable().apply {
-                shape = GradientDrawable.RECTANGLE
-                cornerRadius = 60f
                 setColor(Color.WHITE)
                 setStroke(1, 0xFFDDDDDD.toInt())
             }
@@ -530,135 +370,6 @@ class FloatingWidgetService : Service() {
             this.alpha = alpha
         }
 
-        var initialTouchX = 0f
-        var initialTouchY = 0f
-        var offsetX = 0f
-        var offsetY = 0f
-        var isMoved = false
-
-        val unifiedTouchListener = object : View.OnTouchListener {
-            override fun onTouch(v: View, event: MotionEvent): Boolean {
-                val p = root.layoutParams as WindowManager.LayoutParams
-                when (event.action) {
-                    MotionEvent.ACTION_DOWN -> {
-                        initialTouchX = event.rawX
-                        initialTouchY = event.rawY
-                        offsetX = event.rawX - p.x
-                        offsetY = event.rawY - p.y
-                        isMoved = false
-                        return true 
-                    }
-                    MotionEvent.ACTION_MOVE -> {
-                        val dx = event.rawX - initialTouchX
-                        val dy = event.rawY - initialTouchY
-                        if (Math.abs(dx) > 10 || Math.abs(dy) > 10) {
-                            p.x = (event.rawX - offsetX).toInt()
-                            p.y = (event.rawY - offsetY).toInt()
-                            windowManager.updateViewLayout(root, p)
-                            isMoved = true
-                        }
-                        return true
-                    }
-                    MotionEvent.ACTION_UP -> {
-                        if (isMoved) {
-                            settingsParams?.x = p.x
-                            settingsParams?.y = p.y
-                            prefs.edit { 
-                                putInt("${functionName}_x", p.x)
-                                putInt("${functionName}_y", p.y)
-                            }
-                        } else {
-                            v.performClick()
-                        }
-                        return true
-                    }
-                }
-                return false
-            }
-        }
-
-        root.setOnTouchListener(unifiedTouchListener)
-        toolbarContainer.setOnTouchListener(unifiedTouchListener)
-
-        val createToolbarIcon = { resId: Int, onClick: (View) -> Unit ->
-            ImageView(this).apply {
-                setImageResource(resId)
-                scaleType = ImageView.ScaleType.FIT_CENTER
-                val size = 100 
-                layoutParams = LinearLayout.LayoutParams(size, size).apply {
-                    setMargins(0, 0, 0, 0) // 간격을 좁히기 위해 마진 제거
-                }
-                setPadding(15, 15, 15, 15) // 패딩 추가
-                
-                setOnClickListener { v -> onClick(v) }
-                setOnTouchListener(unifiedTouchListener)
-            }
-        }
-
-        val btnAdd = createToolbarIcon(R.drawable.ic_toolbar_add) { _ -> addNumberedWidget(prefs) }
-        val btnMove = createToolbarIcon(R.drawable.ic_toolbar_lock_v7) { v -> 
-            toggleMoveMode() 
-        }
-        btnMoveView = btnMove
-        val btnHide = createToolbarIcon(R.drawable.ic_toolbar_hide) { v -> 
-            togglePresetsVisibility() 
-            (v as ImageView).setImageResource(if (isPresetsHidden) R.drawable.ic_toolbar_hide_off else R.drawable.ic_toolbar_hide)
-        }
-        val btnClose = createToolbarIcon(R.drawable.ic_toolbar_power) { _ -> 
-            Log.d("KeyMapper", "Toolbar Power Button clicked: Stopping service and updating Prefs")
-            getSharedPreferences("mappings", Context.MODE_PRIVATE).edit(commit = true) { 
-                putBoolean("is_mapping_enabled", false) 
-            }
-            hideAll() 
-        }
-        val btnSave = createToolbarIcon(R.drawable.ic_toolbar_save) { _ -> 
-            val intentAction = Intent(this@FloatingWidgetService, MainActivity::class.java).apply {
-                action = ACTION_UPDATE_UI
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
-            }
-            startActivity(intentAction)
-            Toast.makeText(this@FloatingWidgetService, "변경사항이 저장되었습니다.", Toast.LENGTH_SHORT).show()
-        }
-        val btnBaemin = createToolbarIcon(R.drawable.ic_toolbar_baemin) { _ -> 
-            val pkg = Presets.getPackageName("BAEMIN")
-            launchApp(pkg)
-            loadPresetInternal("BAEMIN")
-            setPresetsVisibility(false) 
-            Toast.makeText(this@FloatingWidgetService, "배민 실행 및 프리셋 활성화", Toast.LENGTH_SHORT).show()
-        }
-        val btnCoupang = createToolbarIcon(R.drawable.ic_toolbar_coupang) { _ -> 
-            val pkg = Presets.getPackageName("COUPANG")
-            launchApp(pkg)
-            loadPresetInternal("COUPANG")
-            setPresetsVisibility(false) 
-            Toast.makeText(this@FloatingWidgetService, "쿠팡 실행 및 프리셋 활성화", Toast.LENGTH_SHORT).show()
-        }
-        val btnFold = createToolbarIcon(R.drawable.ic_toolbar_fold) { v -> 
-            val newState = !isToolbarFolded
-            preferredFoldedState = newState // 사용자가 직접 변경한 상태를 기억
-            setToolbarFolded(newState)
-        }
-
-        this.btnAddView = btnAdd
-        this.btnMoveView = btnMove
-        this.btnHideView = btnHide
-        this.btnCloseView = btnClose
-        this.btnSaveView = btnSave
-        this.btnBaeminView = btnBaemin
-        this.btnCoupangView = btnCoupang
-        this.btnFoldView = btnFold as ImageView
-
-        // 요청하신 순서대로 아이콘 배치 (접기, 잠금, 배민, 쿠팡, 종료)
-        toolbarContainer.addView(btnFold)
-        toolbarContainer.addView(btnMove)
-        toolbarContainer.addView(btnBaemin)
-        toolbarContainer.addView(btnCoupang)
-        toolbarContainer.addView(btnClose)
-
-        root.addView(toolbarContainer)
-        windowManager.addView(root, params)
-        overlayViews[functionName] = root
-    }
 
     private fun showWidget(functionName: String, icon: String, tooltip: String, targetX: Int, targetY: Int, color: Int, keyInfo: String? = null) {
         hideWidget(functionName)
@@ -715,27 +426,12 @@ class FloatingWidgetService : Service() {
         }
         container.addView(tooltipView)
 
-        val circleView = TextView(this).apply {
-            text = icon
-            setTextColor(Color.WHITE)
-            textSize = 20f
-            gravity = Gravity.CENTER
-            val shape = GradientDrawable().apply {
-                shape = GradientDrawable.OVAL
-                setColor(color)
-                setStroke(2, Color.WHITE)
-            }
-            background = shape
-            layoutParams = LinearLayout.LayoutParams(ICON_SIZE, ICON_SIZE)
-        }
+        val circleView = OverlayFactory.createCircleIcon(this, icon, color, ICON_SIZE)
         container.addView(circleView)
 
-        // 이동 모드 시 나타날 드래그 핸들 추가
         val dragHandle = View(this).apply {
             id = R.id.drag_handle
-            layoutParams = LinearLayout.LayoutParams(ICON_SIZE / 2, 10).apply {
-                setMargins(0, 5, 0, 0)
-            }
+            layoutParams = LinearLayout.LayoutParams(ICON_SIZE / 2, 10).apply { setMargins(0, 5, 0, 0) }
             setBackgroundColor(Color.LTGRAY)
             visibility = if (_isMoveMode.value) View.VISIBLE else View.GONE
         }
@@ -753,163 +449,125 @@ class FloatingWidgetService : Service() {
             container.addView(keyView)
         }
 
-        container.setOnTouchListener(object : View.OnTouchListener {
-            private var dragInitialX = 0f
-            private var dragInitialY = 0f
-            private var dragOffsetX = 0f
-            private var dragOffsetY = 0f
-            private var longClickHandled = false
-            private var moveModeActiveForThis = false
-            private val longPressHandler = Handler(Looper.getMainLooper())
-
-            private val moveModeRunnable = Runnable {
-                moveModeActiveForThis = true
-                showCustomToast("${tooltip} 이동 모드 활성화")
-                dragHandle.visibility = View.VISIBLE
-                
-                // 이동 모드 시 진동 피드백
-                triggerVibration(50)
-            }
-
-            private val mappingModeRunnable = Runnable {
-                longClickHandled = true
-                moveModeActiveForThis = false
-
-                // 언락 모드가 아닐 때만 핸들을 숨김
-                if (!_isMoveMode.value) {
-                    dragHandle.visibility = View.GONE
+        container.setOnTouchListener(WidgetTouchHandler(
+            windowManager = windowManager,
+            onMove = { x, y ->
+                params.x = x
+                params.y = y
+                windowManager.updateViewLayout(container, params)
+            },
+            onSave = { x, y ->
+                prefs.edit { putInt(prefKeyX, x); putInt(prefKeyY, y) }
+                if (kr.disys.baedalin.KeyRecordingState.recordingFunction == null) {
+                    showStatusOverlay("위치 저장 완료", 1000, priority = 1)
                 }
-                
-                triggerVibration(150)
-                
-                // 키 입력 대기 카운트다운 시작
-                val mappingHandler = Handler(Looper.getMainLooper())
-                var secondsLeft = 5
-
-                val inputCountdownRunnable = object : Runnable {
-                    override fun run() {
-                        // 만약 매핑이 중간에 완료되었다면 (recordingFunction이 null이 됨) 중단
-                        if (kr.disys.baedalin.KeyRecordingState.recordingFunction == null) return
-
-                        if (secondsLeft > 0) {
-                            showStatusOverlay("[$tooltip]\n매핑할 키를 입력하세요... (${secondsLeft}초)", 1500, priority = 2)
-                            secondsLeft--
-                            mappingHandler.postDelayed(this, 1000)
-                        } else {
-                            lastMappingTime = System.currentTimeMillis()
-                            showStatusOverlay("[$tooltip] 매핑 시간 초과", 3000, priority = 3)
-                            kr.disys.baedalin.KeyRecordingState.recordingFunction = null
-                            // 서비스 설정 복구 트리거
-                            startService(Intent(this@FloatingWidgetService, KeyMapperAccessibilityService::class.java).apply {
-                                action = "ACTION_CANCEL_DIRECT_RECORDING"
-                            })
-                        }
-                    }
-                }
-                
-                // 메모리 공유 방식으로 매핑 상태 설정 (가장 확실함)
-                kr.disys.baedalin.KeyRecordingState.recordingFunction = functionName
-                Log.d("KeyMapper", "!!! Hot Mapping Start: $functionName !!!")
-                
-                // 서비스 설정 업데이트 명령 전달
-                val recordingIntent = Intent(this@FloatingWidgetService, KeyMapperAccessibilityService::class.java).apply {
-                    action = "ACTION_START_DIRECT_RECORDING"
+                if (!_isMoveMode.value) dragHandle.visibility = View.GONE
+            },
+            onClick = {
+                val intent = Intent("ACTION_MANUAL_CLICK").apply {
+                    setPackage(packageName)
                     putExtra("function_name", functionName)
                 }
-                startService(recordingIntent)
-                
-                // UI 카운트다운 시작
-                mappingHandler.post(inputCountdownRunnable)
-            }
-
-            override fun onTouch(v: View, event: MotionEvent): Boolean {
-                val p = container.layoutParams as WindowManager.LayoutParams
-                when (event.action) {
-                    MotionEvent.ACTION_DOWN -> {
-                        longClickHandled = false
-                        // 현재 전역 이동 모드 상태를 따름 (언락 모드면 즉시 이동 가능)
-                        moveModeActiveForThis = _isMoveMode.value
-                        
-                        dragInitialX = event.rawX
-                        dragInitialY = event.rawY
-                        dragOffsetX = event.rawX - p.x
-                        dragOffsetY = event.rawY - p.y
-                        
-                        if (!moveModeActiveForThis) {
-                            longPressHandler.postDelayed(moveModeRunnable, 1500)
-                        }
-                        if (moveModeActiveForThis) {
-                            longPressHandler.postDelayed(mappingModeRunnable, 2000)
-                        }
-                        return true
-                    }
-                    MotionEvent.ACTION_MOVE -> {
-                        val dx = Math.abs(event.rawX - dragInitialX)
-                        val dy = Math.abs(event.rawY - dragInitialY)
-                        
-                        // 매핑 모드가 시작되었다면 이동을 완전히 중단
-                        if (kr.disys.baedalin.KeyRecordingState.recordingFunction != null) {
-                            return true
-                        }
-
-                        if (dx > 25 || dy > 25) {
-                            if (moveModeActiveForThis) {
-                                p.x = (event.rawX - dragOffsetX).toInt()
-                                p.y = (event.rawY - dragOffsetY).toInt()
-                                windowManager.updateViewLayout(container, p)
-                                longClickHandled = true 
-                            } else {
-                                // 이동 모드 전인데 움직임이 크면 롱프레스 취소
-                                longPressHandler.removeCallbacks(moveModeRunnable)
-                                longPressHandler.removeCallbacks(mappingModeRunnable)
-                            }
-                        }
-                        return true
-                    }
-                    MotionEvent.ACTION_UP -> {
-                        longPressHandler.removeCallbacks(moveModeRunnable)
-                        longPressHandler.removeCallbacks(mappingModeRunnable)
-                        
-                        if (moveModeActiveForThis && longClickHandled) {
-                            // 이동 완료 시 좌표 저장
-                            prefs.edit { putInt(prefKeyX, p.x); putInt(prefKeyY, p.y) }
-                            
-                            // 매핑 중이 아닐 때만 '위치 저장 완료' 표시 (우선순위 1)
-                            // 단, 최근 1초 이내에 매핑 결과(성공/초과)가 표시되었다면 생략 (깜빡임 방지)
-                            if (kr.disys.baedalin.KeyRecordingState.recordingFunction == null &&
-                                System.currentTimeMillis() - lastMappingTime > 1000) {
-                                showStatusOverlay("위치 저장 완료", 1000, priority = 1)
-                            }
-                            
-                            // 언락 모드가 아닐 때만(즉, 1회성 이동일 때만) 핸들을 숨김
-                            if (!_isMoveMode.value) {
-                                dragHandle.visibility = View.GONE
-                            }
-                        } else if (!longClickHandled) {
-                            // 롱터치가 발생하지 않은 일반 클릭의 경우
-                            if (!_isMoveMode.value) {
-                                v.performClick()
-                                val intent = Intent("ACTION_MANUAL_CLICK").apply {
-                                    setPackage(packageName)
-                                    putExtra("function_name", functionName)
-                                }
-                                sendBroadcast(intent)
-                            } else {
-                                // 언락 모드에서 짧게 누른 경우 아무 동작도 하지 않음
-                            }
-                        }
-                        return true
-                    }
-                }
-                return false
-            }
-        })
+                sendBroadcast(intent)
+            },
+            onLongClick = {
+                showCustomToast("${tooltip} 이동 모드 활성화")
+                dragHandle.visibility = View.VISIBLE
+                triggerVibration(50)
+            },
+            onMappingMode = {
+                if (!_isMoveMode.value) dragHandle.visibility = View.GONE
+                triggerVibration(150)
+                startMappingCountdown(tooltip, functionName)
+            },
+            isMoveMode = { _isMoveMode.value },
+            isRecording = { kr.disys.baedalin.KeyRecordingState.recordingFunction != null }
+        ))
 
         windowManager.addView(container, params)
         overlayViews[functionName] = container
     }
 
+    private fun startMappingCountdown(tooltip: String, functionName: String) {
+        val mappingHandler = Handler(Looper.getMainLooper())
+        var secondsLeft = 5
+
+        val countdownRunnable = object : Runnable {
+            override fun run() {
+                if (kr.disys.baedalin.KeyRecordingState.recordingFunction == null && secondsLeft < 5) return
+
+                if (secondsLeft > 0) {
+                    showStatusOverlay("[$tooltip]\n매핑할 키를 입력하세요... (${secondsLeft}초)", 1500, priority = 2)
+                    secondsLeft--
+                    mappingHandler.postDelayed(this, 1000)
+                } else {
+                    showStatusOverlay("[$tooltip] 매핑 시간 초과", 3000, priority = 3)
+                    kr.disys.baedalin.KeyRecordingState.recordingFunction = null
+                    startService(Intent(this@FloatingWidgetService, KeyMapperAccessibilityService::class.java).apply {
+                        action = "ACTION_CANCEL_DIRECT_RECORDING"
+                    })
+                }
+            }
+        }
+
+        kr.disys.baedalin.KeyRecordingState.recordingFunction = functionName
+        startService(Intent(this, KeyMapperAccessibilityService::class.java).apply {
+            action = "ACTION_START_DIRECT_RECORDING"
+            putExtra("function_name", functionName)
+        })
+        mappingHandler.post(countdownRunnable)
+    }
+
+    private fun showSettingsWidget() {
+        val functionName = "SYSTEM_SETTINGS"
+        if (overlayViews.containsKey(functionName)) return
+
+        val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
+        val alpha = prefs.getFloat("toolbar_transparency", 1.0f)
+        val savedX = prefs.getInt("${functionName}_x", 800)
+        val savedY = prefs.getInt("${functionName}_y", 200)
+
+        if (!::toolbarManager.isInitialized) {
+            toolbarManager = ToolbarManager(this, windowManager, object : ToolbarManager.ToolbarCallbacks {
+                override fun onAddWidget() { addNumberedWidget(prefs) }
+                override fun onToggleMoveMode() { toggleMoveMode() }
+                override fun onTogglePresetsVisibility() { togglePresetsVisibility() }
+                override fun onPowerOff() {
+                    prefs.edit(commit = true) { putBoolean("is_mapping_enabled", false) }
+                    hideAll()
+                }
+                override fun onOpenMainActivity() {
+                    val intent = Intent(this@FloatingWidgetService, MainActivity::class.java).apply {
+                        action = ACTION_UPDATE_UI
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+                    }
+                    startActivity(intent)
+                }
+                override fun onLaunchApp(name: String) {
+                    val pkg = Presets.getPackageName(name)
+                    launchApp(pkg)
+                    loadPresetInternal(name)
+                    setPresetsVisibility(false)
+                }
+                override fun onFold(folded: Boolean) {
+                    preferredFoldedState = folded
+                    setToolbarFolded(folded)
+                }
+                override fun onSavePosition(x: Int, y: Int) {
+                    prefs.edit { putInt("${functionName}_x", x); putInt("${functionName}_y", y) }
+                }
+            })
+        }
+        toolbarManager.showToolbar(savedX, savedY, alpha, isToolbarFolded)
+        overlayViews[functionName] = View(this) // Placeholder
+    }
+
     private fun hideWidget(functionName: String) {
+        if (functionName == "SYSTEM_SETTINGS") {
+            if (::toolbarManager.isInitialized) toolbarManager.hide()
+            overlayViews.remove(functionName)
+            return
+        }
         overlayViews[functionName]?.let {
             windowManager.removeView(it)
             overlayViews.remove(functionName)
@@ -941,6 +599,7 @@ class FloatingWidgetService : Service() {
     override fun onDestroy() {
         instance = null
         hideScreenBorder()
+        statusManager.cleanup()
         overlayViews.values.forEach { view ->
             try {
                 windowManager.removeView(view)
@@ -981,10 +640,10 @@ class FloatingWidgetService : Service() {
         const val ACTION_HIDE_ALL = "ACTION_HIDE_ALL"
         const val ACTION_HIDE_PRESETS = "ACTION_HIDE_PRESETS"
         const val ACTION_LOAD_PRESET = "ACTION_LOAD_PRESET"
-        const val ACTION_UPDATE_KEY = "ACTION_UPDATE_KEY"
-        const val ACTION_START_RECORDING = "ACTION_START_RECORDING"
         const val ACTION_UPDATE_UI = "ACTION_UPDATE_UI"
         const val ACTION_UPDATE_TRANSPARENCY = "ACTION_UPDATE_TRANSPARENCY"
+        const val ACTION_UPDATE_KEY = "ACTION_UPDATE_KEY"
+
         const val ACTION_START_SERVICE_ONLY = "ACTION_START_SERVICE_ONLY"
         const val ACTION_SET_TOOLBAR_VISIBILITY = "ACTION_SET_TOOLBAR_VISIBILITY"
     }
