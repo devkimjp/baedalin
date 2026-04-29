@@ -62,14 +62,16 @@ class ToolbarManager(
         val container = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(8, 8, 8, 8)
+            setPadding(12, 12, 12, 12)
             background = GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE
-                cornerRadius = 60f
-                setColor(Color.WHITE)
-                setStroke(1, 0xFFDDDDDD.toInt())
+                cornerRadius = 75f
+                // 프리미엄 다크 슬레이트 컬러 (반투명)
+                setColor(Color.parseColor("#F21E293B")) 
+                // 세련된 인디고 블루 테두리
+                setStroke(4, Color.parseColor("#6366F1"))
             }
-            elevation = 8f
+            elevation = 20f
             this.alpha = alpha
         }
         this.root = container
@@ -137,6 +139,7 @@ class ToolbarManager(
         container.setOnTouchListener(touchListener)
         
         btnFoldView = OverlayFactory.createToolbarIcon(context, R.drawable.ic_toolbar_fold, 100).apply {
+            setColorFilter(Color.WHITE) // 화이트 틴트 적용
             setOnTouchListener(touchListener)
             setOnClickListener { 
                 isFolded = !isFolded
@@ -145,21 +148,25 @@ class ToolbarManager(
         }
         
         btnMoveView = OverlayFactory.createToolbarIcon(context, R.drawable.ic_toolbar_lock_v7, 100).apply {
+            setColorFilter(Color.parseColor("#EF4444")) // 잠금(기본) 시 붉은색
             setOnTouchListener(touchListener)
             setOnClickListener { callbacks.onToggleMoveMode() }
         }
         
         val btnBaemin = OverlayFactory.createToolbarIcon(context, R.drawable.ic_toolbar_baemin, 100).apply {
+            // 앱 고유 컬러 유지를 위해 틴트 미적용
             setOnTouchListener(touchListener)
             setOnClickListener { callbacks.onLaunchApp("BAEMIN") }
         }
         
         val btnCoupang = OverlayFactory.createToolbarIcon(context, R.drawable.ic_toolbar_coupang, 100).apply {
+            // 앱 고유 컬러 유지를 위해 틴트 미적용
             setOnTouchListener(touchListener)
             setOnClickListener { callbacks.onLaunchApp("COUPANG") }
         }
         
         val btnClose = OverlayFactory.createToolbarIcon(context, R.drawable.ic_toolbar_power, 100).apply {
+            setColorFilter(Color.parseColor("#EF4444")) // 전원 버튼 붉은색
             setOnTouchListener(touchListener)
             setOnClickListener { callbacks.onPowerOff() }
         }
@@ -201,7 +208,15 @@ class ToolbarManager(
     }
 
     fun updateMoveIcon(isMoveMode: Boolean) {
-        btnMoveView?.setImageResource(if (isMoveMode) R.drawable.ic_toolbar_unlock_v7 else R.drawable.ic_toolbar_lock_v7)
+        btnMoveView?.apply {
+            if (isMoveMode) {
+                setImageResource(R.drawable.ic_toolbar_unlock_v7)
+                setColorFilter(Color.parseColor("#84CC16")) // 안전한 연두색 (Lime Green)
+            } else {
+                setImageResource(R.drawable.ic_toolbar_lock_v7)
+                setColorFilter(Color.parseColor("#EF4444")) // 잠김 시 붉은색
+            }
+        }
     }
 
     fun hide() {
