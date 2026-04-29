@@ -31,37 +31,35 @@ class ToolbarManager(
         fun onSavePosition(x: Int, y: Int)
     }
 
-    var root: FrameLayout? = null
+    var root: View? = null
         private set
-    private var toolbarContainer: LinearLayout? = null
     private var isFolded = false
     
     private var btnFoldView: ImageView? = null
-    private var btnHideView: ImageView? = null
     private var btnMoveView: ImageView? = null
+    private var currentParams: WindowManager.LayoutParams? = null
 
     fun showToolbar(initialX: Int, initialY: Int, alpha: Float, folded: Boolean) {
-        if (root != null) {
-            Log.d("KeyMapper", "ToolbarManager: Toolbar already showing, ignoring showToolbar request")
-            return
-        }
+        if (root != null) return
 
-        Log.d("KeyMapper", "ToolbarManager: showing toolbar at ($initialX, $initialY), folded=$folded")
         isFolded = folded
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or 
+            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+            WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
             PixelFormat.TRANSLUCENT
         ).apply {
-            gravity = Gravity.TOP or Gravity.START
+            gravity = Gravity.TOP or Gravity.LEFT
             x = initialX
             y = initialY
+            windowAnimations = 0
         }
+        currentParams = params
 
-        root = FrameLayout(context)
-        toolbarContainer = LinearLayout(context).apply {
+        val container = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
             setPadding(8, 8, 8, 8)
@@ -74,18 +72,17 @@ class ToolbarManager(
             elevation = 8f
             this.alpha = alpha
         }
+        this.root = container
 
-        setupTouchListener(params)
-        setupIcons(params)
+        val touchListener = setupTouchListener(params)
+        setupIcons(touchListener)
 
-        root?.addView(toolbarContainer)
-        windowManager.addView(root, params)
-        
+        windowManager.addView(container, params)
         setFolded(folded)
     }
 
     private fun setupTouchListener(params: WindowManager.LayoutParams): View.OnTouchListener {
-        val touchListener = object : View.OnTouchListener {
+        return object : View.OnTouchListener {
             private var initialX = 0f
             private var initialY = 0f
             private var offsetX = 0f
@@ -93,6 +90,7 @@ class ToolbarManager(
             private var moved = false
 
             override fun onTouch(v: View, event: MotionEvent): Boolean {
+                val currentRoot = root ?: return false
                 when (event.action) {
                     MotionEvent.ACTION_DOWN -> {
                         initialX = event.rawX
@@ -109,7 +107,7 @@ class ToolbarManager(
                         if (Math.abs(dx) > 10 || Math.abs(dy) > 10) {
                             params.x = (event.rawX - offsetX).toInt()
                             params.y = (event.rawY - offsetY).toInt()
-                            windowManager.updateViewLayout(root, params)
+                            windowManager.updateViewLayout(currentRoot, params)
                             moved = true
                             v.isPressed = false
                         }
@@ -132,21 +130,17 @@ class ToolbarManager(
                 return false
             }
         }
-        root?.setOnTouchListener(touchListener)
-        toolbarContainer?.setOnTouchListener(touchListener)
-        return touchListener
     }
 
-    private fun setupIcons(params: WindowManager.LayoutParams) {
-        val container = toolbarContainer ?: return
-        val touchListener = setupTouchListener(params)
+    private fun setupIcons(touchListener: View.OnTouchListener) {
+        val container = root as? LinearLayout ?: return
+        container.setOnTouchListener(touchListener)
         
         btnFoldView = OverlayFactory.createToolbarIcon(context, R.drawable.ic_toolbar_fold, 100).apply {
             setOnTouchListener(touchListener)
             setOnClickListener { 
                 isFolded = !isFolded
                 callbacks.onFold(isFolded)
-                setFolded(isFolded)
             }
         }
         
@@ -178,16 +172,32 @@ class ToolbarManager(
     }
 
     fun setFolded(folded: Boolean) {
+        val currentRoot = root as? LinearLayout ?: return
         isFolded = folded
-        val container = toolbarContainer ?: return
-        for (i in 1 until container.childCount) {
-            container.getChildAt(i).visibility = if (folded) View.GONE else View.VISIBLE
+        val params = currentParams ?: return
+        
+        // 1. 가시성 변경
+        for (i in 1 until currentRoot.childCount) {
+            currentRoot.getChildAt(i).visibility = if (folded) View.GONE else View.VISIBLE
         }
         btnFoldView?.setImageResource(if (folded) R.drawable.ic_toolbar_unfold else R.drawable.ic_toolbar_fold)
+        
+        // 2. 윈도우 재등록 (위치 캐시 파기)
+        // 뷰를 제거했다가 즉시 다시 추가함으로써 이전 위치 정보가 남지 않도록 합니다.
+        try {
+            if (currentRoot.parent != null) {
+                windowManager.removeViewImmediate(currentRoot)
+            }
+            windowManager.addView(currentRoot, params)
+        } catch (e: Exception) {
+            Log.e("KeyMapper", "Failed to refresh window in setFolded", e)
+            // 실패 시 최후의 수단으로 일반 업데이트 시도
+            try { windowManager.updateViewLayout(currentRoot, params) } catch (e2: Exception) {}
+        }
     }
 
     fun updateAlpha(alpha: Float) {
-        toolbarContainer?.alpha = alpha
+        root?.alpha = alpha
     }
 
     fun updateMoveIcon(isMoveMode: Boolean) {
