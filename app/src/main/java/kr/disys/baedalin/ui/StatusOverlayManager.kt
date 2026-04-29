@@ -94,7 +94,7 @@ class StatusOverlayManager(private val context: Context) {
         statusHandler.postDelayed(hideStatusRunnable, durationMs)
     }
 
-    private fun hideStatusOverlay() {
+    fun hideStatusOverlay() {
         val view = statusOverlayView ?: return
         try {
             windowManager.removeView(view)

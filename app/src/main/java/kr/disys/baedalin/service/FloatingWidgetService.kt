@@ -34,6 +34,12 @@ import kr.disys.baedalin.R
 import kr.disys.baedalin.model.Presets
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kr.disys.baedalin.ui.StatusOverlayManager
+import kr.disys.baedalin.ui.ToolbarManager
+import kr.disys.baedalin.ui.WidgetTouchHandler
+import kr.disys.baedalin.util.OverlayFactory
+import kr.disys.baedalin.KeyRecordingState
+import kr.disys.baedalin.model.DeliveryFunction
 
 class FloatingWidgetService : Service() {
 
@@ -51,16 +57,6 @@ class FloatingWidgetService : Service() {
     private var preferredFoldedState = false
     private var isPresetsHidden = false
     private var screenBorderView: View? = null
-
-    // 툴바 버튼 참조 저장용
-    private var btnAddView: View? = null
-    private var btnMoveView: View? = null
-    private var btnHideView: View? = null
-    private var btnCloseView: View? = null
-    private var btnSaveView: View? = null
-    private var btnBaeminView: View? = null
-    private var btnCoupangView: View? = null
-    private var btnFoldView: ImageView? = null
     
     private lateinit var statusManager: StatusOverlayManager
     private lateinit var toolbarManager: ToolbarManager
@@ -182,25 +178,15 @@ class FloatingWidgetService : Service() {
         // 프리셋이 숨겨지면 키 매핑 간섭도 중지
         _isInterceptionActive.value = !isPresetsHidden
         
-        // 툴바의 눈 아이콘 상태 동기화
-        (btnHideView as? ImageView)?.let { 
-            it.setImageResource(if (isPresetsHidden) R.drawable.ic_toolbar_hide_off else R.drawable.ic_toolbar_hide)
-        }
+        // 툴바의 눈 아이콘 상태 동기화는 이제 ToolbarManager에서 담당하거나 생략 가능
+        // (현재 ToolbarManager에는 눈 아이콘이 명시적으로 포함되어 있지 않음)
     }
 
     private fun setToolbarFolded(folded: Boolean) {
         isToolbarFolded = folded
-        val visibility = if (isToolbarFolded) View.GONE else View.VISIBLE
-        btnAddView?.visibility = visibility
-        btnMoveView?.visibility = visibility
-        btnHideView?.visibility = visibility
-        btnCloseView?.visibility = visibility
-        btnSaveView?.visibility = visibility
-        btnBaeminView?.visibility = visibility
-        btnCoupangView?.visibility = visibility
-        
-        val iconRes = if (isToolbarFolded) R.drawable.ic_toolbar_unfold else R.drawable.ic_toolbar_fold
-        btnFoldView?.setImageResource(iconRes)
+        if (::toolbarManager.isInitialized) {
+            toolbarManager.setFolded(folded)
+        }
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -249,12 +235,14 @@ class FloatingWidgetService : Service() {
                 if (::toolbarManager.isInitialized) toolbarManager.updateAlpha(alpha)
             }
             ACTION_START_SERVICE_ONLY -> {
+                Log.d("KeyMapper", "ACTION_START_SERVICE_ONLY received")
+                getSharedPreferences("mappings", Context.MODE_PRIVATE).edit(commit = true) { 
+                    putBoolean("is_mapping_enabled", true)
+                    putBoolean("toolbar_visible", true) // 서비스 시작 시 툴바를 강제로 보이게 함
+                }
                 showSettingsWidget()
                 _isMappingEnabled.value = true
                 _isInterceptionActive.value = false
-                getSharedPreferences("mappings", Context.MODE_PRIVATE).edit(commit = true) { 
-                    putBoolean("is_mapping_enabled", true) 
-                }
             }
             ACTION_SET_TOOLBAR_VISIBILITY -> {
                 val visible = intent.getBooleanExtra("visible", true)
@@ -337,7 +325,6 @@ class FloatingWidgetService : Service() {
         updateToolbarState() // 상태 변경 후 아이콘 갱신
     }
 
-    // 툴바 아이콘의 활성/비활성 상태(색상, 투명도)를 실시간 업데이트
     fun updateToolbarState() {
         Handler(Looper.getMainLooper()).post {
             val currentApp = KeyMapperAccessibilityService.currentPackageName
@@ -347,28 +334,25 @@ class FloatingWidgetService : Service() {
                              currentApp.contains("coupang") || 
                              currentApp == "kr.disys.baedalin"
 
+            Log.d("KeyMapper", "updateToolbarState: app=$currentApp, isTarget=$isTargetApp, folded=$isToolbarFolded")
+
             if (::toolbarManager.isInitialized) {
                 toolbarManager.updateMoveIcon(_isMoveMode.value)
             }
             
-            if (!isTargetApp) {
-                if (!isToolbarFolded) setToolbarFolded(true)
-            } else {
-                if (isToolbarFolded != preferredFoldedState) setToolbarFolded(preferredFoldedState)
+            if (!isTargetApp && currentApp.isNotEmpty()) { // 앱 이름이 있을 때만 자동 접힘
+                if (!isToolbarFolded) {
+                    Log.d("KeyMapper", "Auto-folding toolbar for non-target app: $currentApp")
+                    setToolbarFolded(true)
+                }
+            } else if (isTargetApp) {
+                if (isToolbarFolded != preferredFoldedState) {
+                    Log.d("KeyMapper", "Restoring toolbar state to folded=$preferredFoldedState for $currentApp")
+                    setToolbarFolded(preferredFoldedState)
+                }
             }
-    }
-
-    private fun showSettingsWidget() {
-                setColor(Color.WHITE)
-                setStroke(1, 0xFFDDDDDD.toInt())
-            }
-            background = shape
-            elevation = 8f
-            
-            // 저장된 투명도 적용
-            val alpha = prefs.getFloat("toolbar_transparency", 1.0f)
-            this.alpha = alpha
         }
+    }
 
 
     private fun showWidget(functionName: String, icon: String, tooltip: String, targetX: Int, targetY: Int, color: Int, keyInfo: String? = null) {
@@ -559,7 +543,10 @@ class FloatingWidgetService : Service() {
             })
         }
         toolbarManager.showToolbar(savedX, savedY, alpha, isToolbarFolded)
-        overlayViews[functionName] = View(this) // Placeholder
+        toolbarManager.root?.let {
+            overlayViews[functionName] = it
+            Log.d("KeyMapper", "showSettingsWidget: Toolbar added to overlayViews")
+        } ?: Log.e("KeyMapper", "showSettingsWidget: Failed to get toolbar root view")
     }
 
     private fun hideWidget(functionName: String) {
@@ -643,6 +630,7 @@ class FloatingWidgetService : Service() {
         const val ACTION_UPDATE_UI = "ACTION_UPDATE_UI"
         const val ACTION_UPDATE_TRANSPARENCY = "ACTION_UPDATE_TRANSPARENCY"
         const val ACTION_UPDATE_KEY = "ACTION_UPDATE_KEY"
+        const val ACTION_START_RECORDING = "ACTION_START_RECORDING"
 
         const val ACTION_START_SERVICE_ONLY = "ACTION_START_SERVICE_ONLY"
         const val ACTION_SET_TOOLBAR_VISIBILITY = "ACTION_SET_TOOLBAR_VISIBILITY"

@@ -31,16 +31,22 @@ class ToolbarManager(
         fun onSavePosition(x: Int, y: Int)
     }
 
-    private var root: FrameLayout? = null
+    var root: FrameLayout? = null
+        private set
     private var toolbarContainer: LinearLayout? = null
     private var isFolded = false
     
     private var btnFoldView: ImageView? = null
     private var btnHideView: ImageView? = null
+    private var btnMoveView: ImageView? = null
 
     fun showToolbar(initialX: Int, initialY: Int, alpha: Float, folded: Boolean) {
-        if (root != null) return
+        if (root != null) {
+            Log.d("KeyMapper", "ToolbarManager: Toolbar already showing, ignoring showToolbar request")
+            return
+        }
 
+        Log.d("KeyMapper", "ToolbarManager: showing toolbar at ($initialX, $initialY), folded=$folded")
         isFolded = folded
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
@@ -70,7 +76,7 @@ class ToolbarManager(
         }
 
         setupTouchListener(params)
-        setupIcons()
+        setupIcons(params)
 
         root?.addView(toolbarContainer)
         windowManager.addView(root, params)
@@ -78,7 +84,7 @@ class ToolbarManager(
         setFolded(folded)
     }
 
-    private fun setupTouchListener(params: WindowManager.LayoutParams) {
+    private fun setupTouchListener(params: WindowManager.LayoutParams): View.OnTouchListener {
         val touchListener = object : View.OnTouchListener {
             private var initialX = 0f
             private var initialY = 0f
@@ -94,6 +100,7 @@ class ToolbarManager(
                         offsetX = event.rawX - params.x
                         offsetY = event.rawY - params.y
                         moved = false
+                        v.isPressed = true
                         return true
                     }
                     MotionEvent.ACTION_MOVE -> {
@@ -104,15 +111,21 @@ class ToolbarManager(
                             params.y = (event.rawY - offsetY).toInt()
                             windowManager.updateViewLayout(root, params)
                             moved = true
+                            v.isPressed = false
                         }
                         return true
                     }
                     MotionEvent.ACTION_UP -> {
+                        v.isPressed = false
                         if (moved) {
                             callbacks.onSavePosition(params.x, params.y)
                         } else {
                             v.performClick()
                         }
+                        return true
+                    }
+                    MotionEvent.ACTION_CANCEL -> {
+                        v.isPressed = false
                         return true
                     }
                 }
@@ -121,12 +134,15 @@ class ToolbarManager(
         }
         root?.setOnTouchListener(touchListener)
         toolbarContainer?.setOnTouchListener(touchListener)
+        return touchListener
     }
 
-    private fun setupIcons() {
+    private fun setupIcons(params: WindowManager.LayoutParams) {
         val container = toolbarContainer ?: return
+        val touchListener = setupTouchListener(params)
         
         btnFoldView = OverlayFactory.createToolbarIcon(context, R.drawable.ic_toolbar_fold, 100).apply {
+            setOnTouchListener(touchListener)
             setOnClickListener { 
                 isFolded = !isFolded
                 callbacks.onFold(isFolded)
@@ -134,24 +150,28 @@ class ToolbarManager(
             }
         }
         
-        val btnMove = OverlayFactory.createToolbarIcon(context, R.drawable.ic_toolbar_lock_v7, 100).apply {
+        btnMoveView = OverlayFactory.createToolbarIcon(context, R.drawable.ic_toolbar_lock_v7, 100).apply {
+            setOnTouchListener(touchListener)
             setOnClickListener { callbacks.onToggleMoveMode() }
         }
         
         val btnBaemin = OverlayFactory.createToolbarIcon(context, R.drawable.ic_toolbar_baemin, 100).apply {
+            setOnTouchListener(touchListener)
             setOnClickListener { callbacks.onLaunchApp("BAEMIN") }
         }
         
         val btnCoupang = OverlayFactory.createToolbarIcon(context, R.drawable.ic_toolbar_coupang, 100).apply {
+            setOnTouchListener(touchListener)
             setOnClickListener { callbacks.onLaunchApp("COUPANG") }
         }
         
         val btnClose = OverlayFactory.createToolbarIcon(context, R.drawable.ic_toolbar_power, 100).apply {
+            setOnTouchListener(touchListener)
             setOnClickListener { callbacks.onPowerOff() }
         }
 
         container.addView(btnFoldView)
-        container.addView(btnMove)
+        container.addView(btnMoveView)
         container.addView(btnBaemin)
         container.addView(btnCoupang)
         container.addView(btnClose)
@@ -163,11 +183,15 @@ class ToolbarManager(
         for (i in 1 until container.childCount) {
             container.getChildAt(i).visibility = if (folded) View.GONE else View.VISIBLE
         }
-        btnFoldView?.setImageResource(if (folded) R.drawable.ic_toolbar_fold_off else R.drawable.ic_toolbar_fold)
+        btnFoldView?.setImageResource(if (folded) R.drawable.ic_toolbar_unfold else R.drawable.ic_toolbar_fold)
     }
 
     fun updateAlpha(alpha: Float) {
         toolbarContainer?.alpha = alpha
+    }
+
+    fun updateMoveIcon(isMoveMode: Boolean) {
+        btnMoveView?.setImageResource(if (isMoveMode) R.drawable.ic_toolbar_unlock_v7 else R.drawable.ic_toolbar_lock_v7)
     }
 
     fun hide() {
