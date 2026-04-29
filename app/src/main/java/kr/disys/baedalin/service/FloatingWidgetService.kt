@@ -217,7 +217,7 @@ class FloatingWidgetService : Service() {
             ACTION_HIDE_ALL -> hideAll()
             ACTION_HIDE_PRESETS -> {
                 setPresetsVisibility(true)
-                setToolbarFolded(true)
+                // 자동 접힘 로직 제거: setToolbarFolded(true) 삭제
             }
             ACTION_HIDE_WIDGET -> {
                 intent.getStringExtra("function_name")?.let { hideWidget(it) }
