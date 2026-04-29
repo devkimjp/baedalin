@@ -334,23 +334,13 @@ class FloatingWidgetService : Service() {
                              currentApp.contains("coupang") || 
                              currentApp == "kr.disys.baedalin"
 
-            Log.d("KeyMapper", "updateToolbarState: app=$currentApp, isTarget=$isTargetApp, folded=$isToolbarFolded")
+            Log.d("KeyMapper", "updateToolbarState: app=$currentApp, isTarget=$isTargetApp")
 
             if (::toolbarManager.isInitialized) {
                 toolbarManager.updateMoveIcon(_isMoveMode.value)
             }
             
-            if (!isTargetApp && currentApp.isNotEmpty()) { // 앱 이름이 있을 때만 자동 접힘
-                if (!isToolbarFolded) {
-                    Log.d("KeyMapper", "Auto-folding toolbar for non-target app: $currentApp")
-                    setToolbarFolded(true)
-                }
-            } else if (isTargetApp) {
-                if (isToolbarFolded != preferredFoldedState) {
-                    Log.d("KeyMapper", "Restoring toolbar state to folded=$preferredFoldedState for $currentApp")
-                    setToolbarFolded(preferredFoldedState)
-                }
-            }
+            // 자동 접힘/펼침 로직 삭제 (사용자가 직접 제어하도록 함)
         }
     }
 
