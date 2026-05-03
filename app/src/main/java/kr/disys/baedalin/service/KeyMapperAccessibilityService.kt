@@ -160,13 +160,15 @@ class KeyMapperAccessibilityService : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event?.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
             val packageName = event.packageName?.toString() ?: return
+            val isFullScreen = event.isFullScreen
+            
             currentPackageName = packageName // 정적 변수 업데이트
             
             val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
             val isMappingEnabled = prefs.getBoolean("is_mapping_enabled", false)
             val isRunning = FloatingWidgetService.isRunning.value
             
-            Log.d("KeyMapper", "Window changed: $packageName, enabled=$isMappingEnabled, running=$isRunning")
+            Log.d("KeyMapper", "Window changed: $packageName (Full:$isFullScreen), enabled=$isMappingEnabled, running=$isRunning")
 
             if (!isMappingEnabled) return
 
@@ -181,22 +183,30 @@ class KeyMapperAccessibilityService : AccessibilityService() {
                     }
                     startService(intent)
                 } else {
-                    // 배달 앱이 아닌 경우 숨기기
-                    if (packageName == "com.android.systemui" || 
-                        packageName == "android" || 
-                        packageName == "kr.disys.baedalin") {
-                        // 시스템 UI나 본인 앱에서는 아이콘 상태만 최신화
+                    // 배달 앱이 아닌 경우 숨기기 여부 결정
+                    // 1. 시스템 앱, 본인 앱, 삼성 제스처/엣지패널 등 '무시'해야 할 패키지들
+                    val isIgnorePackage = packageName == "com.android.systemui" || 
+                                        packageName == "android" || 
+                                        packageName == "kr.disys.baedalin" ||
+                                        packageName == "com.samsung.android.sidegesturepad" ||
+                                        packageName == "com.samsung.android.app.cocktailbarservice"
+                                        
+                    // 2. 무시 대상 패키지이거나 풀스크린이 아닌 경우(오버레이, 팝업, 제스처 등)는 위젯을 숨기지 않음
+                    if (isIgnorePackage || !isFullScreen) {
+                        Log.d("KeyMapper", "Ignoring window change: $packageName (isIgnore=$isIgnorePackage, isFull=$isFullScreen)")
                         FloatingWidgetService.instance?.updateToolbarState()
                         return
                     }
                     
+                    // 배달 앱이 아니고, 무시 대상도 아니며, 풀스크린 앱인 경우에만 위젯 숨김
+                    Log.d("KeyMapper", "Non-delivery full-screen app detected ($packageName). Hiding presets.")
                     val intent = Intent(this, FloatingWidgetService::class.java).apply {
                         action = FloatingWidgetService.ACTION_HIDE_PRESETS
                     }
                     startService(intent)
                 }
                 
-            // 어떤 경우든 앱이 바뀌면 아이콘 상태 갱신
+                // 어떤 경우든 앱이 바뀌면 아이콘 상태 갱신
                 FloatingWidgetService.instance?.updateToolbarState()
             }
         }
