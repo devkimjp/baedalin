@@ -1,8 +1,8 @@
 import os
 from PIL import Image
 
-source_path = r'C:\Users\sungh\.gemini\antigravity\brain\444523bb-0070-4a0f-857c-7dcef93c6994\media__1776894260764.jpg'
-res_dir = r'c:\Users\sungh\baedalin\app\src\main\res'
+source_path = r'C:\Users\sungh\.gemini\antigravity\brain\d5b90cff-697f-4b1e-91d4-c8bf4da08094\media__1777918822671.jpg'
+res_dir = r'd:\proj\baedalin\app\src\main\res'
 
 # Legacy icon sizes
 legacy_sizes = {
