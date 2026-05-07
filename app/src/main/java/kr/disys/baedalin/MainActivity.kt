@@ -1,32 +1,34 @@
 package kr.disys.baedalin
 
 import android.accessibilityservice.AccessibilityService
-import android.accessibilityservice.AccessibilityServiceInfo
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.provider.Settings
-import android.util.Log
 import android.view.KeyEvent
-import android.view.accessibility.AccessibilityManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Box
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.core.content.edit
+import dagger.hilt.android.AndroidEntryPoint
 import kr.disys.baedalin.model.ClickType
 import kr.disys.baedalin.model.DeliveryFunction
 import kr.disys.baedalin.service.FloatingWidgetService
 import kr.disys.baedalin.service.KeyMapperAccessibilityService
-import kr.disys.baedalin.ui.MainViewModel
+import kr.disys.baedalin.ui.main.MainViewModel
+import kr.disys.baedalin.ui.main.MainScreen
 import kr.disys.baedalin.ui.components.*
 import kr.disys.baedalin.ui.theme.BaedalinTheme
-import androidx.core.content.edit
 
+@AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     
     private val viewModel: MainViewModel by viewModels()
@@ -39,7 +41,7 @@ class MainActivity : ComponentActivity() {
         
         setContent {
             BaedalinTheme {
-                val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+                val lifecycleOwner = LocalLifecycleOwner.current
                 DisposableEffect(lifecycleOwner) {
                     val observer = LifecycleEventObserver { _, event ->
                         if (event == Lifecycle.Event.ON_RESUME) {
@@ -108,8 +110,7 @@ class MainActivity : ComponentActivity() {
                                 dismissButton = {
                                     TextButton(onClick = { 
                                         viewModel.conflictFunction = null
-                                        viewModel.recordingFunction = null
-                                        viewModel.recordingClickType = null
+                                        viewModel.stopRecording()
                                         getSharedPreferences("mappings", Context.MODE_PRIVATE).edit { putBoolean("is_recording", false) }
                                     }) { Text("취소") }
                                 }
@@ -203,11 +204,10 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun isAccessibilityServiceEnabled(context: Context, service: Class<out AccessibilityService>): Boolean {
-        val expectedComponentName = android.content.ComponentName(context, service).flattenToString()
-        val enabledServices = Settings.Secure.getString(
-            context.contentResolver,
-            Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
-        ) ?: return false
+        val expectedComponentName = ComponentName(context, service).flattenToString()
+        val enabledServices = Settings.Secure.getString(context.contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES)
+        
+        if (enabledServices == null) return false
         
         return enabledServices.split(':').any { it.equals(expectedComponentName, ignoreCase = true) }
     }

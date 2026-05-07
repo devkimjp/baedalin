@@ -19,7 +19,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.graphics.drawable.toBitmap
-import kr.disys.baedalin.ui.MainViewModel
+import kr.disys.baedalin.ui.main.MainViewModel
+import kr.disys.baedalin.ui.main.InputDeviceInfo
 import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.CircleShape
 
@@ -76,10 +77,10 @@ fun AppPickerDialog(onDismiss: () -> Unit, onAppSelected: (String) -> Unit) {
 
 @Composable
 fun DevicePickerDialog(
-    devices: List<MainViewModel.InputDeviceInfo>,
+    devices: List<InputDeviceInfo>,
     selectedDescriptor: String?,
     onDismiss: () -> Unit,
-    onDeviceSelected: (MainViewModel.InputDeviceInfo?) -> Unit
+    onDeviceSelected: (InputDeviceInfo?) -> Unit
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,

@@ -1,18 +1,20 @@
 plugins {
     alias(libs.plugins.android.application)
+    alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.hilt)
+    alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.kotlin.kapt)
 }
 
 android {
     namespace = "kr.disys.baedalin"
-    compileSdk {
-        version = release(36)
-    }
-
+    compileSdk = 34
+    
     defaultConfig {
         applicationId = "kr.disys.baedalin"
         minSdk = 24
-        targetSdk = 36
+        targetSdk = 34
         versionCode = 1
         versionName = "1.0"
 
@@ -32,6 +34,9 @@ android {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
+    kotlinOptions {
+        jvmTarget = "11"
+    }
     buildFeatures {
         compose = true
     }
@@ -47,6 +52,16 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.material3.adaptive.navigation.suite)
+
+    // Hilt
+    implementation(libs.hilt.android)
+    kapt(libs.hilt.compiler)
+    implementation(libs.androidx.hilt.navigation.compose)
+
+    // DataStore & Serialization
+    implementation(libs.androidx.datastore.preferences)
+    implementation(libs.kotlinx.serialization.json)
+
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

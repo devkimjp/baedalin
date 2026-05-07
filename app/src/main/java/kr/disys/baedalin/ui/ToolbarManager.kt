@@ -37,7 +37,8 @@ class ToolbarManager(
     
     private var btnFoldView: ImageView? = null
     private var btnMoveView: ImageView? = null
-    private var currentParams: WindowManager.LayoutParams? = null
+    var currentParams: WindowManager.LayoutParams? = null
+        private set
 
     fun showToolbar(initialX: Int, initialY: Int, alpha: Float, folded: Boolean) {
         if (root != null) return

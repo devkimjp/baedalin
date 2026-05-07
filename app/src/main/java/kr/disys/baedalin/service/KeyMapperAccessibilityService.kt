@@ -36,6 +36,10 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
+
+@AndroidEntryPoint
 class KeyMapperAccessibilityService : AccessibilityService() {
 
     private val handler = Handler(Looper.getMainLooper())

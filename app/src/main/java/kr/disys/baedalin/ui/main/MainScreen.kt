@@ -1,4 +1,4 @@
-package kr.disys.baedalin.ui.components
+package kr.disys.baedalin.ui.main
 
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -28,6 +28,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.edit
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kr.disys.baedalin.MainActivity
 import kr.disys.baedalin.R
 import kr.disys.baedalin.model.ClickType
@@ -35,7 +36,6 @@ import kr.disys.baedalin.model.DeliveryFunction
 import kr.disys.baedalin.model.Presets
 import kr.disys.baedalin.model.ShareConfig
 import kr.disys.baedalin.service.FloatingWidgetService
-import kr.disys.baedalin.ui.MainViewModel
 import kr.disys.baedalin.util.ShareManager
 import android.view.KeyEvent
 
@@ -45,20 +45,19 @@ fun MainScreen(
     viewModel: MainViewModel
 ) {
     val context = LocalContext.current
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val prefs = remember { context.getSharedPreferences("mappings", Context.MODE_PRIVATE) }
     var transparency by remember { mutableStateOf(prefs.getFloat("toolbar_transparency", 1.0f)) }
 
     // 매핑 정보가 하나라도 있는지 체크
-    val hasAnyMapping = remember(viewModel.mappingVersion, viewModel.selectedDeviceDescriptor) {
+    val hasAnyMapping = remember(uiState.mappingVersion, uiState.selectedDeviceDescriptor) {
         var found = false
-        val devicePrefix = viewModel.selectedDeviceDescriptor ?: "GLOBAL"
+        val devicePrefix = uiState.selectedDeviceDescriptor ?: "GLOBAL"
         
-        // 1. 장치/글로벌 기반 매핑 확인 (개별 기능 설정)
         DeliveryFunction.entries.forEach { function ->
             if (prefs.getInt("${devicePrefix}_${function.name}_keycode", -1) != -1) found = true
         }
         
-        // 2. 프리셋 기반 매핑 확인 (툴바 위젯)
         if (!found) {
             val presets = listOf("BAEMIN", "COUPANG", "YOGIYO")
             presets.forEach { preset ->
@@ -77,7 +76,7 @@ fun MainScreen(
     }
 
     val shakeColor by animateColorAsState(
-        targetValue = if (viewModel.shakeDeviceSelector > 0 && viewModel.shakeDeviceSelector % 2 != 0) Color.Red.copy(alpha = 0.3f) 
+        targetValue = if (uiState.shakeDeviceSelector > 0 && uiState.shakeDeviceSelector % 2 != 0) Color.Red.copy(alpha = 0.3f) 
                      else MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f),
         animationSpec = repeatable(
             iterations = 3,
@@ -102,8 +101,8 @@ fun MainScreen(
             // 장치 선택 섹션
             Card(
                 modifier = Modifier.fillMaxWidth().clickable { viewModel.showDevicePicker = true },
-                colors = CardDefaults.cardColors(containerColor = if (viewModel.shakeDeviceSelector > 0) shakeColor else MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)),
-                border = if (viewModel.shakeDeviceSelector > 0 && viewModel.shakeDeviceSelector % 2 != 0) BorderStroke(2.dp, Color.Red) else null
+                colors = CardDefaults.cardColors(containerColor = if (uiState.shakeDeviceSelector > 0) shakeColor else MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)),
+                border = if (uiState.shakeDeviceSelector > 0 && uiState.shakeDeviceSelector % 2 != 0) BorderStroke(2.dp, Color.Red) else null
             ) {
                 Row(
                     modifier = Modifier.padding(12.dp).fillMaxWidth(),
@@ -113,8 +112,8 @@ fun MainScreen(
                     Column {
                         Text("감시할 입력 장치", style = MaterialTheme.typography.labelMedium)
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            if (viewModel.selectedDeviceDescriptor != null) {
-                                val isConnected = viewModel.inputDevices.find { it.descriptor == viewModel.selectedDeviceDescriptor }?.isConnected ?: false
+                            if (uiState.selectedDeviceDescriptor != null) {
+                                val isConnected = uiState.inputDevices.find { it.descriptor == uiState.selectedDeviceDescriptor }?.isConnected ?: false
                                 Box(
                                     modifier = Modifier
                                         .size(10.dp)
@@ -122,7 +121,7 @@ fun MainScreen(
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
                             }
-                            Text(viewModel.selectedDeviceName, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
+                            Text(uiState.selectedDeviceName, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
                         }
                     }
                     Icon(imageVector = Icons.Default.Settings, contentDescription = null)
@@ -143,7 +142,7 @@ fun MainScreen(
             
             presetsList.forEach { presetName ->
                 val listKey = "${presetName}_active_custom_widgets"
-                val activeWidgets = remember(viewModel.mappingVersion) {
+                val activeWidgets = remember(uiState.mappingVersion) {
                     prefs.getString(listKey, "")?.split(",")?.filter { it.isNotBlank() } ?: emptyList()
                 }
 
@@ -244,8 +243,8 @@ fun MainScreen(
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(function.label, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                                 
-                                val mappings = remember(function, viewModel.selectedDeviceDescriptor, viewModel.mappingVersion) {
-                                    val prefix = viewModel.selectedDeviceDescriptor ?: "GLOBAL"
+                                val mappings = remember(function, uiState.selectedDeviceDescriptor, uiState.mappingVersion) {
+                                    val prefix = uiState.selectedDeviceDescriptor ?: "GLOBAL"
                                     listOf(ClickType.SINGLE, ClickType.DOUBLE).mapNotNull { type ->
                                         val k = prefs.getInt("${prefix}_${function.name}_keycode", -1)
                                         val t = prefs.getString("${prefix}_${function.name}_clicktype", "")
@@ -262,25 +261,25 @@ fun MainScreen(
 
                             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 listOf(ClickType.SINGLE, ClickType.DOUBLE).forEach { type ->
-                                    val isRecording = viewModel.recordingFunction == function && viewModel.recordingClickType == type
-                                    val prefix = viewModel.selectedDeviceDescriptor ?: "GLOBAL"
-                                    val isMapped = remember(function, viewModel.selectedDeviceDescriptor, type, viewModel.mappingVersion) {
+                                    val isRecording = uiState.recordingFunction == function && uiState.recordingClickType == type
+                                    val prefix = uiState.selectedDeviceDescriptor ?: "GLOBAL"
+                                    val isMapped = remember(function, uiState.selectedDeviceDescriptor, type, uiState.mappingVersion) {
                                         prefs.getInt("${prefix}_${function.name}_keycode", -1) != -1 && 
                                         prefs.getString("${prefix}_${function.name}_clicktype", "") == type.name
                                     }
 
                                     Surface(
                                         onClick = { viewModel.startRecording(function, type) },
-                                        enabled = !viewModel.isMappingEnabled,
+                                        enabled = !uiState.isMappingEnabled,
                                         modifier = Modifier.size(36.dp),
                                         shape = CircleShape,
                                         color = if (isRecording) Color.Red 
                                                 else if (isMapped) {
-                                                    if (viewModel.isMappingEnabled) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                                                    if (uiState.isMappingEnabled) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
                                                     else MaterialTheme.colorScheme.primaryContainer
                                                 }
                                                 else {
-                                                    if (viewModel.isMappingEnabled) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                                                    if (uiState.isMappingEnabled) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                                                     else MaterialTheme.colorScheme.surfaceVariant
                                                 },
                                         tonalElevation = 2.dp
@@ -305,26 +304,26 @@ fun MainScreen(
 
             Button(
                 onClick = { viewModel.toggleService() },
-                enabled = hasAnyMapping || viewModel.isMappingEnabled,
+                enabled = hasAnyMapping || uiState.isMappingEnabled,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(64.dp),
                 shape = RoundedCornerShape(16.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = if (viewModel.isMappingEnabled) MaterialTheme.colorScheme.error 
+                    containerColor = if (uiState.isMappingEnabled) MaterialTheme.colorScheme.error 
                                     else if (!hasAnyMapping) Color.Gray 
                                     else MaterialTheme.colorScheme.primary,
-                    contentColor = if (viewModel.isMappingEnabled) MaterialTheme.colorScheme.onError else Color.White
+                    contentColor = if (uiState.isMappingEnabled) MaterialTheme.colorScheme.onError else Color.White
                 ),
                 elevation = ButtonDefaults.buttonElevation(defaultElevation = 4.dp)
             ) {
                 Icon(
-                    imageVector = if (viewModel.isMappingEnabled) Icons.Default.Close else Icons.Default.PlayArrow,
+                    imageVector = if (uiState.isMappingEnabled) Icons.Default.Close else Icons.Default.PlayArrow,
                     contentDescription = null
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = if (viewModel.isMappingEnabled) "서비스 중지" 
+                    text = if (uiState.isMappingEnabled) "서비스 중지" 
                            else if (!hasAnyMapping) "매핑 정보 없음" 
                            else "서비스 시작",
                     fontSize = 18.sp,
@@ -332,7 +331,7 @@ fun MainScreen(
                 )
             }
 
-            if (viewModel.isMappingEnabled) {
+            if (uiState.isMappingEnabled) {
                 OutlinedButton(
                     onClick = {
                         val currentVisible = prefs.getBoolean("toolbar_visible", true)
