@@ -17,6 +17,7 @@ import androidx.compose.runtime.*
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.core.content.edit
 import dagger.hilt.android.AndroidEntryPoint
 import kr.disys.baedalin.model.ClickType
@@ -41,6 +42,7 @@ class MainActivity : ComponentActivity() {
         
         setContent {
             BaedalinTheme {
+                val uiState by viewModel.uiState.collectAsStateWithLifecycle()
                 val lifecycleOwner = LocalLifecycleOwner.current
                 DisposableEffect(lifecycleOwner) {
                     val observer = LifecycleEventObserver { _, event ->
@@ -61,19 +63,19 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                if (!viewModel.isAccessibilityEnabled || !viewModel.isOverlayEnabled) {
+                if (!uiState.isAccessibilityEnabled || !uiState.isOverlayEnabled) {
                     PermissionWizard(
-                        isAccessibilityEnabled = viewModel.isAccessibilityEnabled,
-                        isOverlayEnabled = viewModel.isOverlayEnabled
+                        isAccessibilityEnabled = uiState.isAccessibilityEnabled,
+                        isOverlayEnabled = uiState.isOverlayEnabled
                     )
                 } else {
                     Box {
                         MainScreen(viewModel = viewModel)
                         
-                        if (viewModel.showDevicePicker) {
+                        if (uiState.showDevicePicker) {
                             DevicePickerDialog(
-                                devices = viewModel.inputDevices,
-                                selectedDescriptor = viewModel.selectedDeviceDescriptor,
+                                devices = uiState.inputDevices,
+                                selectedDescriptor = uiState.selectedDeviceDescriptor,
                                 onDismiss = { viewModel.showDevicePicker = false },
                                 onDeviceSelected = { device ->
                                     viewModel.saveSelectedDevice(device)
@@ -82,28 +84,28 @@ class MainActivity : ComponentActivity() {
                             )
                         }
 
-                        if (viewModel.showAppPicker) {
+                        if (uiState.showAppPicker) {
                             AppPickerDialog(
                                 onDismiss = { viewModel.showAppPicker = false },
                                 onAppSelected = { pkgName ->
-                                    saveCustomPackage(viewModel.targetPresetForPicker!!, pkgName)
+                                    saveCustomPackage(uiState.targetPresetForPicker!!, pkgName)
                                     viewModel.showAppPicker = false
-                                    loadPreset(viewModel.targetPresetForPicker!!)
+                                    loadPreset(uiState.targetPresetForPicker!!)
                                 }
                             )
                         }
 
-                        if (viewModel.conflictFunction != null) {
+                        if (uiState.conflictFunction != null) {
                             AlertDialog(
                                 onDismissRequest = { 
                                     viewModel.conflictFunction = null
                                     getSharedPreferences("mappings", Context.MODE_PRIVATE).edit { putBoolean("is_recording", false) }
                                 },
                                 title = { Text("키 중복 확인") },
-                                text = { Text("'${viewModel.conflictFunction?.label}' 기능에 이미 설정된 키입니다.\n현재 기능으로 변경하시겠습니까?") },
+                                text = { Text("'${uiState.conflictFunction?.label}' 기능에 이미 설정된 키입니다.\n현재 기능으로 변경하시겠습니까?") },
                                 confirmButton = {
                                     Button(onClick = {
-                                        viewModel.executeSaveMapping(viewModel.recordingFunction!!, viewModel.recordingClickType!!, viewModel.pendingKeyCode!!)
+                                        viewModel.executeSaveMapping(uiState.recordingFunction!!, uiState.recordingClickType!!, uiState.pendingKeyCode!!)
                                         viewModel.conflictFunction = null
                                     }) { Text("변경") }
                                 },

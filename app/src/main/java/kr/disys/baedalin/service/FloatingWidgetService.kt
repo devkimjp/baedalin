@@ -178,7 +178,13 @@ class FloatingWidgetService : Service() {
 
     fun updateToolbarState() {
         if (::toolbarManager.isInitialized) {
-            toolbarManager.updateMoveIcon(_isMoveMode.value)
+            try {
+                toolbarManager.updateMoveIcon(_isMoveMode.value)
+            } catch (e: Exception) {
+                Log.e("KeyMapper", "Failed to update toolbar state", e)
+            }
+        } else {
+            Log.d("KeyMapper", "toolbarManager not initialized yet, skipping updateToolbarState")
         }
     }
 

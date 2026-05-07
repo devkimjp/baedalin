@@ -57,7 +57,7 @@ object Presets {
     }
 
     fun getPresetFromPackage(packageName: String): String? = when (packageName) {
-        "com.woowahan.bros" -> "BAEMIN"
+        "com.woowahan.bros", "com.woowahan.bros.rider" -> "BAEMIN"
         "com.coupang.mobile.eats.courier" -> "COUPANG"
         "kr.co.yogiyo.riderapp" -> "YOGIYO"
         else -> null

@@ -1,8 +1,12 @@
 package kr.disys.baedalin.ui.main
 
+import android.content.Context
+import android.hardware.input.InputManager
+import android.view.InputDevice
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kr.disys.baedalin.domain.usecase.GetPresetsUseCase
 import kr.disys.baedalin.domain.usecase.SavePresetUseCase
 import kr.disys.baedalin.model.ClickType
@@ -14,8 +18,18 @@ import javax.inject.Inject
 @HiltViewModel
 class MainViewModel @Inject constructor(
     private val getPresetsUseCase: GetPresetsUseCase,
-    private val savePresetUseCase: SavePresetUseCase
+    private val savePresetUseCase: SavePresetUseCase,
+    @ApplicationContext private val context: Context
 ) : ViewModel() {
+
+    private val inputManager = context.getSystemService(Context.INPUT_SERVICE) as InputManager
+    private val prefs = context.getSharedPreferences("mappings", Context.MODE_PRIVATE)
+
+    private val deviceListener = object : InputManager.InputDeviceListener {
+        override fun onInputDeviceAdded(deviceId: Int) = refreshDeviceList()
+        override fun onInputDeviceRemoved(deviceId: Int) = refreshDeviceList()
+        override fun onInputDeviceChanged(deviceId: Int) = refreshDeviceList()
+    }
 
     private val _uiState = MutableStateFlow(MainUiState())
     val uiState: StateFlow<MainUiState> = _uiState.asStateFlow()
@@ -62,7 +76,41 @@ class MainViewModel @Inject constructor(
 
     init {
         observePresets()
-        // TODO: 장치 리스트 초기화 및 리스너 등록 로직 이전 필요
+        inputManager.registerInputDeviceListener(deviceListener, null)
+        loadInitialDevice()
+        refreshDeviceList()
+    }
+
+    private fun loadInitialDevice() {
+        val savedDescriptor = prefs.getString("selected_device_descriptor", null)
+        if (savedDescriptor != null) {
+            val device = InputDevice.getDeviceIds().toList().mapNotNull { id ->
+                InputDevice.getDevice(id)
+            }.find { it.descriptor == savedDescriptor }
+            
+            _uiState.update { it.copy(
+                selectedDeviceDescriptor = savedDescriptor,
+                selectedDeviceName = device?.name ?: "연결됨 (이름 불명)"
+            )}
+        }
+        
+        val isMapping = prefs.getBoolean("is_mapping_enabled", false)
+        _uiState.update { it.copy(isMappingEnabled = isMapping) }
+    }
+
+    private fun refreshDeviceList() {
+        val devices = InputDevice.getDeviceIds().toList().mapNotNull { id ->
+            InputDevice.getDevice(id)
+        }.filter { device ->
+            !device.isVirtual && (device.sources and InputDevice.SOURCE_KEYBOARD != 0)
+        }.map { device ->
+            InputDeviceInfo(
+                name = device.name,
+                descriptor = device.descriptor,
+                isConnected = true
+            )
+        }
+        _uiState.update { it.copy(inputDevices = devices) }
     }
 
     private fun observePresets() {
@@ -79,7 +127,9 @@ class MainViewModel @Inject constructor(
 
     fun toggleService() {
         val currentStatus = _uiState.value.isMappingEnabled
-        _uiState.update { it.copy(isMappingEnabled = !currentStatus) }
+        val nextStatus = !currentStatus
+        _uiState.update { it.copy(isMappingEnabled = nextStatus) }
+        prefs.edit().putBoolean("is_mapping_enabled", nextStatus).apply()
     }
 
     fun saveSelectedDevice(device: InputDeviceInfo?) {
@@ -88,6 +138,10 @@ class MainViewModel @Inject constructor(
                 selectedDeviceDescriptor = device?.descriptor,
                 selectedDeviceName = device?.name ?: "장치를 추가하세요"
             )
+        }
+        prefs.edit().apply {
+            putString("selected_device_descriptor", device?.descriptor)
+            apply()
         }
     }
 
@@ -119,5 +173,10 @@ class MainViewModel @Inject constructor(
 
     fun updateMappingVersion() {
         _uiState.update { it.copy(mappingVersion = it.mappingVersion + 1) }
+    }
+
+    override fun onCleared() {
+        inputManager.unregisterInputDeviceListener(deviceListener)
+        super.onCleared()
     }
 }
