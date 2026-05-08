@@ -446,8 +446,23 @@ class KeyMapperAccessibilityService : AccessibilityService() {
                     return true
                 }
                 else -> {
-                    val x = prefs.getInt("${activePreset}_${function.name}_x", -1).toFloat()
-                    val y = prefs.getInt("${activePreset}_${function.name}_y", -1).toFloat()
+                    val widgetPrefs = getSharedPreferences("WidgetPositions", Context.MODE_PRIVATE)
+                    var x = widgetPrefs.getInt("${activePreset}_${function.name}_x", -1).toFloat()
+                    var y = widgetPrefs.getInt("${activePreset}_${function.name}_y", -1).toFloat()
+                    
+                    if (x == -1f || y == -1f) {
+                        val presetList = when(activePreset) {
+                            "BAEMIN" -> Presets.BAEMIN
+                            "COUPANG" -> Presets.COUPANG
+                            "YOGIYO" -> Presets.YOGIYO
+                            else -> Presets.BAEMIN
+                        }
+                        val info = presetList.find { it.function.name == function.name }
+                        if (info != null) {
+                            x = info.x.toFloat()
+                            y = info.y.toFloat()
+                        }
+                    }
                     
                     if (x != -1f && y != -1f) {
                         val tapX = x + 50f

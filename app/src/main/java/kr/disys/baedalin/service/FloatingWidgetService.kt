@@ -87,6 +87,13 @@ class FloatingWidgetService : Service() {
                 val visible = intent.getBooleanExtra("visible", true)
                 if (visible) showSettingsWidget() else hideWidget("SYSTEM_SETTINGS")
             }
+            ACTION_UPDATE_KEY -> {
+                val functionName = intent.getStringExtra("function_name")
+                val keyName = intent.getStringExtra("key_name")
+                val label = intent.getStringExtra("label")
+                Toast.makeText(this, "$label -> $keyName 매핑 완료", Toast.LENGTH_SHORT).show()
+                // UI 갱신 로직이 필요한 경우 여기에 추가
+            }
         }
     }
 
@@ -103,8 +110,12 @@ class FloatingWidgetService : Service() {
         hidePresets()
         setPresetsVisibility(false)
 
+        val sharedPrefs = getSharedPreferences("WidgetPositions", Context.MODE_PRIVATE)
+
         presetList.forEach { info ->
-            showWidget(info.function.name, info.icon, info.tooltip, info.x, info.y, color)
+            val savedX = sharedPrefs.getInt("${presetName}_${info.function.name}_x", info.x)
+            val savedY = sharedPrefs.getInt("${presetName}_${info.function.name}_y", info.y)
+            showWidget(info.function.name, info.icon, info.tooltip, savedX, savedY, color)
         }
     }
 
@@ -138,10 +149,22 @@ class FloatingWidgetService : Service() {
                 params.y = y
                 overlayManager.updateOverlay(functionName, params)
             },
-            onSave = { x, y -> /* 저장 로직 */ },
+            onSave = { x, y -> 
+                val sharedPrefs = getSharedPreferences("WidgetPositions", Context.MODE_PRIVATE)
+                sharedPrefs.edit {
+                    putInt("${currentPreset}_${functionName}_x", x)
+                    putInt("${currentPreset}_${functionName}_y", y)
+                }
+            },
             onClick = { /* 클릭 로직 */ },
             onLongClick = { /* 롱클릭 로직 */ },
-            onMappingMode = { /* 매핑 로직 */ },
+            onMappingMode = { 
+                val intent = Intent("ACTION_START_DIRECT_RECORDING").apply {
+                    putExtra("preset_name", currentPreset)
+                    putExtra("function_name", functionName)
+                }
+                sendBroadcast(intent)
+            },
             isMoveMode = { _isMoveMode.value },
             isRecording = { false }
         ))
@@ -156,7 +179,26 @@ class FloatingWidgetService : Service() {
         if (!::toolbarManager.isInitialized) {
             toolbarManager = ToolbarManager(this, getSystemService(Context.WINDOW_SERVICE) as WindowManager, object : ToolbarManager.ToolbarCallbacks {
                 override fun onAddWidget() {}
-                override fun onToggleMoveMode() { _isMoveMode.value = !_isMoveMode.value }
+                override fun onToggleMoveMode() { 
+                    val newMode = !_isMoveMode.value
+                    _isMoveMode.value = newMode
+                    updateToolbarState()
+                    
+                    overlayManager.getAllOverlayIds().forEach { id ->
+                        if (id != "SYSTEM_SETTINGS") {
+                            val view = overlayManager.getOverlayView(id)
+                            val p = view?.layoutParams as? WindowManager.LayoutParams
+                            if (p != null) {
+                                if (newMode) {
+                                    p.flags = p.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE.inv()
+                                } else {
+                                    p.flags = p.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+                                }
+                                overlayManager.updateOverlay(id, p)
+                            }
+                        }
+                    }
+                }
                 override fun onTogglePresetsVisibility() { setPresetsVisibility(!isPresetsHidden) }
                 override fun onPowerOff() { hideAll() }
                 override fun onOpenMainActivity() {

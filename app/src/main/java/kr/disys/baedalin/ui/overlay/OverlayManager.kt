@@ -43,4 +43,6 @@ class OverlayManager @Inject constructor(
     fun isShowing(id: String): Boolean = overlayViews.containsKey(id)
 
     fun getOverlayView(id: String): View? = overlayViews[id]
+
+    fun getAllOverlayIds(): List<String> = overlayViews.keys.toList()
 }
