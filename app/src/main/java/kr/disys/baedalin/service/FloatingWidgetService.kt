@@ -178,11 +178,12 @@ class FloatingWidgetService : Service() {
             onClick = { /* 클릭 로직 */ },
             onLongClick = { /* 롱클릭 로직 */ },
             onMappingMode = { 
-                val intent = Intent("ACTION_START_DIRECT_RECORDING").apply {
+                val intent = Intent(this@FloatingWidgetService, kr.disys.baedalin.service.KeyMapperAccessibilityService::class.java).apply {
+                    action = "ACTION_START_DIRECT_RECORDING"
                     putExtra("preset_name", currentPreset)
                     putExtra("function_name", functionName)
                 }
-                sendBroadcast(intent)
+                startService(intent)
             },
             isMoveMode = { _isMoveMode.value },
             isRecording = { false }

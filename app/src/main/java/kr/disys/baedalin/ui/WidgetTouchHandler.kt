@@ -63,14 +63,13 @@ class WidgetTouchHandler(
                 if (isRecording()) return true
 
                 if (dx > 25 || dy > 25) {
+                    handler.removeCallbacks(moveModeRunnable)
+                    handler.removeCallbacks(mappingModeRunnable)
                     if (moveModeActiveForThis) {
                         val newX = (event.rawX - dragOffsetX).toInt()
                         val newY = (event.rawY - dragOffsetY).toInt()
                         onMove(newX, newY)
                         longClickHandled = true 
-                    } else {
-                        handler.removeCallbacks(moveModeRunnable)
-                        handler.removeCallbacks(mappingModeRunnable)
                     }
                 }
                 return true
