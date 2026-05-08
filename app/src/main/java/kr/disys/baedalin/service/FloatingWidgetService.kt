@@ -94,8 +94,9 @@ class FloatingWidgetService : Service() {
             ACTION_UPDATE_KEY -> {
                 val functionName = intent.getStringExtra("function_name")
                 val keyName = intent.getStringExtra("key_name")
-                val label = intent.getStringExtra("label")
-                Toast.makeText(this, "$label -> $keyName 매핑 완료", Toast.LENGTH_SHORT).show()
+                val label = intent.getStringExtra("label") ?: "버튼"
+                statusManager.showStatusOverlay("[$label] 매핑되었습니다.\n$keyName", 3000)
+                loadPresetInternal(currentPreset)
             }
         }
     }
@@ -115,10 +116,11 @@ class FloatingWidgetService : Service() {
         }
         setPresetsVisibility(false)
 
+        val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
         val sharedPrefs = getSharedPreferences("WidgetPositions", Context.MODE_PRIVATE)
         val offsetX = ICON_SIZE / 2
         val offsetY = ICON_SIZE / 2 + 40
-
+        val prefix = prefs.getString("selected_device_descriptor", "GLOBAL") ?: "GLOBAL"
         presetList.forEach { info ->
             val savedX = sharedPrefs.getInt("${presetName}_${info.function.name}_x", -1)
             val savedY = sharedPrefs.getInt("${presetName}_${info.function.name}_y", -1)
@@ -126,11 +128,17 @@ class FloatingWidgetService : Service() {
             val targetX = if (savedX != -1) savedX else info.x - offsetX
             val targetY = if (savedY != -1) savedY else info.y - offsetY
             
-            showWidget(info.function.name, info.icon, info.tooltip, targetX, targetY, color)
+            val keycode = prefs.getInt("${prefix}_${info.function.name}_keycode", -1)
+            val keyInfo = if (keycode != -1) {
+                val keyName = android.view.KeyEvent.keyCodeToString(keycode).replace("KEYCODE_", "")
+                "$keycode ($keyName)"
+            } else null
+            
+            showWidget(info.function.name, info.icon, info.tooltip, targetX, targetY, color, keyInfo)
         }
     }
 
-    private fun showWidget(functionName: String, icon: String, tooltip: String, targetX: Int, targetY: Int, color: Int) {
+    private fun showWidget(functionName: String, icon: String, tooltip: String, targetX: Int, targetY: Int, color: Int, keyInfo: String? = null) {
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
@@ -157,8 +165,25 @@ class FloatingWidgetService : Service() {
                 visibility = if (_isMoveMode.value) View.VISIBLE else View.GONE
             })
 
-            addView(TextView(this@FloatingWidgetService).apply { text = tooltip })
+            addView(TextView(this@FloatingWidgetService).apply { 
+                text = tooltip 
+                setTextColor(Color.WHITE)
+                setBackgroundColor(0xCC000000.toInt())
+                setPadding(8, 4, 8, 4)
+                textSize = 10f
+            })
             addView(OverlayFactory.createCircleIcon(this@FloatingWidgetService, icon, color, ICON_SIZE))
+            
+            if (keyInfo != null) {
+                addView(TextView(this@FloatingWidgetService).apply {
+                    text = keyInfo
+                    setTextColor(Color.YELLOW)
+                    setBackgroundColor(0xAA000000.toInt())
+                    setPadding(4, 2, 4, 2)
+                    textSize = 9f
+                    gravity = Gravity.CENTER
+                })
+            }
         }
 
         container.setOnTouchListener(WidgetTouchHandler(
@@ -176,14 +201,13 @@ class FloatingWidgetService : Service() {
                 }
             },
             onClick = { /* 클릭 로직 */ },
-            onLongClick = { /* 롱클릭 로직 */ },
+            onLongClick = { 
+                statusManager.showStatusOverlay("${tooltip} 위젯 선택됨", 1000)
+                triggerVibration(50)
+            },
             onMappingMode = { 
-                val intent = Intent(this@FloatingWidgetService, kr.disys.baedalin.service.KeyMapperAccessibilityService::class.java).apply {
-                    action = "ACTION_START_DIRECT_RECORDING"
-                    putExtra("preset_name", currentPreset)
-                    putExtra("function_name", functionName)
-                }
-                startService(intent)
+                triggerVibration(150)
+                startMappingCountdown(tooltip, functionName)
             },
             isMoveMode = { _isMoveMode.value },
             isRecording = { false }
@@ -240,7 +264,11 @@ class FloatingWidgetService : Service() {
                     }
                     startActivity(intent)
                 }
-                override fun onLaunchApp(name: String) { loadPresetInternal(name) }
+                override fun onLaunchApp(name: String) { 
+                    val pkg = Presets.getPackageName(name)
+                    launchApp(pkg)
+                    loadPresetInternal(name) 
+                }
                 override fun onFold(folded: Boolean) { isToolbarFolded = folded }
                 override fun onSavePosition(x: Int, y: Int) {}
             })
@@ -326,6 +354,78 @@ class FloatingWidgetService : Service() {
                 screenBorderView = null
             }
         }
+    }
+
+    private fun launchApp(packageName: String) {
+        val launchIntent = packageManager.getLaunchIntentForPackage(packageName)
+        if (launchIntent != null) {
+            launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            try {
+                startActivity(launchIntent)
+            } catch (e: Exception) {
+                Log.e("KeyMapper", "Failed to launch app: $packageName", e)
+                Toast.makeText(this, "앱을 실행할 수 없습니다.", Toast.LENGTH_SHORT).show()
+            }
+        } else {
+            Toast.makeText(this, "앱이 설치되어 있지 않습니다: $packageName", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun triggerVibration(durationMs: Long = 100) {
+        try {
+            val vibrator = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                val vibratorManager = getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? android.os.VibratorManager
+                vibratorManager?.defaultVibrator
+            } else {
+                @Suppress("DEPRECATION")
+                getSystemService(Context.VIBRATOR_SERVICE) as? android.os.Vibrator
+            }
+
+            if (vibrator != null && vibrator.hasVibrator()) {
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                    val attrs = android.media.AudioAttributes.Builder()
+                        .setUsage(android.media.AudioAttributes.USAGE_ASSISTANCE_ACCESSIBILITY)
+                        .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                        .build()
+                    vibrator.vibrate(android.os.VibrationEffect.createOneShot(durationMs, android.os.VibrationEffect.DEFAULT_AMPLITUDE), attrs)
+                } else {
+                    @Suppress("DEPRECATION")
+                    vibrator.vibrate(durationMs)
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("KeyMapper", "Vibration failed", e)
+        }
+    }
+
+    private fun startMappingCountdown(tooltip: String, functionName: String) {
+        val mappingHandler = Handler(Looper.getMainLooper())
+        var secondsLeft = 5
+
+        val countdownRunnable = object : Runnable {
+            override fun run() {
+                if (kr.disys.baedalin.KeyRecordingState.recordingFunction == null && secondsLeft < 5) return
+
+                if (secondsLeft > 0) {
+                    statusManager.showStatusOverlay("[$tooltip]\n매핑할 키를 입력하세요... (${secondsLeft}초)", 1500)
+                    secondsLeft--
+                    mappingHandler.postDelayed(this, 1000)
+                } else {
+                    statusManager.showStatusOverlay("[$tooltip] 매핑 시간 초과", 3000)
+                    kr.disys.baedalin.KeyRecordingState.recordingFunction = null
+                    startService(Intent(this@FloatingWidgetService, kr.disys.baedalin.service.KeyMapperAccessibilityService::class.java).apply {
+                        action = "ACTION_CANCEL_DIRECT_RECORDING"
+                    })
+                }
+            }
+        }
+
+        kr.disys.baedalin.KeyRecordingState.recordingFunction = functionName
+        startService(Intent(this, kr.disys.baedalin.service.KeyMapperAccessibilityService::class.java).apply {
+            action = "ACTION_START_DIRECT_RECORDING"
+            putExtra("function_name", functionName)
+        })
+        mappingHandler.post(countdownRunnable)
     }
 
     private fun setPresetsVisibility(hidden: Boolean) {
