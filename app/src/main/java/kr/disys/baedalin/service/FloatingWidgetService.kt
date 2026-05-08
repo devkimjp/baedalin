@@ -45,6 +45,77 @@ class FloatingWidgetService : Service() {
     private lateinit var toolbarManager: ToolbarManager
     private var screenBorderView: View? = null
 
+    // 커스텀 위젯 관리를 위한 상태 변수
+    private var lastAddedX = 200
+    private var lastAddedY = 250
+
+    private fun addNumberedWidget() {
+        val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
+        val preset = currentPreset
+        val counterKey = "${preset}_custom_counter"
+        val counter = prefs.getInt(counterKey, 1)
+        val label = counter.toString()
+        val functionName = "${preset}_CUSTOM_$label"
+        val color = Presets.getColor(preset)
+        
+        // 1. 위젯 표시
+        showWidget(
+            functionName = functionName,
+            icon = label,
+            tooltip = "사용자 $label",
+            targetX = lastAddedX,
+            targetY = lastAddedY,
+            color = color
+        )
+        
+        // 2. 데이터 저장 (목록 관리)
+        val listKey = "${preset}_active_custom_widgets"
+        val currentWidgets = prefs.getString(listKey, "") ?: ""
+        val newList = if (currentWidgets.isEmpty()) label else "$currentWidgets,$label"      
+        
+        prefs.edit { 
+            putString(listKey, newList)
+            putInt(counterKey, counter + 1)
+            putInt("${preset}_last_added_x", lastAddedX + 60)
+            putInt("${preset}_last_added_y", lastAddedY + 60)
+        }
+
+        // 3. 좌표 및 카운터 갱신
+        lastAddedX += 60
+        lastAddedY += 60
+        if (lastAddedX > 800 || lastAddedY > 1200) {
+            lastAddedX = 200
+            lastAddedY = 250
+        }
+        statusManager.showStatusOverlay("커스텀 위젯 $label 추가됨", 1000)
+    }
+
+    private fun loadStoredCustomWidgets() {
+        val preset = currentPreset
+        val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
+        val listKey = "${preset}_active_custom_widgets"
+        val activeWidgets = prefs.getString(listKey, "") ?: ""
+        val color = Presets.getColor(preset)
+
+        if (activeWidgets.isNotEmpty()) {
+            activeWidgets.split(",").forEach { label ->
+                if (label.isNotBlank()) {
+                    showWidget(
+                        functionName = "${preset}_CUSTOM_$label",
+                        icon = label,
+                        tooltip = "사용자 $label",
+                        targetX = -1, // 기존 저장 좌표 사용
+                        targetY = -1,
+                        color = color
+                    )
+                }
+            }
+        }
+        
+        lastAddedX = prefs.getInt("${preset}_last_added_x", 200)
+        lastAddedY = prefs.getInt("${preset}_last_added_y", 250)
+    }
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
@@ -74,6 +145,7 @@ class FloatingWidgetService : Service() {
             ACTION_LOAD_PRESET -> {
                 val preset = intent.getStringExtra("preset_name") ?: "BAEMIN"
                 loadPresetInternal(preset)
+                loadStoredCustomWidgets()
                 showSettingsWidget()
                 _isMappingEnabled.value = true
                 _isInterceptionActive.value = true
@@ -150,8 +222,22 @@ class FloatingWidgetService : Service() {
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.START
-            x = targetX
-            y = targetY
+            
+            val sharedPrefs = getSharedPreferences("WidgetPositions", Context.MODE_PRIVATE)
+            val savedX = sharedPrefs.getInt("${currentPreset}_${functionName}_x", -1)
+            val savedY = sharedPrefs.getInt("${currentPreset}_${functionName}_y", -1)
+
+            if (savedX != -1 && savedY != -1) {
+                x = savedX
+                y = savedY
+            } else if (targetX != -1 && targetY != -1) {
+                x = targetX
+                y = targetY
+                sharedPrefs.edit { putInt("${currentPreset}_${functionName}_x", x); putInt("${currentPreset}_${functionName}_y", y) }
+            } else {
+                x = 100
+                y = 100
+            }
         }
 
         val container = LinearLayout(this).apply {
@@ -199,8 +285,17 @@ class FloatingWidgetService : Service() {
                     putInt("${currentPreset}_${functionName}_x", x)
                     putInt("${currentPreset}_${functionName}_y", y)
                 }
+                if (kr.disys.baedalin.KeyRecordingState.recordingFunction == null) {
+                    statusManager.showStatusOverlay("위치 저장 완료", 1000)
+                }
             },
-            onClick = { /* 클릭 로직 */ },
+            onClick = {
+                val intent = Intent(ACTION_MANUAL_CLICK).apply {
+                    setPackage(packageName)
+                    putExtra("function_name", functionName)
+                }
+                sendBroadcast(intent)
+            },
             onLongClick = { 
                 statusManager.showStatusOverlay("${tooltip} 위젯 선택됨", 1000)
                 triggerVibration(50)
@@ -210,7 +305,7 @@ class FloatingWidgetService : Service() {
                 startMappingCountdown(tooltip, functionName)
             },
             isMoveMode = { _isMoveMode.value },
-            isRecording = { false }
+            isRecording = { kr.disys.baedalin.KeyRecordingState.recordingFunction != null }
         ))
 
         overlayManager.showOverlay(functionName, container, params)
@@ -222,7 +317,7 @@ class FloatingWidgetService : Service() {
 
         if (!::toolbarManager.isInitialized) {
             toolbarManager = ToolbarManager(this, getSystemService(Context.WINDOW_SERVICE) as WindowManager, object : ToolbarManager.ToolbarCallbacks {
-                override fun onAddWidget() {}
+                override fun onAddWidget() { addNumberedWidget() }
                 override fun onToggleMoveMode() { 
                     val newMode = !_isMoveMode.value
                     _isMoveMode.value = newMode
@@ -475,5 +570,6 @@ class FloatingWidgetService : Service() {
         const val ACTION_UPDATE_KEY = "ACTION_UPDATE_KEY"
         const val ACTION_START_RECORDING = "ACTION_START_RECORDING"
         const val ACTION_UPDATE_UI = "ACTION_UPDATE_UI"
+        const val ACTION_MANUAL_CLICK = "ACTION_MANUAL_CLICK"
     }
 }
