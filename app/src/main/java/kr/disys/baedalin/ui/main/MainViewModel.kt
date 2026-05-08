@@ -14,6 +14,7 @@ import kr.disys.baedalin.model.DeliveryFunction
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import androidx.core.content.edit
 
 @HiltViewModel
 class MainViewModel @Inject constructor(
@@ -37,17 +38,17 @@ class MainViewModel @Inject constructor(
     // Compatibility properties for MainActivity
     var isAccessibilityEnabled: Boolean
         get() = _uiState.value.isAccessibilityEnabled
-        set(value) { _uiState.update { it.copy(isAccessibilityEnabled = value) } }
+        set(value) { _uiState.update { state -> state.copy(isAccessibilityEnabled = value) } }
 
     var isOverlayEnabled: Boolean
         get() = _uiState.value.isOverlayEnabled
-        set(value) { _uiState.update { it.copy(isOverlayEnabled = value) } }
+        set(value) { _uiState.update { state -> state.copy(isOverlayEnabled = value) } }
 
     val isMappingEnabled: Boolean get() = _uiState.value.isMappingEnabled
 
     var showDevicePicker: Boolean
         get() = _uiState.value.showDevicePicker
-        set(value) { _uiState.update { it.copy(showDevicePicker = value) } }
+        set(value) { _uiState.update { state -> state.copy(showDevicePicker = value) } }
 
     val inputDevices: List<InputDeviceInfo> get() = _uiState.value.inputDevices
     val selectedDeviceDescriptor: String? get() = _uiState.value.selectedDeviceDescriptor
@@ -56,19 +57,19 @@ class MainViewModel @Inject constructor(
 
     var showAppPicker: Boolean
         get() = _uiState.value.showAppPicker
-        set(value) { _uiState.update { it.copy(showAppPicker = value) } }
+        set(value) { _uiState.update { state -> state.copy(showAppPicker = value) } }
 
     var targetPresetForPicker: String?
         get() = _uiState.value.targetPresetForPicker
-        set(value) { _uiState.update { it.copy(targetPresetForPicker = value) } }
+        set(value) { _uiState.update { state -> state.copy(targetPresetForPicker = value) } }
 
     var conflictFunction: DeliveryFunction?
         get() = _uiState.value.conflictFunction
-        set(value) { _uiState.update { it.copy(conflictFunction = value) } }
+        set(value) { _uiState.update { state -> state.copy(conflictFunction = value) } }
 
     var pendingKeyCode: Int?
         get() = _uiState.value.pendingKeyCode
-        set(value) { _uiState.update { it.copy(pendingKeyCode = value) } }
+        set(value) { _uiState.update { state -> state.copy(pendingKeyCode = value) } }
 
     val recordingFunction: DeliveryFunction? get() = _uiState.value.recordingFunction
     val recordingClickType: ClickType? get() = _uiState.value.recordingClickType
@@ -86,16 +87,16 @@ class MainViewModel @Inject constructor(
         if (savedDescriptor != null) {
             val device = InputDevice.getDeviceIds().toList().mapNotNull { id ->
                 InputDevice.getDevice(id)
-            }.find { it.descriptor == savedDescriptor }
+            }.find { d -> d.descriptor == savedDescriptor }
             
-            _uiState.update { it.copy(
+            _uiState.update { state -> state.copy(
                 selectedDeviceDescriptor = savedDescriptor,
                 selectedDeviceName = device?.name ?: "연결됨 (이름 불명)"
             )}
         }
         
         val isMapping = prefs.getBoolean("is_mapping_enabled", false)
-        _uiState.update { it.copy(isMappingEnabled = isMapping) }
+        _uiState.update { state -> state.copy(isMappingEnabled = isMapping) }
     }
 
     private fun refreshDeviceList() {
@@ -110,17 +111,17 @@ class MainViewModel @Inject constructor(
                 isConnected = true
             )
         }
-        _uiState.update { it.copy(inputDevices = devices) }
+        _uiState.update { state -> state.copy(inputDevices = devices) }
     }
 
     private fun observePresets() {
         getPresetsUseCase()
-            .onStart { _uiState.update { it.copy(isLoading = true) } }
+            .onStart { _uiState.update { state -> state.copy(isLoading = true) } }
             .onEach { presets ->
-                _uiState.update { it.copy(presets = presets, isLoading = false) }
+                _uiState.update { state -> state.copy(presets = presets, isLoading = false) }
             }
             .catch { e ->
-                _uiState.update { it.copy(errorMessage = e.message, isLoading = false) }
+                _uiState.update { state -> state.copy(errorMessage = e.message, isLoading = false) }
             }
             .launchIn(viewModelScope)
     }
@@ -128,51 +129,50 @@ class MainViewModel @Inject constructor(
     fun toggleService() {
         val currentStatus = _uiState.value.isMappingEnabled
         val nextStatus = !currentStatus
-        _uiState.update { it.copy(isMappingEnabled = nextStatus) }
-        prefs.edit().putBoolean("is_mapping_enabled", nextStatus).apply()
+        _uiState.update { state -> state.copy(isMappingEnabled = nextStatus) }
+        prefs.edit { putBoolean("is_mapping_enabled", nextStatus) }
     }
 
     fun saveSelectedDevice(device: InputDeviceInfo?) {
-        _uiState.update { 
-            it.copy(
+        _uiState.update { state ->
+            state.copy(
                 selectedDeviceDescriptor = device?.descriptor,
                 selectedDeviceName = device?.name ?: "장치를 추가하세요"
             )
         }
-        prefs.edit().apply {
+        prefs.edit {
             putString("selected_device_descriptor", device?.descriptor)
-            apply()
         }
     }
 
     fun startRecording(func: DeliveryFunction, type: ClickType) {
-        _uiState.update { 
-            if (it.recordingFunction == func && it.recordingClickType == type) {
-                it.copy(recordingFunction = null, recordingClickType = null)
+        _uiState.update { state ->
+            if (state.recordingFunction == func && state.recordingClickType == type) {
+                state.copy(recordingFunction = null, recordingClickType = null)
             } else {
-                it.copy(recordingFunction = func, recordingClickType = type)
+                state.copy(recordingFunction = func, recordingClickType = type)
             }
         }
     }
 
     fun executeSaveMapping(func: DeliveryFunction, type: ClickType, keyCode: Int) {
-        // TODO: UseCase를 통한 저장 로직 구현 필요
+        // TODO: UseCase를 통한 저장 로직 구현 필요 (인자 사용: $func, $type, $keyCode)
         stopRecording()
-        _uiState.update { 
-            it.copy(
-                mappingVersion = it.mappingVersion + 1
+        _uiState.update { state ->
+            state.copy(
+                mappingVersion = state.mappingVersion + 1
             )
         }
     }
 
     fun stopRecording() {
-        _uiState.update { 
-            it.copy(recordingFunction = null, recordingClickType = null)
+        _uiState.update { state ->
+            state.copy(recordingFunction = null, recordingClickType = null)
         }
     }
 
     fun updateMappingVersion() {
-        _uiState.update { it.copy(mappingVersion = it.mappingVersion + 1) }
+        _uiState.update { state -> state.copy(mappingVersion = state.mappingVersion + 1) }
     }
 
     override fun onCleared() {
