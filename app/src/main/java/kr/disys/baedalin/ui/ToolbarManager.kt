@@ -145,6 +145,7 @@ class ToolbarManager(
             setOnClickListener { 
                 isFolded = !isFolded
                 callbacks.onFold(isFolded)
+                setFolded(isFolded)
             }
         }
         
