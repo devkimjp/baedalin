@@ -3,7 +3,9 @@ package kr.disys.baedalin.service
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.graphics.Color
 import android.graphics.PixelFormat
+import android.graphics.drawable.GradientDrawable
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
@@ -11,6 +13,7 @@ import android.util.Log
 import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
+import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
@@ -40,6 +43,7 @@ class FloatingWidgetService : Service() {
     
     private lateinit var statusManager: StatusOverlayManager
     private lateinit var toolbarManager: ToolbarManager
+    private var screenBorderView: View? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -92,7 +96,6 @@ class FloatingWidgetService : Service() {
                 val keyName = intent.getStringExtra("key_name")
                 val label = intent.getStringExtra("label")
                 Toast.makeText(this, "$label -> $keyName 매핑 완료", Toast.LENGTH_SHORT).show()
-                // UI 갱신 로직이 필요한 경우 여기에 추가
             }
         }
     }
@@ -107,15 +110,23 @@ class FloatingWidgetService : Service() {
         }
         val color = Presets.getColor(presetName)
 
-        hidePresets()
+        overlayManager.getAllOverlayIds().forEach { id ->
+            if (id != "SYSTEM_SETTINGS") hideWidget(id)
+        }
         setPresetsVisibility(false)
 
         val sharedPrefs = getSharedPreferences("WidgetPositions", Context.MODE_PRIVATE)
+        val offsetX = ICON_SIZE / 2
+        val offsetY = ICON_SIZE / 2 + 40
 
         presetList.forEach { info ->
-            val savedX = sharedPrefs.getInt("${presetName}_${info.function.name}_x", info.x)
-            val savedY = sharedPrefs.getInt("${presetName}_${info.function.name}_y", info.y)
-            showWidget(info.function.name, info.icon, info.tooltip, savedX, savedY, color)
+            val savedX = sharedPrefs.getInt("${presetName}_${info.function.name}_x", -1)
+            val savedY = sharedPrefs.getInt("${presetName}_${info.function.name}_y", -1)
+            
+            val targetX = if (savedX != -1) savedX else info.x - offsetX
+            val targetY = if (savedY != -1) savedY else info.y - offsetY
+            
+            showWidget(info.function.name, info.icon, info.tooltip, targetX, targetY, color)
         }
     }
 
@@ -138,6 +149,14 @@ class FloatingWidgetService : Service() {
         val container = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
+            
+            addView(View(this@FloatingWidgetService).apply {
+                id = 10001
+                layoutParams = LinearLayout.LayoutParams(20, 20)
+                setBackgroundColor(Color.YELLOW)
+                visibility = if (_isMoveMode.value) View.VISIBLE else View.GONE
+            })
+
             addView(TextView(this@FloatingWidgetService).apply { text = tooltip })
             addView(OverlayFactory.createCircleIcon(this@FloatingWidgetService, icon, color, ICON_SIZE))
         }
@@ -182,17 +201,30 @@ class FloatingWidgetService : Service() {
                 override fun onToggleMoveMode() { 
                     val newMode = !_isMoveMode.value
                     _isMoveMode.value = newMode
+                    
+                    val toastMsg = if (newMode) {
+                        showScreenBorder()
+                        "위젯 위치 설정(드래그 가능 상태)"
+                    } else {
+                        hideScreenBorder()
+                        "위젯 위치 잠금(배달 앱 조작 가능)"
+                    }
+                    statusManager.showStatusOverlay(toastMsg, 2000)
+                    
                     updateToolbarState()
                     
-                    overlayManager.getAllOverlayIds().forEach { id ->
+                    val ids = overlayManager.getAllOverlayIds()
+                    ids.forEach { id ->
                         if (id != "SYSTEM_SETTINGS") {
                             val view = overlayManager.getOverlayView(id)
                             val p = view?.layoutParams as? WindowManager.LayoutParams
                             if (p != null) {
                                 if (newMode) {
                                     p.flags = p.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE.inv()
+                                    view?.findViewById<View>(10001)?.visibility = View.VISIBLE
                                 } else {
                                     p.flags = p.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+                                    view?.findViewById<View>(10001)?.visibility = View.GONE
                                 }
                                 overlayManager.updateOverlay(id, p)
                             }
@@ -225,16 +257,74 @@ class FloatingWidgetService : Service() {
             } catch (e: Exception) {
                 Log.e("KeyMapper", "Failed to update toolbar state", e)
             }
-        } else {
-            Log.d("KeyMapper", "toolbarManager not initialized yet, skipping updateToolbarState")
         }
     }
 
     private fun hideWidget(id: String) = overlayManager.hideOverlay(id)
 
-    private fun hidePresets() {
-        // 프리셋 위젯만 필터링하여 제거하는 로직 필요
-        // 현재는 단순화를 위해 생략하거나 overlayManager 확장 필요
+    private fun showScreenBorder() {
+        if (screenBorderView != null) return
+
+        val wm = getSystemService(Context.WINDOW_SERVICE) as WindowManager
+        val params = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or 
+            WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+            WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+            PixelFormat.TRANSLUCENT
+        )
+
+        val frameLayout = FrameLayout(this).apply {
+            val border = GradientDrawable().apply {
+                setStroke(15, Color.YELLOW)
+                setColor(Color.TRANSPARENT)
+            }
+            foreground = border
+            
+            val textView = TextView(this.context).apply {
+                text = "위젯 위치 설정 모드 활성\n\n위젯을 드래그하여 배치하세요\n설정 완료 후 다시 자물쇠를 누르세요"
+                setTextColor(Color.YELLOW)
+                textSize = 16f
+                gravity = Gravity.CENTER
+                setBackgroundColor(Color.argb(160, 0, 0, 0))
+                setPadding(40, 30, 40, 30)
+                android.graphics.Typeface.DEFAULT_BOLD.also { typeface = it }
+                setShadowLayer(8f, 0f, 0f, Color.BLACK)
+            }
+            
+            val lp = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                Gravity.TOP or Gravity.CENTER_HORIZONTAL
+            )
+            lp.topMargin = 40
+            addView(textView, lp)
+        }
+        screenBorderView = frameLayout
+
+        try {
+            wm.addView(screenBorderView, params)
+        } catch (e: Exception) {
+            Log.e("KeyMapper", "Failed to add screen border", e)
+        }
+    }
+
+    private fun hideScreenBorder() {
+        val wm = getSystemService(Context.WINDOW_SERVICE) as WindowManager
+        screenBorderView?.let {
+            try {
+                if (it.parent != null) {
+                    wm.removeViewImmediate(it)
+                }
+            } catch (e: Exception) {
+                Log.e("KeyMapper", "Failed to remove screen border", e)
+            } finally {
+                screenBorderView = null
+            }
+        }
     }
 
     private fun setPresetsVisibility(hidden: Boolean) {
@@ -243,6 +333,7 @@ class FloatingWidgetService : Service() {
     }
 
     private fun hideAll() {
+        hideScreenBorder()
         overlayManager.hideAll()
         _isRunning.value = false
         stopSelf()
@@ -250,6 +341,7 @@ class FloatingWidgetService : Service() {
 
     override fun onDestroy() {
         instance = null
+        hideScreenBorder()
         statusManager.cleanup()
         overlayManager.hideAll()
         _isRunning.value = false
