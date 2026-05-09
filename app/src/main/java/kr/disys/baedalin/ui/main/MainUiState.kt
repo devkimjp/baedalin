@@ -29,7 +29,11 @@ data class MainUiState(
     val conflictFunction: DeliveryFunction? = null,
     val pendingKeyCode: Int? = null,
     
-    val mappingVersion: Int = 0
+    val mappingVersion: Int = 0,
+    
+    // Wizard States
+    val showMappingWizard: Boolean = false,
+    val currentWizardFunction: DeliveryFunction? = null
 )
 
 data class InputDeviceInfo(

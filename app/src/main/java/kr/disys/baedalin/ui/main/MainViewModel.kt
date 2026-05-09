@@ -97,6 +97,53 @@ class MainViewModel @Inject constructor(
         
         val isMapping = prefs.getBoolean("is_mapping_enabled", false)
         _uiState.update { state -> state.copy(isMappingEnabled = isMapping) }
+        
+        checkMappings()
+    }
+
+    private fun checkMappings() {
+        val prefix = _uiState.value.selectedDeviceDescriptor ?: "GLOBAL"
+        val hasAnyMapping = DeliveryFunction.values().any { func ->
+            prefs.getInt("${prefix}_${func.name}_keycode", -1) != -1
+        }
+        
+        android.util.Log.d("MainViewModel", "checkMappings: prefix=$prefix, hasAnyMapping=$hasAnyMapping")
+        
+        if (!hasAnyMapping) {
+            _uiState.update { it.copy(showMappingWizard = true, currentWizardFunction = DeliveryFunction.values().first()) }
+        }
+    }
+
+    var showMappingWizard: Boolean
+        get() = _uiState.value.showMappingWizard
+        set(value) { _uiState.update { it.copy(showMappingWizard = value) } }
+
+    var currentWizardFunction: DeliveryFunction?
+        get() = _uiState.value.currentWizardFunction
+        set(value) { _uiState.update { it.copy(currentWizardFunction = value) } }
+
+    fun nextWizardStep() {
+        val current = _uiState.value.currentWizardFunction ?: return
+        val entries = DeliveryFunction.values()
+        val index = entries.indexOf(current)
+        if (index < entries.size - 1) {
+            _uiState.update { it.copy(currentWizardFunction = entries[index + 1]) }
+        } else {
+            _uiState.update { it.copy(showMappingWizard = false, currentWizardFunction = null) }
+        }
+    }
+
+    fun saveWizardMapping(keyCode: Int) {
+        val func = _uiState.value.currentWizardFunction ?: return
+        val prefix = _uiState.value.selectedDeviceDescriptor ?: "GLOBAL"
+        
+        prefs.edit(commit = true) {
+            putInt("${prefix}_${func.name}_keycode", keyCode)
+            putString("${prefix}_${func.name}_clicktype", ClickType.SINGLE.name)
+        }
+        
+        updateMappingVersion()
+        nextWizardStep()
     }
 
     private fun refreshDeviceList() {
@@ -156,13 +203,14 @@ class MainViewModel @Inject constructor(
     }
 
     fun executeSaveMapping(func: DeliveryFunction, type: ClickType, keyCode: Int) {
-        // TODO: UseCase를 통한 저장 로직 구현 필요 (인자 사용: $func, $type, $keyCode)
-        stopRecording()
-        _uiState.update { state ->
-            state.copy(
-                mappingVersion = state.mappingVersion + 1
-            )
+        val prefix = _uiState.value.selectedDeviceDescriptor ?: "GLOBAL"
+        prefs.edit(commit = true) {
+            putInt("${prefix}_${func.name}_keycode", keyCode)
+            putString("${prefix}_${func.name}_clicktype", type.name)
         }
+        
+        stopRecording()
+        updateMappingVersion()
     }
 
     fun stopRecording() {

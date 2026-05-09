@@ -118,6 +118,14 @@ class MainActivity : ComponentActivity() {
                                 }
                             )
                         }
+
+                        if (uiState.showMappingWizard && uiState.currentWizardFunction != null) {
+                            MappingWizard(
+                                currentFunction = uiState.currentWizardFunction!!,
+                                onDismiss = { viewModel.showMappingWizard = false },
+                                onSkip = { viewModel.nextWizardStep() }
+                            )
+                        }
                     }
                 }
             }
@@ -137,7 +145,7 @@ class MainActivity : ComponentActivity() {
 
         if (intent?.action == FloatingWidgetService.ACTION_START_RECORDING) {
             val funcName = intent.getStringExtra("function_name")
-            val function = DeliveryFunction.entries.find { it.name == funcName }
+            val function = DeliveryFunction.values().find { it.name == funcName }
             if (function != null) {
                 viewModel.startRecording(function, ClickType.SINGLE)
             }
@@ -153,7 +161,7 @@ class MainActivity : ComponentActivity() {
                 val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
                 val prefix = viewModel.selectedDeviceDescriptor ?: "GLOBAL"
                 
-                val conflict = DeliveryFunction.entries.find { 
+                val conflict = DeliveryFunction.values().find { 
                     prefs.getInt("${prefix}_${it.name}_keycode", -1) == keyCode 
                 }
 
@@ -185,11 +193,22 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
+        if (viewModel.showMappingWizard && viewModel.currentWizardFunction != null) {
+            event?.device?.let { device ->
+                viewModel.saveSelectedDevice(kr.disys.baedalin.ui.main.InputDeviceInfo(
+                    name = device.name,
+                    descriptor = device.descriptor,
+                    isConnected = true
+                ))
+            }
+            viewModel.saveWizardMapping(keyCode)
+            return true
+        }
         if (viewModel.recordingFunction != null && viewModel.recordingClickType != null) {
             val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
             val prefix = viewModel.selectedDeviceDescriptor ?: "GLOBAL"
             
-            val conflict = DeliveryFunction.entries.find { 
+            val conflict = DeliveryFunction.values().find { 
                 prefs.getInt("${prefix}_${it.name}_keycode", -1) == keyCode 
             }
 

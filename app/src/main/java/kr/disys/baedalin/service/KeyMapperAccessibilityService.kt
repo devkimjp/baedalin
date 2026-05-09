@@ -274,7 +274,7 @@ class KeyMapperAccessibilityService : AccessibilityService() {
                 kr.disys.baedalin.KeyRecordingState.recordingFunction = null // 매핑 완료 후 해제
                 
                 // 기능명으로 라벨 찾기 (사전 정의된 기능 또는 커스텀 위젯)
-                val function = DeliveryFunction.entries.find { it.name == funcName }
+                val function = DeliveryFunction.values().find { it.name == funcName }
                 val label = function?.label ?: "커스텀 $funcName"
                 
                 saveDirectMapping(funcName, keyCode)
@@ -325,24 +325,21 @@ class KeyMapperAccessibilityService : AccessibilityService() {
         Log.d("KeyMapper", "[DEBUG] onKeyEvent: keyCode=${event.keyCode}, action=${event.action}")
 
         val targetDescriptor = prefs.getString("selected_device_descriptor", null)
-        if (targetDescriptor == null) {
-            Log.d("KeyMapper", "[DEBUG] BYPASS: No target device selected.")
-            return false
-        }
-        
         val device = InputDevice.getDevice(event.deviceId)
-        if (device == null || device.descriptor != targetDescriptor) {
-            Log.d("KeyMapper", "[DEBUG] BYPASS: Device mismatch or null. target=$targetDescriptor")
-            return false
+        val deviceDescriptor = device?.descriptor ?: "UNKNOWN"
+        
+        val prefix = if (targetDescriptor != null && deviceDescriptor == targetDescriptor) {
+            targetDescriptor
+        } else {
+            "GLOBAL"
         }
         
         val keyCode = event.keyCode
         val action = event.action
-        val prefix = targetDescriptor ?: "GLOBAL"
         val isMapped = isKeyMapped(keyCode, prefix)
         
         if (!isMapped) {
-            Log.d("KeyMapper", "[DEBUG] BYPASS: Key $keyCode is NOT mapped for $prefix")
+            Log.d("KeyMapper", "[DEBUG] BYPASS: Key $keyCode is NOT mapped for prefix=$prefix (device=$deviceDescriptor, target=$targetDescriptor)")
             return false
         }
 
@@ -395,7 +392,7 @@ class KeyMapperAccessibilityService : AccessibilityService() {
     private fun isKeyMapped(keyCode: Int, prefix: String): Boolean {
         val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
         var found = false
-        DeliveryFunction.entries.forEach { function ->
+        DeliveryFunction.values().forEach { function ->
             val storedKey = prefs.getInt("${prefix}_${function.name}_keycode", -1)
             if (storedKey == keyCode) {
                 found = true
@@ -416,7 +413,7 @@ class KeyMapperAccessibilityService : AccessibilityService() {
         
         Log.d("KeyMapper", "handleAction: keyCode=$keyCode, clickType=$clickType, prefix=$prefix, activePreset=$activePreset")
         
-        val function = DeliveryFunction.entries.find { func ->
+        val function = DeliveryFunction.values().find { func ->
             val mappedKey = prefs.getInt("${prefix}_${func.name}_keycode", -1)
             val mappedClick = prefs.getString("${prefix}_${func.name}_clicktype", ClickType.SINGLE.name)
             mappedKey == keyCode && mappedClick == clickType.name

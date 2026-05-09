@@ -88,7 +88,24 @@ fun MainScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(title = { Text("달마링 키매퍼") })
+            TopAppBar(
+                title = { Text("달마링 키매퍼") },
+                actions = {
+                    IconButton(onClick = {
+                        // 서비스 중지 및 앱 종료
+                        if (uiState.isMappingEnabled) {
+                            viewModel.toggleService()
+                        }
+                        (context as? android.app.Activity)?.finish()
+                    }) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "종료",
+                            tint = MaterialTheme.colorScheme.error
+                        )
+                    }
+                }
+            )
         }
     ) { innerPadding ->
         Column(
