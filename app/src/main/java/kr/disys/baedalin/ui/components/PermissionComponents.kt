@@ -2,18 +2,20 @@ package kr.disys.baedalin.ui.components
 
 import android.content.Intent
 import android.provider.Settings
+import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -24,126 +26,177 @@ import androidx.core.net.toUri
 @Composable
 fun PermissionWizard(
     isAccessibilityEnabled: Boolean,
-    isOverlayEnabled: Boolean
+    isOverlayEnabled: Boolean,
+    onComplete: () -> Unit = {}
 ) {
+    var currentStep by remember { mutableStateOf(if (!isOverlayEnabled) 0 else 1) }
+    val totalSteps = 2
     val context = LocalContext.current
-    
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        Icon(
-            imageVector = Icons.Default.Settings,
-            contentDescription = null,
-            modifier = Modifier.size(80.dp),
-            tint = MaterialTheme.colorScheme.primary
-        )
-        
-        Spacer(modifier = Modifier.height(24.dp))
-        
-        Text(
-            text = "필수 권한 설정이 필요합니다",
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold,
-            textAlign = TextAlign.Center
-        )
-        
-        Spacer(modifier = Modifier.height(8.dp))
-        
-        Text(
-            text = "라이더님의 안전한 운행을 위해\n아래 두 가지 권한을 반드시 허용해주세요.",
-            style = MaterialTheme.typography.bodyLarge,
-            textAlign = TextAlign.Center,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        
-        Spacer(modifier = Modifier.height(40.dp))
-        
-        PermissionItem(
-            title = "다른 앱 위에 그리기",
-            description = "배달 앱 화면 위에 위젯을 띄우기 위해 필요합니다.",
-            isGranted = isOverlayEnabled,
-            onClick = {
-                val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, "package:${context.packageName}".toUri())
-                context.startActivity(intent)
-            }
-        )
-        
-        Spacer(modifier = Modifier.height(16.dp))
-        
-        PermissionItem(
-            title = "접근성 서비스 활성화",
-            description = "리모컨 신호를 터치 동작으로 변환하기 위해 필요합니다.\n[달마링 키매퍼 서비스]를 '사용'으로 설정해주세요.",
-            isGranted = isAccessibilityEnabled,
-            onClick = {
-                context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
-            }
-        )
-        
+
+    // 모든 권한이 허용되면 완료 호출
+    LaunchedEffect(isAccessibilityEnabled, isOverlayEnabled) {
         if (isAccessibilityEnabled && isOverlayEnabled) {
-            Spacer(modifier = Modifier.height(40.dp))
-            Button(
-                onClick = { /* Will recompose to MainScreen automatically */ },
-                modifier = Modifier.fillMaxWidth().height(56.dp)
+            onComplete()
+        }
+    }
+
+    Scaffold(
+        bottomBar = {
+            Box(modifier = Modifier.padding(24.dp).fillMaxWidth()) {
+                if (currentStep == 0 && isOverlayEnabled) {
+                    Button(
+                        onClick = { currentStep = 1 },
+                        modifier = Modifier.fillMaxWidth().height(56.dp),
+                        shape = RoundedCornerShape(16.dp)
+                    ) {
+                        Text("다음 단계로", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    }
+                } else if (currentStep == 1 && isAccessibilityEnabled) {
+                    Button(
+                        onClick = { onComplete() },
+                        modifier = Modifier.fillMaxWidth().height(56.dp),
+                        shape = RoundedCornerShape(16.dp)
+                    ) {
+                        Text("시작하기", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .padding(innerPadding)
+                .fillMaxSize()
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            // Step Indicator
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text("시작하기", fontSize = 18.sp)
+                repeat(totalSteps) { index ->
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(4.dp)
+                            .clip(CircleShape)
+                            .background(
+                                if (index <= currentStep) MaterialTheme.colorScheme.primary 
+                                else MaterialTheme.colorScheme.surfaceVariant
+                            )
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(32.dp))
+
+            AnimatedContent(
+                targetState = currentStep,
+                transitionSpec = {
+                    slideInHorizontally { it } + fadeIn() togetherWith slideOutHorizontally { -it } + fadeOut()
+                },
+                label = "stepAnimation"
+            ) { step ->
+                when (step) {
+                    0 -> PermissionStepContent(
+                        title = "다른 앱 위에 그리기",
+                        description = "배달 앱 화면 위에 조작 버튼(위젯)을 띄우기 위해 이 권한이 꼭 필요합니다.\n설정 화면에서 '달마링'을 찾아 활성화해주세요.",
+                        icon = Icons.Default.Layers,
+                        isGranted = isOverlayEnabled,
+                        onAction = {
+                            val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, "package:${context.packageName}".toUri())
+                            context.startActivity(intent)
+                        }
+                    )
+                    1 -> PermissionStepContent(
+                        title = "접근성 서비스 활성화",
+                        description = "리모컨 버튼 신호를 실제 터치 동작으로 연결하기 위한 핵심 권한입니다.\n[설치된 앱] → [달마링 키매퍼]를 '사용'으로 켜주세요.",
+                        icon = Icons.Default.TouchApp,
+                        isGranted = isAccessibilityEnabled,
+                        onAction = {
+                            context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                        }
+                    )
+                }
             }
         }
     }
 }
 
 @Composable
-fun PermissionItem(
+fun PermissionStepContent(
     title: String,
     description: String,
+    icon: ImageVector,
     isGranted: Boolean,
-    onClick: () -> Unit
+    onAction: () -> Unit
 ) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = if (isGranted) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f) 
-                             else MaterialTheme.colorScheme.surfaceVariant
-        ),
-        border = if (isGranted) null else androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.fillMaxWidth()
     ) {
-        Row(
-            modifier = Modifier
-                .padding(16.dp)
-                .fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
+        Surface(
+            modifier = Modifier.size(120.dp),
+            shape = CircleShape,
+            color = if (isGranted) Color(0xFFE8F5E9) else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
         ) {
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .background(
-                        if (isGranted) Color(0xFF4CAF50) else MaterialTheme.colorScheme.outline,
-                        CircleShape
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
+            Box(contentAlignment = Alignment.Center) {
                 Icon(
-                    imageVector = if (isGranted) Icons.Default.Check else Icons.Default.Warning,
+                    imageVector = if (isGranted) Icons.Default.CheckCircle else icon,
                     contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.size(24.dp)
+                    modifier = Modifier.size(64.dp),
+                    tint = if (isGranted) Color(0xFF4CAF50) else MaterialTheme.colorScheme.primary
                 )
             }
-            
-            Spacer(modifier = Modifier.width(16.dp))
-            
-            Column(modifier = Modifier.weight(1f)) {
-                Text(text = title, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                Text(text = description, fontSize = 12.sp, lineHeight = 16.sp)
+        }
+
+        Spacer(modifier = Modifier.height(32.dp))
+
+        Text(
+            text = title,
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Text(
+            text = description,
+            style = MaterialTheme.typography.bodyLarge,
+            textAlign = TextAlign.Center,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            lineHeight = 24.sp
+        )
+
+        Spacer(modifier = Modifier.height(48.dp))
+
+        if (!isGranted) {
+            Button(
+                onClick = onAction,
+                modifier = Modifier.fillMaxWidth().height(64.dp),
+                shape = RoundedCornerShape(16.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+            ) {
+                Icon(Icons.Default.Settings, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text("권한 설정하러 가기", fontSize = 16.sp)
             }
-            
-            if (!isGranted) {
-                Button(onClick = onClick, contentPadding = PaddingValues(horizontal = 12.dp)) {
-                    Text("설정", fontSize = 12.sp)
+        } else {
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                color = Color(0xFFE8F5E9)
+            ) {
+                Row(
+                    modifier = Modifier.padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Icon(Icons.Default.Check, contentDescription = null, tint = Color(0xFF4CAF50))
+                    Spacer(Modifier.width(8.dp))
+                    Text("설정이 완료되었습니다!", color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
                 }
             }
         }

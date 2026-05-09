@@ -12,38 +12,42 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Box
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.core.content.edit
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.core.content.edit
 import dagger.hilt.android.AndroidEntryPoint
 import kr.disys.baedalin.model.ClickType
 import kr.disys.baedalin.model.DeliveryFunction
 import kr.disys.baedalin.service.FloatingWidgetService
 import kr.disys.baedalin.service.KeyMapperAccessibilityService
-import kr.disys.baedalin.ui.main.MainViewModel
+import kr.disys.baedalin.ui.components.PermissionWizard
 import kr.disys.baedalin.ui.main.MainScreen
-import kr.disys.baedalin.ui.components.*
+import kr.disys.baedalin.ui.main.MainViewModel
 import kr.disys.baedalin.ui.theme.BaedalinTheme
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
-    
     private val viewModel: MainViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        
         enableEdgeToEdge()
         handleIntent(intent)
-        
+
         setContent {
             BaedalinTheme {
                 val uiState by viewModel.uiState.collectAsStateWithLifecycle()
                 val lifecycleOwner = LocalLifecycleOwner.current
+
                 DisposableEffect(lifecycleOwner) {
                     val observer = LifecycleEventObserver { _, event ->
                         if (event == Lifecycle.Event.ON_RESUME) {
@@ -66,35 +70,18 @@ class MainActivity : ComponentActivity() {
                 if (!uiState.isAccessibilityEnabled || !uiState.isOverlayEnabled) {
                     PermissionWizard(
                         isAccessibilityEnabled = uiState.isAccessibilityEnabled,
-                        isOverlayEnabled = uiState.isOverlayEnabled
+                        isOverlayEnabled = uiState.isOverlayEnabled,
+                        onComplete = {
+                            // 권한 허용 후 상태 즉시 갱신
+                            viewModel.isAccessibilityEnabled = isAccessibilityServiceEnabled(this@MainActivity, KeyMapperAccessibilityService::class.java)
+                            viewModel.isOverlayEnabled = Settings.canDrawOverlays(this@MainActivity)
+                        }
                     )
                 } else {
                     Box {
                         MainScreen(viewModel = viewModel)
                         
-                        if (uiState.showDevicePicker) {
-                            DevicePickerDialog(
-                                devices = uiState.inputDevices,
-                                selectedDescriptor = uiState.selectedDeviceDescriptor,
-                                onDismiss = { viewModel.showDevicePicker = false },
-                                onDeviceSelected = { device ->
-                                    viewModel.saveSelectedDevice(device)
-                                    viewModel.showDevicePicker = false
-                                }
-                            )
-                        }
-
-                        if (uiState.showAppPicker) {
-                            AppPickerDialog(
-                                onDismiss = { viewModel.showAppPicker = false },
-                                onAppSelected = { pkgName ->
-                                    saveCustomPackage(uiState.targetPresetForPicker!!, pkgName)
-                                    viewModel.showAppPicker = false
-                                    loadPreset(uiState.targetPresetForPicker!!)
-                                }
-                            )
-                        }
-
+                        // 중복 키 경고 다이얼로그 (위저드 외 상황 대비)
                         if (uiState.conflictFunction != null) {
                             AlertDialog(
                                 onDismissRequest = { 
@@ -149,20 +136,35 @@ class MainActivity : ComponentActivity() {
 
         if (intent?.action == "ACTION_KEY_RECORDED") {
             val keyCode = intent.getIntExtra("keycode", -1)
-            if (keyCode != -1 && viewModel.recordingFunction != null && viewModel.recordingClickType != null) {
-                val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
-                val prefix = viewModel.selectedDeviceDescriptor ?: "GLOBAL"
-                
-                val conflict = DeliveryFunction.entries.find { 
-                    prefs.getInt("${prefix}_${it.name}_keycode", -1) == keyCode 
-                }
+            handleKeyCodeInput(keyCode)
+        }
+    }
 
-                if (conflict != null && conflict != viewModel.recordingFunction) {
-                    viewModel.conflictFunction = conflict
-                    viewModel.pendingKeyCode = keyCode
-                } else {
-                    viewModel.executeSaveMapping(viewModel.recordingFunction!!, viewModel.recordingClickType!!, keyCode)
-                }
+    private fun handleKeyCodeInput(keyCode: Int) {
+        if (keyCode == -1) return
+        
+        val uiState = viewModel.uiState.value
+        
+        // 1. 매핑 위저드 중인 경우
+        if (uiState.isMappingWizardActive) {
+            viewModel.pendingKeyCode = keyCode
+            return
+        }
+
+        // 2. 개별 녹화 중인 경우
+        if (viewModel.recordingFunction != null && viewModel.recordingClickType != null) {
+            val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
+            val prefix = viewModel.selectedDeviceDescriptor ?: "GLOBAL"
+            
+            val conflict = DeliveryFunction.entries.find { 
+                prefs.getInt("${prefix}_${it.name}_keycode", -1) == keyCode 
+            }
+
+            if (conflict != null && conflict != viewModel.recordingFunction) {
+                viewModel.conflictFunction = conflict
+                viewModel.pendingKeyCode = keyCode
+            } else {
+                viewModel.executeSaveMapping(viewModel.recordingFunction!!, viewModel.recordingClickType!!, keyCode)
             }
         }
     }
@@ -179,27 +181,15 @@ class MainActivity : ComponentActivity() {
         viewModel.updateMappingVersion()
     }
 
-    private fun saveCustomPackage(preset: String, pkgName: String) {
-        val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
-        prefs.edit { putString("${preset}_custom_pkg", pkgName) }
-    }
-
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
-        if (viewModel.recordingFunction != null && viewModel.recordingClickType != null) {
-            val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
-            val prefix = viewModel.selectedDeviceDescriptor ?: "GLOBAL"
-            
-            val conflict = DeliveryFunction.entries.find { 
-                prefs.getInt("${prefix}_${it.name}_keycode", -1) == keyCode 
-            }
+        // 볼륨 키 등 시스템 키 제외하고 가로채기
+        if (keyCode == KeyEvent.KEYCODE_VOLUME_UP || keyCode == KeyEvent.KEYCODE_VOLUME_DOWN) {
+            return super.onKeyDown(keyCode, event)
+        }
 
-            if (conflict != null && conflict != viewModel.recordingFunction) {
-                viewModel.conflictFunction = conflict
-                viewModel.pendingKeyCode = keyCode
-                return true
-            }
-
-            viewModel.executeSaveMapping(viewModel.recordingFunction!!, viewModel.recordingClickType!!, keyCode)
+        if (viewModel.uiState.value.isMappingWizardActive || 
+            (viewModel.recordingFunction != null && viewModel.recordingClickType != null)) {
+            handleKeyCodeInput(keyCode)
             return true
         }
         return super.onKeyDown(keyCode, event)

@@ -156,13 +156,28 @@ class MainViewModel @Inject constructor(
     }
 
     fun executeSaveMapping(func: DeliveryFunction, type: ClickType, keyCode: Int) {
-        // TODO: UseCase를 통한 저장 로직 구현 필요 (인자 사용: $func, $type, $keyCode)
+        val prefix = selectedDeviceDescriptor ?: "GLOBAL"
+        prefs.edit(commit = true) {
+            putInt("${prefix}_${func.name}_keycode", keyCode)
+            putString("${prefix}_${func.name}_clicktype", type.name)
+            putBoolean("is_recording", false)
+        }
+        
         stopRecording()
+        closeMappingWizard()
         _uiState.update { state ->
             state.copy(
                 mappingVersion = state.mappingVersion + 1
             )
         }
+    }
+
+    fun openMappingWizard() {
+        _uiState.update { it.copy(isMappingWizardActive = true) }
+    }
+
+    fun closeMappingWizard() {
+        _uiState.update { it.copy(isMappingWizardActive = false, pendingKeyCode = null) }
     }
 
     fun stopRecording() {
