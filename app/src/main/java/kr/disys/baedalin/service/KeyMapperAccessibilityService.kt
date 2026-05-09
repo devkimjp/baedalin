@@ -460,7 +460,7 @@ class KeyMapperAccessibilityService : AccessibilityService() {
                     
                     if (x != -1f && y != -1f) {
                         val tapX = x + 50f
-                        val tapY = y + 90f
+                        val tapY = y + 100f // 90f에서 100f로 상향 (인디케이터+툴팁 높이 반영)
                         Log.d("KeyMapper", "PERFORMING ACTION: ${function.name} at ($tapX, $tapY)")
                         gestureManager.performTap(tapX, tapY)
                         return true

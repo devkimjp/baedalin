@@ -191,7 +191,7 @@ class FloatingWidgetService : Service() {
         val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
         val sharedPrefs = getSharedPreferences("WidgetPositions", Context.MODE_PRIVATE)
         val offsetX = ICON_SIZE / 2
-        val offsetY = ICON_SIZE / 2 + 40
+        val offsetY = ICON_SIZE / 2 + 50 // 인디케이터(20) + 툴팁(약 30) 고려하여 40에서 50으로 상향
         val prefix = prefs.getString("selected_device_descriptor", "GLOBAL") ?: "GLOBAL"
         presetList.forEach { info ->
             val savedX = sharedPrefs.getInt("${presetName}_${info.function.name}_x", -1)
@@ -221,7 +221,7 @@ class FloatingWidgetService : Service() {
             (if (_isMoveMode.value) 0 else WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE),
             PixelFormat.TRANSLUCENT
         ).apply {
-            gravity = Gravity.TOP or Gravity.START
+            gravity = Gravity.TOP or Gravity.LEFT
             
             val sharedPrefs = getSharedPreferences("WidgetPositions", Context.MODE_PRIVATE)
             val savedX = sharedPrefs.getInt("${currentPreset}_${functionName}_x", -1)
@@ -248,7 +248,7 @@ class FloatingWidgetService : Service() {
                 id = 10001
                 layoutParams = LinearLayout.LayoutParams(20, 20)
                 setBackgroundColor(Color.YELLOW)
-                visibility = if (_isMoveMode.value) View.VISIBLE else View.GONE
+                visibility = if (_isMoveMode.value) View.VISIBLE else View.INVISIBLE
             })
 
             addView(TextView(this@FloatingWidgetService).apply { 
@@ -344,8 +344,9 @@ class FloatingWidgetService : Service() {
                                     view?.findViewById<View>(10001)?.visibility = View.VISIBLE
                                 } else {
                                     p.flags = p.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
-                                    view?.findViewById<View>(10001)?.visibility = View.GONE
+                                    view?.findViewById<View>(10001)?.visibility = View.INVISIBLE
                                 }
+                                p.gravity = Gravity.TOP or Gravity.LEFT
                                 overlayManager.updateOverlay(id, p)
                             }
                         }
