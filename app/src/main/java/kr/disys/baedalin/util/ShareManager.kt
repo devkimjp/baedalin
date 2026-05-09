@@ -29,6 +29,7 @@ object ShareManager {
         val customWidgets = mutableListOf<CustomWidgetInfo>()
         
         val presets = listOf("BAEMIN", "COUPANG", "YOGIYO")
+        val widgetPrefs = context.getSharedPreferences("WidgetPositions", Context.MODE_PRIVATE)
         
         presets.forEach { preset ->
             // 1. 기본 위젯 좌표 수집
@@ -40,8 +41,8 @@ object ShareManager {
             }
             
             presetList.forEach { info ->
-                val x = prefs.getInt("${preset}_${info.function.name}_x", -1)
-                val y = prefs.getInt("${preset}_${info.function.name}_y", -1)
+                val x = widgetPrefs.getInt("${preset}_${info.function.name}_x", -1)
+                val y = widgetPrefs.getInt("${preset}_${info.function.name}_y", -1)
                 if (x != -1 && y != -1) {
                     coordinates.add(CoordinateEntry(preset, info.function.name, x, y))
                 }
@@ -60,8 +61,8 @@ object ShareManager {
                 // 개별 커스텀 위젯 좌표 수집
                 activeWidgets.split(",").filter { it.isNotBlank() }.forEach { label ->
                     val funcName = "${preset}_CUSTOM_$label"
-                    val cx = prefs.getInt("${preset}_${funcName}_x", -1)
-                    val cy = prefs.getInt("${preset}_${funcName}_y", -1)
+                    val cx = widgetPrefs.getInt("${preset}_${funcName}_x", -1)
+                    val cy = widgetPrefs.getInt("${preset}_${funcName}_y", -1)
                     if (cx != -1 && cy != -1) {
                         coordinates.add(CoordinateEntry(preset, funcName, cx, cy))
                     }
@@ -118,20 +119,24 @@ object ShareManager {
             val json = String(Base64.decode(base64Code, Base64.NO_WRAP))
             val config = ShareConfig.fromJSONString(json)
             
+            val widgetPrefs = context.getSharedPreferences("WidgetPositions", Context.MODE_PRIVATE)
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            prefs.edit {
-                // 1. 좌표 적용
-                config.coordinates.forEach { entry ->
-                    putInt("${entry.preset}_${entry.function}_x", entry.x)
-                    putInt("${entry.preset}_${entry.function}_y", entry.y)
-                }
-                
-                // 2. 커스텀 위젯 정보 적용
+            
+            prefs.edit(commit = true) {
+                // 1. 커스텀 위젯 정보 적용
                 config.customWidgets.forEach { custom ->
                     putString("${custom.preset}_active_custom_widgets", custom.activeWidgets)
                     putInt("${custom.preset}_custom_counter", custom.counter)
                     putInt("${custom.preset}_last_added_x", custom.lastX)
                     putInt("${custom.preset}_last_added_y", custom.lastY)
+                }
+            }
+
+            widgetPrefs.edit(commit = true) {
+                // 2. 좌표 적용
+                config.coordinates.forEach { entry ->
+                    putInt("${entry.preset}_${entry.function}_x", entry.x)
+                    putInt("${entry.preset}_${entry.function}_y", entry.y)
                 }
             }
             config

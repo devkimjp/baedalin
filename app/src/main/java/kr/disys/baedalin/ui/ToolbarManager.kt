@@ -18,7 +18,9 @@ import kr.disys.baedalin.util.OverlayFactory
 class ToolbarManager(
     private val context: Context,
     private val windowManager: WindowManager,
-    private val callbacks: ToolbarCallbacks
+    private val callbacks: ToolbarCallbacks,
+    private val onOpenSettings: () -> Unit,
+    private val isNightMode: () -> Boolean
 ) {
     interface ToolbarCallbacks {
         fun onAddWidget()
@@ -37,6 +39,7 @@ class ToolbarManager(
     
     private var btnFoldView: ImageView? = null
     private var btnMoveView: ImageView? = null
+    private lateinit var settingsIcon: ImageView
     var currentParams: WindowManager.LayoutParams? = null
         private set
 
@@ -67,10 +70,14 @@ class ToolbarManager(
             background = GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE
                 cornerRadius = 75f
-                // 프리미엄 다크 슬레이트 컬러 (반투명)
-                setColor(Color.parseColor("#F21E293B")) 
-                // 세련된 인디고 블루 테두리
-                setStroke(4, Color.parseColor("#6366F1"))
+                val night = isNightMode()
+                if (night) {
+                    setColor(Color.parseColor("#F21E293B")) 
+                    setStroke(4, Color.parseColor("#6366F1"))
+                } else {
+                    setColor(Color.parseColor("#F2FFFFFF"))
+                    setStroke(4, Color.parseColor("#CBD5E1"))
+                }
             }
             elevation = 20f
             this.alpha = alpha
@@ -82,6 +89,25 @@ class ToolbarManager(
 
         windowManager.addView(container, params)
         setFolded(folded)
+    }
+
+    fun updateTheme(isNightMode: Boolean) {
+        val container = root as? LinearLayout ?: return
+        container.background = GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = 75f
+            if (isNightMode) {
+                setColor(Color.parseColor("#F21E293B"))
+                setStroke(4, Color.parseColor("#6366F1"))
+            } else {
+                setColor(Color.parseColor("#F2FFFFFF"))
+                setStroke(4, Color.parseColor("#CBD5E1"))
+            }
+        }
+
+        val iconColor = if (isNightMode) Color.WHITE else Color.parseColor("#1E293B")
+        btnFoldView?.setColorFilter(iconColor)
+        settingsIcon.setColorFilter(iconColor)
     }
 
     private fun setupTouchListener(params: WindowManager.LayoutParams): View.OnTouchListener {
@@ -140,7 +166,7 @@ class ToolbarManager(
         container.setOnTouchListener(touchListener)
         
         btnFoldView = OverlayFactory.createToolbarIcon(context, R.drawable.ic_toolbar_fold, 100).apply {
-            setColorFilter(Color.WHITE) // 화이트 틴트 적용
+            setColorFilter(if (isNightMode()) Color.WHITE else Color.parseColor("#1E293B"))
             setOnTouchListener(touchListener)
             setOnClickListener { 
                 isFolded = !isFolded
@@ -150,33 +176,51 @@ class ToolbarManager(
         }
         
         btnMoveView = OverlayFactory.createToolbarIcon(context, R.drawable.ic_toolbar_lock_v7, 100).apply {
-            setColorFilter(Color.parseColor("#EF4444")) // 잠금(기본) 시 붉은색
+            setColorFilter(Color.parseColor("#EF4444"))
             setOnTouchListener(touchListener)
             setOnClickListener { callbacks.onToggleMoveMode() }
         }
+
+        val btnAdd = OverlayFactory.createToolbarIcon(context, R.drawable.ic_toolbar_add, 100).apply {
+            setColorFilter(if (isNightMode()) Color.WHITE else Color.parseColor("#1E293B"))
+            setOnTouchListener(touchListener)
+            setOnClickListener { callbacks.onAddWidget() }
+        }
+        
+        settingsIcon = OverlayFactory.createToolbarIcon(context, R.drawable.ic_toolbar_settings, 100).apply {
+            setColorFilter(if (isNightMode()) Color.WHITE else Color.parseColor("#1E293B"))
+            setOnTouchListener(touchListener)
+            setOnClickListener { onOpenSettings() }
+        }
         
         val btnBaemin = OverlayFactory.createToolbarIcon(context, R.drawable.ic_toolbar_baemin, 100).apply {
-            // 앱 고유 컬러 유지를 위해 틴트 미적용
             setOnTouchListener(touchListener)
             setOnClickListener { callbacks.onLaunchApp("BAEMIN") }
         }
         
         val btnCoupang = OverlayFactory.createToolbarIcon(context, R.drawable.ic_toolbar_coupang, 100).apply {
-            // 앱 고유 컬러 유지를 위해 틴트 미적용
             setOnTouchListener(touchListener)
             setOnClickListener { callbacks.onLaunchApp("COUPANG") }
         }
+
+        val btnYogiyo = OverlayFactory.createToolbarIcon(context, R.drawable.ic_yogiyo, 100).apply {
+            setOnTouchListener(touchListener)
+            setOnClickListener { callbacks.onLaunchApp("YOGIYO") }
+        }
         
         val btnClose = OverlayFactory.createToolbarIcon(context, R.drawable.ic_toolbar_power, 100).apply {
-            setColorFilter(Color.parseColor("#EF4444")) // 전원 버튼 붉은색
+            setColorFilter(Color.parseColor("#EF4444"))
             setOnTouchListener(touchListener)
             setOnClickListener { callbacks.onPowerOff() }
         }
 
         container.addView(btnFoldView)
         container.addView(btnMoveView)
+        container.addView(btnAdd)
+        container.addView(settingsIcon)
         container.addView(btnBaemin)
         container.addView(btnCoupang)
+        container.addView(btnYogiyo)
         container.addView(btnClose)
     }
 
@@ -185,14 +229,11 @@ class ToolbarManager(
         isFolded = folded
         val params = currentParams ?: return
         
-        // 1. 가시성 변경
         for (i in 1 until currentRoot.childCount) {
             currentRoot.getChildAt(i).visibility = if (folded) View.GONE else View.VISIBLE
         }
         btnFoldView?.setImageResource(if (folded) R.drawable.ic_toolbar_unfold else R.drawable.ic_toolbar_fold)
         
-        // 2. 윈도우 재등록 (위치 캐시 파기)
-        // 뷰를 제거했다가 즉시 다시 추가함으로써 이전 위치 정보가 남지 않도록 합니다.
         try {
             if (currentRoot.parent != null) {
                 windowManager.removeViewImmediate(currentRoot)
@@ -200,7 +241,6 @@ class ToolbarManager(
             windowManager.addView(currentRoot, params)
         } catch (e: Exception) {
             Log.e("KeyMapper", "Failed to refresh window in setFolded", e)
-            // 실패 시 최후의 수단으로 일반 업데이트 시도
             try { windowManager.updateViewLayout(currentRoot, params) } catch (e2: Exception) {}
         }
     }
@@ -213,10 +253,10 @@ class ToolbarManager(
         btnMoveView?.apply {
             if (isMoveMode) {
                 setImageResource(R.drawable.ic_toolbar_unlock_v7)
-                setColorFilter(Color.parseColor("#84CC16")) // 안전한 연두색 (Lime Green)
+                setColorFilter(Color.parseColor("#84CC16"))
             } else {
                 setImageResource(R.drawable.ic_toolbar_lock_v7)
-                setColorFilter(Color.parseColor("#EF4444")) // 잠김 시 붉은색
+                setColorFilter(Color.parseColor("#EF4444"))
             }
         }
     }

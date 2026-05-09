@@ -19,9 +19,13 @@ class StatusOverlayManager(private val context: Context) {
     private var statusTextView: TextView? = null
     private val statusHandler = Handler(Looper.getMainLooper())
     private val hideStatusRunnable = Runnable { hideStatusOverlay() }
+    private var isNightMode = true
     
     private var currentStatusPriority = 0 
-    private var statusGeneration = 0 
+    
+    fun updateTheme(isNight: Boolean) {
+        isNightMode = isNight
+    }    private var statusGeneration = 0 
     private var lastMessageContent: String? = null
     private var lastMessageTimestamp = 0L
 
@@ -47,9 +51,14 @@ class StatusOverlayManager(private val context: Context) {
         if (statusOverlayView == null) {
             val container = FrameLayout(context).apply {
                 background = GradientDrawable().apply {
-                    setColor(0xEE000000.toInt())
+                    if (isNightMode) {
+                        setColor(0xEE1E293B.toInt()) // 다크 슬레이트
+                        setStroke(4, Color.parseColor("#FBBF24")) // 앰버/골드
+                    } else {
+                        setColor(0xEEFFFFFF.toInt()) // 화이트
+                        setStroke(4, Color.parseColor("#6366F1")) // 인디고
+                    }
                     cornerRadius = 60f
-                    setStroke(4, Color.parseColor("#FFD700"))
                 }
                 setPadding(80, 50, 80, 50)
                 elevation = 20f
@@ -57,7 +66,7 @@ class StatusOverlayManager(private val context: Context) {
             
             statusTextView = TextView(context).apply {
                 text = message
-                setTextColor(Color.WHITE)
+                setTextColor(if (isNightMode) Color.WHITE else Color.parseColor("#1E293B"))
                 textSize = 20f
                 gravity = Gravity.CENTER
                 setLineSpacing(0f, 1.2f)

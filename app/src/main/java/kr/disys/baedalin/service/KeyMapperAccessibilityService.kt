@@ -239,8 +239,15 @@ class KeyMapperAccessibilityService : AccessibilityService() {
         when (action) {
             "ACTION_UI_SNAPSHOT" -> captureUISnapshot()
             "ACTION_START_DIRECT_RECORDING" -> {
-                kr.disys.baedalin.KeyRecordingState.recordingFunction = intent.getStringExtra("function_name")
-                Log.d("KeyMapper", "!!! STARTED DIRECT RECORDING via START_SERVICE for: ${kr.disys.baedalin.KeyRecordingState.recordingFunction} !!!")
+                val funcName = intent.getStringExtra("function_name")
+                kr.disys.baedalin.KeyRecordingState.recordingFunction = funcName
+                Log.d("KeyMapper", "!!! STARTED DIRECT RECORDING for: $funcName !!!")
+                Toast.makeText(this, "매핑 대기 중: ${funcName ?: "알 수 없음"}", Toast.LENGTH_SHORT).show()
+                updateKeyFilterState()
+            }
+            "ACTION_CANCEL_DIRECT_RECORDING" -> {
+                Log.d("KeyMapper", "!!! CANCELLED DIRECT RECORDING !!!")
+                kr.disys.baedalin.KeyRecordingState.recordingFunction = null
                 updateKeyFilterState()
             }
         }
@@ -268,10 +275,13 @@ class KeyMapperAccessibilityService : AccessibilityService() {
         // 1. 레코딩 모드 처리 (최우선)
         val directRecordingFunction = kr.disys.baedalin.KeyRecordingState.recordingFunction
         if (directRecordingFunction != null) {
+            Log.d("KeyMapper", "[RECORDING] Key Event detected: code=${event.keyCode}, action=${event.action}")
             if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
                 val keyCode = event.keyCode
                 val funcName = directRecordingFunction
-                kr.disys.baedalin.KeyRecordingState.recordingFunction = null // 매핑 완료 후 해제
+                kr.disys.baedalin.KeyRecordingState.recordingFunction = null // 매핑 완료 후 즉시 해제
+                
+                Log.d("KeyMapper", "[RECORDING] Mapping captured: $funcName -> $keyCode")
                 
                 // 기능명으로 라벨 찾기 (사전 정의된 기능 또는 커스텀 위젯)
                 val function = DeliveryFunction.entries.find { it.name == funcName }
@@ -279,8 +289,10 @@ class KeyMapperAccessibilityService : AccessibilityService() {
                 
                 saveDirectMapping(funcName, keyCode)
                 playSuccessSound()
+                updateKeyFilterState() // 필터 상태 즉시 업데이트
                 
                 val keyName = KeyEvent.keyCodeToString(keyCode).replace("KEYCODE_", "")
+                Toast.makeText(this, "[$label] 매핑 완료: $keyName", Toast.LENGTH_SHORT).show()
                 
                 // FloatingWidgetService에 UI 갱신 및 메시지 표시 알림
                 val updateIntent = Intent(this, FloatingWidgetService::class.java).apply {

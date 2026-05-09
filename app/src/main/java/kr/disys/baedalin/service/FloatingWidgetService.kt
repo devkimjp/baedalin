@@ -27,6 +27,7 @@ import kr.disys.baedalin.ui.ToolbarManager
 import kr.disys.baedalin.ui.WidgetTouchHandler
 import kr.disys.baedalin.ui.overlay.OverlayManager
 import kr.disys.baedalin.util.OverlayFactory
+import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import javax.inject.Inject
@@ -48,6 +49,8 @@ class FloatingWidgetService : Service() {
     // 커스텀 위젯 관리를 위한 상태 변수
     private var lastAddedX = 200
     private var lastAddedY = 250
+
+    private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
     private fun addNumberedWidget() {
         val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
@@ -123,6 +126,9 @@ class FloatingWidgetService : Service() {
         instance = this
         statusManager = StatusOverlayManager(this)
         _isRunning.value = true
+        
+        val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
+        _isNightMode.value = prefs.getBoolean("is_night_mode", false)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -170,6 +176,26 @@ class FloatingWidgetService : Service() {
                 statusManager.showStatusOverlay("[$label] 매핑되었습니다.\n$keyName", 3000)
                 loadPresetInternal(currentPreset)
             }
+            "ACTION_TOGGLE_THEME" -> {
+                val newMode = !_isNightMode.value
+                _isNightMode.value = newMode
+                val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
+                prefs.edit { putBoolean("is_night_mode", newMode) }
+                
+                if (::toolbarManager.isInitialized) toolbarManager.updateTheme(newMode)
+                statusManager.updateTheme(newMode)
+                
+                overlayManager.getAllOverlayIds().forEach { id ->
+                    if (id != "SYSTEM_SETTINGS") {
+                        val view = overlayManager.getOverlayView(id) as? LinearLayout
+                        val tooltipView = view?.findViewById<TextView>(10002)
+                        tooltipView?.apply {
+                            setTextColor(if (newMode) Color.LTGRAY else Color.WHITE)
+                            setBackgroundColor(if (newMode) 0xEE111111.toInt() else 0xCC000000.toInt())
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -191,7 +217,7 @@ class FloatingWidgetService : Service() {
         val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
         val sharedPrefs = getSharedPreferences("WidgetPositions", Context.MODE_PRIVATE)
         val offsetX = ICON_SIZE / 2
-        val offsetY = ICON_SIZE / 2 + 50 // 인디케이터(20) + 툴팁(약 30) 고려하여 40에서 50으로 상향
+        val offsetY = ICON_SIZE / 2 + 40
         val prefix = prefs.getString("selected_device_descriptor", "GLOBAL") ?: "GLOBAL"
         presetList.forEach { info ->
             val savedX = sharedPrefs.getInt("${presetName}_${info.function.name}_x", -1)
@@ -221,7 +247,7 @@ class FloatingWidgetService : Service() {
             (if (_isMoveMode.value) 0 else WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE),
             PixelFormat.TRANSLUCENT
         ).apply {
-            gravity = Gravity.TOP or Gravity.LEFT
+            gravity = Gravity.TOP or Gravity.START
             
             val sharedPrefs = getSharedPreferences("WidgetPositions", Context.MODE_PRIVATE)
             val savedX = sharedPrefs.getInt("${currentPreset}_${functionName}_x", -1)
@@ -248,13 +274,14 @@ class FloatingWidgetService : Service() {
                 id = 10001
                 layoutParams = LinearLayout.LayoutParams(20, 20)
                 setBackgroundColor(Color.YELLOW)
-                visibility = if (_isMoveMode.value) View.VISIBLE else View.INVISIBLE
+                visibility = if (_isMoveMode.value) View.VISIBLE else View.GONE
             })
 
             addView(TextView(this@FloatingWidgetService).apply { 
+                id = 10002
                 text = tooltip 
-                setTextColor(Color.WHITE)
-                setBackgroundColor(0xCC000000.toInt())
+                setTextColor(if (_isNightMode.value) Color.LTGRAY else Color.WHITE)
+                setBackgroundColor(if (_isNightMode.value) 0xEE111111.toInt() else 0xCC000000.toInt())
                 setPadding(8, 4, 8, 4)
                 textSize = 10f
             })
@@ -316,58 +343,68 @@ class FloatingWidgetService : Service() {
         if (overlayManager.isShowing(functionName)) return
 
         if (!::toolbarManager.isInitialized) {
-            toolbarManager = ToolbarManager(this, getSystemService(Context.WINDOW_SERVICE) as WindowManager, object : ToolbarManager.ToolbarCallbacks {
-                override fun onAddWidget() { addNumberedWidget() }
-                override fun onToggleMoveMode() { 
-                    val newMode = !_isMoveMode.value
-                    _isMoveMode.value = newMode
-                    
-                    val toastMsg = if (newMode) {
-                        showScreenBorder()
-                        "위젯 위치 설정(드래그 가능 상태)"
-                    } else {
-                        hideScreenBorder()
-                        "위젯 위치 잠금(배달 앱 조작 가능)"
-                    }
-                    statusManager.showStatusOverlay(toastMsg, 2000)
-                    
-                    updateToolbarState()
-                    
-                    val ids = overlayManager.getAllOverlayIds()
-                    ids.forEach { id ->
-                        if (id != "SYSTEM_SETTINGS") {
-                            val view = overlayManager.getOverlayView(id)
-                            val p = view?.layoutParams as? WindowManager.LayoutParams
-                            if (p != null) {
-                                if (newMode) {
-                                    p.flags = p.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE.inv()
-                                    view?.findViewById<View>(10001)?.visibility = View.VISIBLE
-                                } else {
-                                    p.flags = p.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
-                                    view?.findViewById<View>(10001)?.visibility = View.INVISIBLE
+            toolbarManager = ToolbarManager(
+                this, 
+                getSystemService(Context.WINDOW_SERVICE) as WindowManager, 
+                object : ToolbarManager.ToolbarCallbacks {
+                    override fun onAddWidget() { addNumberedWidget() }
+                    override fun onToggleMoveMode() { 
+                        val newMode = !_isMoveMode.value
+                        _isMoveMode.value = newMode
+                        
+                        val toastMsg = if (newMode) {
+                            showScreenBorder()
+                            "위젯 위치 설정(드래그 가능 상태)"
+                        } else {
+                            hideScreenBorder()
+                            "위젯 위치 잠금(배달 앱 조작 가능)"
+                        }
+                        statusManager.showStatusOverlay(toastMsg, 2000)
+                        
+                        updateToolbarState()
+                        
+                        val ids = overlayManager.getAllOverlayIds()
+                        ids.forEach { id ->
+                            if (id != "SYSTEM_SETTINGS") {
+                                val view = overlayManager.getOverlayView(id)
+                                val p = view?.layoutParams as? WindowManager.LayoutParams
+                                if (p != null) {
+                                    if (newMode) {
+                                        p.flags = p.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE.inv()
+                                        view?.findViewById<View>(10001)?.visibility = View.VISIBLE
+                                    } else {
+                                        p.flags = p.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+                                        view?.findViewById<View>(10001)?.visibility = View.GONE
+                                    }
+                                    overlayManager.updateOverlay(id, p)
                                 }
-                                p.gravity = Gravity.TOP or Gravity.LEFT
-                                overlayManager.updateOverlay(id, p)
                             }
                         }
                     }
-                }
-                override fun onTogglePresetsVisibility() { setPresetsVisibility(!isPresetsHidden) }
-                override fun onPowerOff() { hideAll() }
-                override fun onOpenMainActivity() {
+                    override fun onTogglePresetsVisibility() { setPresetsVisibility(!isPresetsHidden) }
+                    override fun onPowerOff() { hideAll() }
+                    override fun onOpenMainActivity() {
+                        val intent = Intent(this@FloatingWidgetService, MainActivity::class.java).apply {
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        startActivity(intent)
+                    }
+                    override fun onLaunchApp(name: String) { 
+                        val pkg = Presets.getPackageName(name)
+                        launchApp(pkg)
+                        loadPresetInternal(name) 
+                    }
+                    override fun onFold(folded: Boolean) { isToolbarFolded = folded }
+                    override fun onSavePosition(x: Int, y: Int) {}
+                },
+                onOpenSettings = {
                     val intent = Intent(this@FloatingWidgetService, MainActivity::class.java).apply {
                         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                     }
                     startActivity(intent)
-                }
-                override fun onLaunchApp(name: String) { 
-                    val pkg = Presets.getPackageName(name)
-                    launchApp(pkg)
-                    loadPresetInternal(name) 
-                }
-                override fun onFold(folded: Boolean) { isToolbarFolded = folded }
-                override fun onSavePosition(x: Int, y: Int) {}
-            })
+                },
+                isNightMode = { _isNightMode.value }
+            )
         }
         toolbarManager.showToolbar(800, 200, 1.0f, isToolbarFolded)
         toolbarManager.root?.let {
@@ -542,6 +579,7 @@ class FloatingWidgetService : Service() {
         statusManager.cleanup()
         overlayManager.hideAll()
         _isRunning.value = false
+        serviceScope.cancel()
         super.onDestroy()
     }
 
@@ -557,6 +595,9 @@ class FloatingWidgetService : Service() {
 
         private val _isMoveMode = MutableStateFlow(false)
         val isMoveMode: StateFlow<Boolean> = _isMoveMode
+
+        private val _isNightMode = MutableStateFlow(false)
+        val isNightMode: StateFlow<Boolean> = _isNightMode
 
         var instance: FloatingWidgetService? = null
 
