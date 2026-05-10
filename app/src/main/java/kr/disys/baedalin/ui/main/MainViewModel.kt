@@ -111,10 +111,11 @@ class MainViewModel @Inject constructor(
     }
 
     private fun refreshDeviceList() {
-        val devices = InputDevice.getDeviceIds().toList().mapNotNull { id ->
+        val currentDevices = InputDevice.getDeviceIds().toList().mapNotNull { id ->
             InputDevice.getDevice(id)
         }.filter { device ->
-            !device.isVirtual && (device.sources and InputDevice.SOURCE_KEYBOARD != 0)
+            // 필터링 완화: 가상 장치가 아니며, 키보드/D-PAD/게임패드 등 외부 입력 장치면 대상으로 고려
+            !device.isVirtual && (device.sources and (InputDevice.SOURCE_KEYBOARD or InputDevice.SOURCE_DPAD or InputDevice.SOURCE_GAMEPAD) != 0)
         }.map { device ->
             InputDeviceInfo(
                 name = device.name,
@@ -122,7 +123,44 @@ class MainViewModel @Inject constructor(
                 isConnected = true
             )
         }
-        _uiState.update { state -> state.copy(inputDevices = devices) }
+
+        val previousDevices = _uiState.value.inputDevices
+        _uiState.update { state -> state.copy(inputDevices = currentDevices) }
+
+        // 새로 추가된 장치가 있는지 확인
+        val newlyAdded = currentDevices.find { current -> 
+            previousDevices.none { prev -> prev.descriptor == current.descriptor }
+        }
+
+        val currentSelectedDescriptor = _uiState.value.selectedDeviceDescriptor
+        
+        // 1. 현재 선택된 장치가 여전히 연결되어 있는지 확인
+        val stillConnected = currentDevices.find { it.descriptor == currentSelectedDescriptor }
+        
+        if (stillConnected != null) {
+            // 연결 유지 중이면 이름 등 최신 정보만 갱신 (필요시)
+            _uiState.update { it.copy(selectedDeviceName = stillConnected.name) }
+        } else {
+            // 2. 선택된 장치가 없거나 끊겼다면, 새로 추가된 장치나 기존에 연결된 장치 중 하나를 자동 선택
+            val deviceToSelect = newlyAdded ?: currentDevices.firstOrNull()
+            
+            if (deviceToSelect != null) {
+                _uiState.update { state ->
+                    state.copy(
+                        selectedDeviceDescriptor = deviceToSelect.descriptor,
+                        selectedDeviceName = deviceToSelect.name
+                    )
+                }
+                prefs.edit {
+                    putString("selected_device_descriptor", deviceToSelect.descriptor)
+                }
+                
+                // 새로운 장치가 연결되어 자동 선택된 경우 토스트 알림
+                if (newlyAdded != null) {
+                    Toast.makeText(context, "${deviceToSelect.name} 장치가 연결되어 자동으로 선택되었습니다.", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
     }
 
     private fun observePresets() {

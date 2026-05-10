@@ -267,15 +267,13 @@ class KeyMapperAccessibilityService : AccessibilityService() {
         val isRecording = KeyRecordingState.isRecording || prefs.getBoolean("is_recording", false)
         val isInterceptionActive = FloatingWidgetService.isInterceptionActive.value
 
-        // 모든 키 이벤트 흐름 추적을 위해 최상단 로그 추가
-        if (event.action == KeyEvent.ACTION_DOWN) {
-            Log.d("KeyMapper", "[DEBUG] onKeyEvent IN: code=${event.keyCode}, enabled=$isMappingEnabled, active=$isInterceptionActive")
-        }
+        // 모든 키 이벤트(UP/DOWN 포함)를 디버깅을 위해 로그 기록 (scanCode 추가)
+        Log.d("KeyMapper", "[DEBUG] onKeyEvent: code=${event.keyCode}, scan=${event.scanCode}, action=${event.action}, deviceId=${event.deviceId}")
 
         // 1. 레코딩 모드 처리 (최우선)
         val directRecordingFunction = kr.disys.baedalin.KeyRecordingState.recordingFunction
         if (directRecordingFunction != null) {
-            Log.d("KeyMapper", "[RECORDING] Key Event detected: code=${event.keyCode}, action=${event.action}")
+            Log.d("KeyMapper", "[RECORDING] Intercepting for $directRecordingFunction: code=${event.keyCode}")
             if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
                 val keyCode = event.keyCode
                 val funcName = directRecordingFunction
@@ -330,21 +328,25 @@ class KeyMapperAccessibilityService : AccessibilityService() {
 
         // 3. 위젯이 숨겨진 상태(비활성 앱)면 바이패스
         if (!isInterceptionActive) {
-            Log.d("KeyMapper", "[DEBUG] BYPASS: isInterceptionActive is FALSE. keyCode=${event.keyCode}")
+            if (event.action == KeyEvent.ACTION_DOWN) {
+                Log.d("KeyMapper", "[DEBUG] BYPASS: isInterceptionActive is FALSE. keyCode=${event.keyCode}")
+            }
             return false
         }
 
-        Log.d("KeyMapper", "[DEBUG] onKeyEvent: keyCode=${event.keyCode}, action=${event.action}")
-
         val targetDescriptor = prefs.getString("selected_device_descriptor", null)
         if (targetDescriptor == null) {
-            Log.d("KeyMapper", "[DEBUG] BYPASS: No target device selected.")
+            if (event.action == KeyEvent.ACTION_DOWN) {
+                Log.d("KeyMapper", "[DEBUG] BYPASS: No target device selected.")
+            }
             return false
         }
         
         val device = InputDevice.getDevice(event.deviceId)
         if (device == null || device.descriptor != targetDescriptor) {
-            Log.d("KeyMapper", "[DEBUG] BYPASS: Device mismatch or null. target=$targetDescriptor")
+            if (event.action == KeyEvent.ACTION_DOWN) {
+                Log.d("KeyMapper", "[DEBUG] BYPASS: Device mismatch or null. target=$targetDescriptor")
+            }
             return false
         }
         
@@ -354,7 +356,9 @@ class KeyMapperAccessibilityService : AccessibilityService() {
         val isMapped = isKeyMapped(keyCode, prefix)
         
         if (!isMapped) {
-            Log.d("KeyMapper", "[DEBUG] BYPASS: Key $keyCode is NOT mapped for $prefix")
+            if (event.action == KeyEvent.ACTION_DOWN) {
+                Log.d("KeyMapper", "[DEBUG] BYPASS: Key $keyCode is NOT mapped for $prefix")
+            }
             return false
         }
 

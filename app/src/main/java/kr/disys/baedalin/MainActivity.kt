@@ -44,7 +44,8 @@ class MainActivity : ComponentActivity() {
         handleIntent(intent)
 
         setContent {
-            BaedalinTheme {
+            val isNight by FloatingWidgetService.isNightMode.collectAsStateWithLifecycle()
+            BaedalinTheme(darkTheme = isNight) {
                 val uiState by viewModel.uiState.collectAsStateWithLifecycle()
                 val lifecycleOwner = LocalLifecycleOwner.current
 
@@ -182,11 +183,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
-        // 볼륨 키 등 시스템 키 제외하고 가로채기
-        if (keyCode == KeyEvent.KEYCODE_VOLUME_UP || keyCode == KeyEvent.KEYCODE_VOLUME_DOWN) {
-            return super.onKeyDown(keyCode, event)
-        }
-
+        // 녹화 중일 때는 볼륨 키도 가로채서 매핑에 사용
         if (viewModel.uiState.value.isMappingWizardActive || 
             (viewModel.recordingFunction != null && viewModel.recordingClickType != null)) {
             handleKeyCodeInput(keyCode)
