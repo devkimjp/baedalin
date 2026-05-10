@@ -39,6 +39,7 @@ class ToolbarManager(
     
     private var btnFoldView: ImageView? = null
     private var btnMoveView: ImageView? = null
+    private var btnHomeView: ImageView? = null
     private lateinit var settingsIcon: ImageView
     var currentParams: WindowManager.LayoutParams? = null
         private set
@@ -107,6 +108,7 @@ class ToolbarManager(
 
         val iconColor = if (isNightMode) Color.WHITE else Color.parseColor("#1E293B")
         btnFoldView?.setColorFilter(iconColor)
+        btnHomeView?.setColorFilter(iconColor)
     }
 
     private fun setupTouchListener(params: WindowManager.LayoutParams): View.OnTouchListener {
@@ -164,6 +166,12 @@ class ToolbarManager(
         val container = root as? LinearLayout ?: return
         container.setOnTouchListener(touchListener)
         
+        btnHomeView = OverlayFactory.createToolbarIcon(context, R.drawable.ic_toolbar_home, 100).apply {
+            setColorFilter(if (isNightMode()) Color.WHITE else Color.parseColor("#1E293B"))
+            setOnTouchListener(touchListener)
+            setOnClickListener { callbacks.onOpenMainActivity() }
+        }
+
         btnFoldView = OverlayFactory.createToolbarIcon(context, R.drawable.ic_toolbar_fold, 100).apply {
             setColorFilter(if (isNightMode()) Color.WHITE else Color.parseColor("#1E293B"))
             setOnTouchListener(touchListener)
@@ -204,10 +212,6 @@ class ToolbarManager(
             setOnClickListener { callbacks.onLaunchApp("COUPANG") }
         }
 
-        val btnYogiyo = OverlayFactory.createToolbarIcon(context, R.drawable.ic_yogiyo, 100).apply {
-            setOnTouchListener(touchListener)
-            setOnClickListener { callbacks.onLaunchApp("YOGIYO") }
-        }
         
         val btnClose = OverlayFactory.createToolbarIcon(context, R.drawable.ic_toolbar_power, 100).apply {
             setColorFilter(Color.parseColor("#EF4444"))
@@ -215,13 +219,13 @@ class ToolbarManager(
             setOnClickListener { callbacks.onPowerOff() }
         }
 
+        container.addView(btnHomeView)
         container.addView(btnFoldView)
         container.addView(btnMoveView)
         // container.addView(btnAdd)
         // container.addView(settingsIcon)
         container.addView(btnBaemin)
         container.addView(btnCoupang)
-        container.addView(btnYogiyo)
         container.addView(btnClose)
     }
 
@@ -230,7 +234,8 @@ class ToolbarManager(
         isFolded = folded
         val params = currentParams ?: return
         
-        for (i in 1 until currentRoot.childCount) {
+        // 인덱스 0(홈)과 1(접기)은 항상 유지하고, 2번부터 숨김/표시 처리
+        for (i in 2 until currentRoot.childCount) {
             currentRoot.getChildAt(i).visibility = if (folded) View.GONE else View.VISIBLE
         }
         btnFoldView?.setImageResource(if (folded) R.drawable.ic_toolbar_unfold else R.drawable.ic_toolbar_fold)

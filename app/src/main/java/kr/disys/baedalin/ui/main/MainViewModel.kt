@@ -306,7 +306,7 @@ class MainViewModel @Inject constructor(
                 val widgetPrefs = context.getSharedPreferences("WidgetPositions", Context.MODE_PRIVATE)
                 val coordinates = mutableListOf<CoordinateEntry>()
                 
-                listOf("BAEMIN", "COUPANG", "YOGIYO").forEach { preset ->
+                listOf("BAEMIN", "COUPANG").forEach { preset ->
                     DeliveryFunction.entries.forEach { func ->
                         val x = widgetPrefs.getInt("${preset}_${func.name}_x", -1)
                         val y = widgetPrefs.getInt("${preset}_${func.name}_y", -1)
@@ -317,7 +317,7 @@ class MainViewModel @Inject constructor(
                 }
 
                 val customWidgets = mutableListOf<CustomWidgetInfo>()
-                listOf("BAEMIN", "COUPANG", "YOGIYO").forEach { preset ->
+                listOf("BAEMIN", "COUPANG").forEach { preset ->
                     val active = prefs.getString("${preset}_active_custom_widgets", "") ?: ""
                     if (active.isNotEmpty()) {
                         customWidgets.add(CustomWidgetInfo(

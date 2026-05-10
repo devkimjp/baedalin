@@ -210,7 +210,6 @@ class FloatingWidgetService : Service() {
         val presetList = when(presetName) {
             "BAEMIN" -> Presets.BAEMIN
             "COUPANG" -> Presets.COUPANG
-            "YOGIYO" -> Presets.YOGIYO
             else -> Presets.BAEMIN
         }
         val color = Presets.getColor(presetName)

@@ -197,7 +197,6 @@ fun MainScreen(
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 PresetItem("배민", R.drawable.ic_toolbar_baemin, "BAEMIN", viewModel)
                 PresetItem("쿠팡", R.drawable.ic_toolbar_coupang, "COUPANG", viewModel)
-                PresetItem("요기요", R.drawable.ic_yogiyo, "YOGIYO", viewModel)
             }
 
             // 4. 기능 리스트 (Compact)
