@@ -195,6 +195,7 @@ fun MappingWizard(
                         onNext = { if (currentStepIdx < totalSteps - 1) currentStepIdx++ }
                     )
                     3 -> ClickTypeSelectionStep(
+                        recordedKeyCode = recordedKeyCode,
                         onTypeSelected = {
                             selectedClickType = it
                             onComplete(selectedFunction!!, it, recordedKeyCode!!)
@@ -325,7 +326,7 @@ fun KeyRecordingStep(
         
         if (recordedKeyCode != null) {
             LaunchedEffect(recordedKeyCode) {
-                kotlinx.coroutines.delay(600) // 사용자가 인식 결과를 잠시 볼 수 있게 지연
+                kotlinx.coroutines.delay(200) // 매우 짧은 지연 후 즉시 이동
                 onNext()
             }
             Spacer(modifier = Modifier.height(32.dp))
@@ -345,12 +346,17 @@ fun KeyRecordingStep(
 }
 
 @Composable
-fun ClickTypeSelectionStep(onTypeSelected: (ClickType) -> Unit) {
+fun ClickTypeSelectionStep(
+    recordedKeyCode: Int?,
+    onTypeSelected: (ClickType) -> Unit
+) {
     Column {
+        val keyName = recordedKeyCode?.let { android.view.KeyEvent.keyCodeToString(it).replace("KEYCODE_", "") } ?: "알 수 없음"
         Text(
-            "어떻게 눌렀을 때 동작할까요?",
+            "입력코드: $keyName\n어떻게 눌렀을 때 동작할까요?",
             style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            lineHeight = 24.sp
         )
         Spacer(modifier = Modifier.height(24.dp))
         Row(
