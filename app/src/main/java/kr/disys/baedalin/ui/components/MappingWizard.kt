@@ -56,8 +56,17 @@ fun MappingWizard(
         )
     }
 
-    var currentStep by remember { mutableStateOf(if (hasPermission) 1 else 0) }
-    var selectedFunction by remember { mutableStateOf<DeliveryFunction?>(null) }
+    val unmappedFunctions = getUnmappedFunctions()
+    var currentStep by remember { 
+        mutableStateOf(
+            if (!hasPermission) 0 
+            else if (unmappedFunctions.isNotEmpty()) 2 // 미매핑 기능이 있으면 바로 키 입력 단계로
+            else 1 // 없으면 기능 선택 단계로
+        ) 
+    }
+    var selectedFunction by remember { 
+        mutableStateOf(if (hasPermission && unmappedFunctions.isNotEmpty()) unmappedFunctions.first() else null) 
+    }
     var selectedClickType by remember { mutableStateOf<ClickType?>(null) }
 
     val launcher = rememberLauncherForActivityResult(
@@ -71,14 +80,14 @@ fun MappingWizard(
 
     val totalSteps = 4
 
-    // 매핑 완료 후 다음 기능을 찾는 로직
+    // 매핑 완료 후 다음 기능을 찾는 로직 (자동화)
     val moveToNextFunction = {
         val remaining = getUnmappedFunctions()
         if (remaining.isNotEmpty()) {
             selectedFunction = remaining.first()
-            currentStep = 1 // 키 입력 단계로 바로 이동
+            currentStep = 2 // 다음 미매핑 기능의 키 입력 단계로 바로 이동
         } else {
-            onDismiss() // 더 이상 설정할 기능이 없으면 닫기
+            onDismiss() // 모든 기능 매핑 완료 시 닫기
         }
     }
 
