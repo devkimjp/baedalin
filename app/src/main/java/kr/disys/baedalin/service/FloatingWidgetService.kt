@@ -576,6 +576,10 @@ class FloatingWidgetService : Service() {
         hideScreenBorder()
         overlayManager.hideAll()
         _isRunning.value = false
+        // 앱 재진입 시 자동 재시작 방지를 위해 서비스 상태 저장
+        getSharedPreferences("mappings", Context.MODE_PRIVATE).edit {
+            putBoolean("is_mapping_enabled", false)
+        }
         stopSelf()
     }
 

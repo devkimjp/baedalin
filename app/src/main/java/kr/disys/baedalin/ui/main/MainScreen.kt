@@ -58,6 +58,8 @@ fun MainScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val prefs = remember { context.getSharedPreferences("mappings", Context.MODE_PRIVATE) }
     val isNight by FloatingWidgetService.isNightMode.collectAsStateWithLifecycle()
+    // 툴바 전원 버튼으로 서비스가 종료되면 이 값이 false로 바뀌어 스위치도 자동으로 반영됨
+    val isServiceRunning by FloatingWidgetService.isRunning.collectAsStateWithLifecycle()
     
     // 설정 관련 상태
     var showImportDialog by remember { mutableStateOf(false) }
@@ -141,10 +143,29 @@ fun MainScreen(
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
             // 1. 서비스 상태 & 대형 스위치
+            // isServiceRunning: FloatingWidgetService.isRunning StateFlow를 관찰하여
+            // 툴바 전원 버튼 종료 시에도 스위치 상태가 자동으로 동기화됨
             ServiceStatusCard(
-                isEnabled = uiState.isMappingEnabled,
+                isEnabled = isServiceRunning,
                 deviceName = uiState.selectedDeviceName,
-                onToggle = { viewModel.toggleService() },
+                onToggle = {
+                    if (isServiceRunning) {
+                        // 서비스 중지: 툴바 전원 버튼과 동일한 ACTION_HIDE_ALL 사용
+                        context.startService(
+                            android.content.Intent(context, FloatingWidgetService::class.java).apply {
+                                action = FloatingWidgetService.ACTION_HIDE_ALL
+                            }
+                        )
+                    } else {
+                        // 서비스 시작: ViewModel의 isMappingEnabled도 함께 업데이트
+                        viewModel.toggleService()
+                        context.startService(
+                            android.content.Intent(context, FloatingWidgetService::class.java).apply {
+                                action = FloatingWidgetService.ACTION_START_SERVICE_ONLY
+                            }
+                        )
+                    }
+                },
                 onDeviceClick = { viewModel.showDevicePicker = true }
             )
 
