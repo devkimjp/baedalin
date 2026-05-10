@@ -9,6 +9,7 @@ data class MainUiState(
     val isMappingEnabled: Boolean = false,
     val isAccessibilityEnabled: Boolean = false,
     val isOverlayEnabled: Boolean = false,
+    val isBluetoothEnabled: Boolean = false,
     val isLoading: Boolean = false,
     val errorMessage: String? = null,
     

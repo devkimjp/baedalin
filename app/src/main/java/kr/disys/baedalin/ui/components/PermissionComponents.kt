@@ -27,15 +27,23 @@ import androidx.core.net.toUri
 fun PermissionWizard(
     isAccessibilityEnabled: Boolean,
     isOverlayEnabled: Boolean,
+    isBluetoothEnabled: Boolean,
+    onRequestBluetoothPermission: () -> Unit,
     onComplete: () -> Unit = {}
 ) {
-    var currentStep by remember { mutableStateOf(if (!isOverlayEnabled) 0 else 1) }
-    val totalSteps = 2
+    var currentStep by remember { 
+        mutableStateOf(
+            if (!isOverlayEnabled) 0 
+            else if (!isAccessibilityEnabled) 1 
+            else 2
+        ) 
+    }
+    val totalSteps = 3
     val context = LocalContext.current
 
     // 모든 권한이 허용되면 완료 호출
-    LaunchedEffect(isAccessibilityEnabled, isOverlayEnabled) {
-        if (isAccessibilityEnabled && isOverlayEnabled) {
+    LaunchedEffect(isAccessibilityEnabled, isOverlayEnabled, isBluetoothEnabled) {
+        if (isAccessibilityEnabled && isOverlayEnabled && isBluetoothEnabled) {
             onComplete()
         }
     }
@@ -52,6 +60,14 @@ fun PermissionWizard(
                         Text("다음 단계로", fontSize = 18.sp, fontWeight = FontWeight.Bold)
                     }
                 } else if (currentStep == 1 && isAccessibilityEnabled) {
+                    Button(
+                        onClick = { currentStep = 2 },
+                        modifier = Modifier.fillMaxWidth().height(56.dp),
+                        shape = RoundedCornerShape(16.dp)
+                    ) {
+                        Text("다음 단계로", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    }
+                } else if (currentStep == 2 && isBluetoothEnabled) {
                     Button(
                         onClick = { onComplete() },
                         modifier = Modifier.fillMaxWidth().height(56.dp),
@@ -118,6 +134,25 @@ fun PermissionWizard(
                             context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
                         }
                     )
+                    2 -> PermissionStepContent(
+                        title = "근처 기기 접근 권한",
+                        description = "사용하시는 블루투스 리모컨의 이름을 확인하고 구분하기 위해 필요한 권한입니다.\n허용해주셔야 리모컨을 정확히 찾아낼 수 있습니다.",
+                        icon = Icons.Default.Bluetooth,
+                        isGranted = isBluetoothEnabled,
+                        onAction = {
+                            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                                // 1차적으로 권한 요청 시도
+                                onRequestBluetoothPermission()
+                            }
+                        },
+                        onSecondaryAction = {
+                            // 권한이 거부되었을 경우를 대비해 설정 화면으로 이동하는 옵션 제공
+                            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                data = android.net.Uri.fromParts("package", context.packageName, null)
+                            }
+                            context.startActivity(intent)
+                        }
+                    )
                 }
             }
         }
@@ -130,8 +165,10 @@ fun PermissionStepContent(
     description: String,
     icon: ImageVector,
     isGranted: Boolean,
-    onAction: () -> Unit
+    onAction: () -> Unit,
+    onSecondaryAction: (() -> Unit)? = null
 ) {
+    val context = LocalContext.current
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier.fillMaxWidth()
@@ -173,15 +210,28 @@ fun PermissionStepContent(
         Spacer(modifier = Modifier.height(48.dp))
 
         if (!isGranted) {
-            Button(
-                onClick = onAction,
-                modifier = Modifier.fillMaxWidth().height(64.dp),
-                shape = RoundedCornerShape(16.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
-            ) {
-                Icon(Icons.Default.Settings, contentDescription = null)
-                Spacer(Modifier.width(8.dp))
-                Text("권한 설정하러 가기", fontSize = 16.sp)
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Button(
+                    onClick = onAction,
+                    modifier = Modifier.fillMaxWidth().height(64.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                ) {
+                    Icon(Icons.Default.Settings, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("권한 설정하러 가기", fontSize = 16.sp)
+                }
+
+                onSecondaryAction?.let {
+                    TextButton(
+                        onClick = it,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Default.Settings, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("시스템 설정에서 직접 허용하기")
+                    }
+                }
             }
         } else {
             Surface(

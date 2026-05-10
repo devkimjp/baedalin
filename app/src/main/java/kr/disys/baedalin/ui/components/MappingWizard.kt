@@ -30,6 +30,9 @@ import android.os.Build
 import kr.disys.baedalin.model.ClickType
 import kr.disys.baedalin.model.DeliveryFunction
 import android.Manifest
+import android.content.Intent
+import android.provider.Settings
+import android.net.Uri
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -39,10 +42,6 @@ fun MappingWizard(
     getUnmappedFunctions: () -> List<DeliveryFunction>,
     recordedKeyCode: Int? = null
 ) {
-    var currentStep by remember { mutableStateOf(0) }
-    var selectedFunction by remember { mutableStateOf<DeliveryFunction?>(null) }
-    var selectedClickType by remember { mutableStateOf<ClickType?>(null) }
-    
     val context = LocalContext.current
     val bluetoothPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
         Manifest.permission.BLUETOOTH_CONNECT
@@ -56,6 +55,10 @@ fun MappingWizard(
             ContextCompat.checkSelfPermission(context, bluetoothPermission) == PackageManager.PERMISSION_GRANTED
         )
     }
+
+    var currentStep by remember { mutableStateOf(if (hasPermission) 1 else 0) }
+    var selectedFunction by remember { mutableStateOf<DeliveryFunction?>(null) }
+    var selectedClickType by remember { mutableStateOf<ClickType?>(null) }
 
     val launcher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -293,6 +296,7 @@ fun BluetoothPermissionStep(
     onRequestPermission: () -> Unit,
     onNext: () -> Unit
 ) {
+    val context = LocalContext.current
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp)
@@ -319,12 +323,28 @@ fun BluetoothPermissionStep(
         Spacer(modifier = Modifier.height(40.dp))
         
         if (!hasPermission) {
-            Button(
-                onClick = onRequestPermission,
-                modifier = Modifier.fillMaxWidth().height(56.dp),
-                shape = RoundedCornerShape(16.dp)
-            ) {
-                Text("권한 허용하기", fontSize = 16.sp)
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Button(
+                    onClick = onRequestPermission,
+                    modifier = Modifier.fillMaxWidth().height(56.dp),
+                    shape = RoundedCornerShape(16.dp)
+                ) {
+                    Text("권한 허용하기", fontSize = 16.sp)
+                }
+                
+                TextButton(
+                    onClick = {
+                        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                            data = android.net.Uri.fromParts("package", context.packageName, null)
+                        }
+                        context.startActivity(intent)
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.Settings, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("시스템 설정에서 허용하기")
+                }
             }
         } else {
             Button(

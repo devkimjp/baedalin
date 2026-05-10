@@ -38,6 +38,12 @@ import kr.disys.baedalin.ui.theme.BaedalinTheme
 class MainActivity : ComponentActivity() {
     private val viewModel: MainViewModel by viewModels()
     
+    private val bluetoothPermissionLauncher = registerForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        viewModel.isBluetoothEnabled = isGranted
+    }
+    
     private val keyReceiver = object : android.content.BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             if (intent.action == "ACTION_KEY_RECORDED") {
@@ -70,6 +76,7 @@ class MainActivity : ComponentActivity() {
                         if (event == Lifecycle.Event.ON_RESUME) {
                             viewModel.isAccessibilityEnabled = isAccessibilityServiceEnabled(this@MainActivity, KeyMapperAccessibilityService::class.java)
                             viewModel.isOverlayEnabled = Settings.canDrawOverlays(this@MainActivity)
+                            viewModel.isBluetoothEnabled = checkBluetoothPermission()
                             
                             if (viewModel.isMappingEnabled) {
                                 startService(Intent(this@MainActivity, FloatingWidgetService::class.java).apply {
@@ -84,14 +91,21 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                if (!uiState.isAccessibilityEnabled || !uiState.isOverlayEnabled) {
+                if (!uiState.isAccessibilityEnabled || !uiState.isOverlayEnabled || !uiState.isBluetoothEnabled) {
                     PermissionWizard(
                         isAccessibilityEnabled = uiState.isAccessibilityEnabled,
                         isOverlayEnabled = uiState.isOverlayEnabled,
+                        isBluetoothEnabled = uiState.isBluetoothEnabled,
+                        onRequestBluetoothPermission = {
+                            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                                bluetoothPermissionLauncher.launch(android.Manifest.permission.BLUETOOTH_CONNECT)
+                            }
+                        },
                         onComplete = {
                             // 권한 허용 후 상태 즉시 갱신
                             viewModel.isAccessibilityEnabled = isAccessibilityServiceEnabled(this@MainActivity, KeyMapperAccessibilityService::class.java)
                             viewModel.isOverlayEnabled = Settings.canDrawOverlays(this@MainActivity)
+                            viewModel.isBluetoothEnabled = checkBluetoothPermission()
                         }
                     )
                 } else {
@@ -246,5 +260,13 @@ class MainActivity : ComponentActivity() {
         if (enabledServices == null) return false
         
         return enabledServices.split(':').any { it.equals(expectedComponentName, ignoreCase = true) }
+    }
+
+    private fun checkBluetoothPermission(): Boolean {
+        return if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+            checkSelfPermission(android.Manifest.permission.BLUETOOTH_CONNECT) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        } else {
+            true
+        }
     }
 }

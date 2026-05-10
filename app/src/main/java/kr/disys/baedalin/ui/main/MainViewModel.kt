@@ -52,6 +52,10 @@ class MainViewModel @Inject constructor(
         get() = _uiState.value.isOverlayEnabled
         set(value) { _uiState.update { state -> state.copy(isOverlayEnabled = value) } }
 
+    var isBluetoothEnabled: Boolean
+        get() = _uiState.value.isBluetoothEnabled
+        set(value) { _uiState.update { state -> state.copy(isBluetoothEnabled = value) } }
+
     val isMappingEnabled: Boolean get() = _uiState.value.isMappingEnabled
 
     var showDevicePicker: Boolean
