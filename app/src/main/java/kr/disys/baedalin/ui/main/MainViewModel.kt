@@ -255,13 +255,11 @@ class MainViewModel @Inject constructor(
     fun executeSaveMapping(func: DeliveryFunction, type: ClickType, keyCode: Int) {
         val prefix = selectedDeviceDescriptor ?: "GLOBAL"
         prefs.edit(commit = true) {
-            // 1. 중복 키 제거: 현재 입력된 keyCode를 사용하는 다른 모든 매핑을 먼저 지웁니다.
+            // 1. 중복 키 제거: 동일한 keyCode와 동일한 ClickType을 사용하는 다른 매핑을 지웁니다.
             DeliveryFunction.entries.forEach { f ->
-                ClickType.entries.forEach { t ->
-                    val key = "${prefix}_${f.name}_${t.name}_keycode"
-                    if (prefs.getInt(key, -1) == keyCode) {
-                        remove(key)
-                    }
+                val key = "${prefix}_${f.name}_${type.name}_keycode"
+                if (prefs.getInt(key, -1) == keyCode) {
+                    remove(key)
                 }
             }
 
