@@ -45,6 +45,8 @@ fun MappingWizard(
     recordedKeyCode: Int? = null
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    
     val bluetoothPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
         Manifest.permission.BLUETOOTH_CONNECT
     } else {
@@ -86,15 +88,27 @@ fun MappingWizard(
         }
     }
 
+    var showContinueDialog by remember { mutableStateOf(false) }
+    
     // 매핑 완료 후 다음 기능을 찾는 로직 (자동화)
     val moveToNextFunction = {
-        // 매핑 완료 후 다음으로 자동 점프하지 않고, 
-        // 사용자가 상태를 확인할 수 있도록 기능 선택 목록(Step 1)으로 돌아갑니다.
         val listStepIdx = activeSteps.indexOf(1)
         if (listStepIdx != -1) {
             currentStepIdx = listStepIdx
         } else {
             onDismiss()
+        }
+    }
+
+    // 다음 버튼 매핑 연속 진행
+    val startNextMapping = {
+        val remaining = getUnmappedFunctions()
+        if (remaining.isNotEmpty()) {
+            selectedFunction = remaining.first()
+            val keyStepIdx = activeSteps.indexOf(2)
+            if (keyStepIdx != -1) currentStepIdx = keyStepIdx
+        } else {
+            moveToNextFunction()
         }
     }
 
@@ -189,20 +203,73 @@ fun MappingWizard(
                             if (currentStepIdx < totalSteps - 1) currentStepIdx++
                         }
                     )
-                    2 -> KeyRecordingStep(
-                        selectedFunction = selectedFunction!!,
-                        recordedKeyCode = recordedKeyCode,
-                        onNext = { if (currentStepIdx < totalSteps - 1) currentStepIdx++ }
-                    )
+                    2 -> {
+                        KeyRecordingStep(
+                            selectedFunction = selectedFunction!!,
+                            recordedKeyCode = recordedKeyCode,
+                            onNext = { if (currentStepIdx < totalSteps - 1) currentStepIdx++ },
+                            onTimeout = {
+                                // 시간 초과 시 다시 목록으로 (Step 1)
+                                val listStepIdx = activeSteps.indexOf(1)
+                                if (listStepIdx != -1) currentStepIdx = listStepIdx
+                            }
+                        )
+                        // 키가 입력되면 대기 화면 없이 즉시 다음 단계로 전진
+                        LaunchedEffect(recordedKeyCode) {
+                            if (recordedKeyCode != null) {
+                                if (currentStepIdx < totalSteps - 1) currentStepIdx++
+                            }
+                        }
+                    }
                     3 -> ClickTypeSelectionStep(
                         recordedKeyCode = recordedKeyCode,
-                        onTypeSelected = {
-                            selectedClickType = it
-                            onComplete(selectedFunction!!, it, recordedKeyCode!!)
-                            moveToNextFunction() // 매핑 완료 후 다음 기능으로!
+                        onTypeSelected = { type ->
+                            val func = selectedFunction!!
+                            val code = recordedKeyCode!!
+                            onComplete(func, type, code)
+                            
+                            // 매핑 완료 피드백 및 다음 매핑 진행 여부 확인
+                            val keyName = android.view.KeyEvent.keyCodeToString(code).replace("KEYCODE_", "")
+                            val typeLabel = if (type == ClickType.SINGLE) "한 번 누르기" else "두 번 누르기"
+                            android.widget.Toast.makeText(context, "[${func.label}] 매핑 완료: $keyName ($typeLabel)", android.widget.Toast.LENGTH_SHORT).show()
+                            
+                            val remaining = getUnmappedFunctions()
+                            if (remaining.isNotEmpty()) {
+                                // 다음 버튼 매핑 여부 확인 다이얼로그 표시 로직 (여기서는 간단한 알림 후 선택 상태로 전환)
+                                showContinueDialog = true
+                            } else {
+                                moveToNextFunction()
+                            }
                         }
                     )
                 }
+            }
+
+            if (showContinueDialog) {
+                AlertDialog(
+                    onDismissRequest = { 
+                        showContinueDialog = false
+                        moveToNextFunction()
+                    },
+                    title = { Text("매핑 완료") },
+                    text = { Text("설정이 완료되었습니다.\n다음 버튼을 이어서 매핑할까요?") },
+                    confirmButton = {
+                        Button(onClick = {
+                            showContinueDialog = false
+                            startNextMapping()
+                        }) {
+                            Text("예")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = {
+                            showContinueDialog = false
+                            moveToNextFunction()
+                        }) {
+                            Text("아니오")
+                        }
+                    }
+                )
             }
         }
     }
@@ -296,52 +363,54 @@ fun FunctionSelectionStep(
 fun KeyRecordingStep(
     selectedFunction: DeliveryFunction,
     recordedKeyCode: Int?,
-    onNext: () -> Unit
+    onNext: () -> Unit,
+    onTimeout: () -> Unit // 시간 초과 콜백 추가
 ) {
+    var timeLeft by remember { mutableStateOf(5) }
+    
+    // 카운트다운 로직
+    LaunchedEffect(Unit) {
+        while (timeLeft > 0 && recordedKeyCode == null) {
+            kotlinx.coroutines.delay(1000)
+            timeLeft--
+        }
+        if (timeLeft == 0 && recordedKeyCode == null) {
+            onTimeout()
+        }
+    }
+
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp)
     ) {
-        Icon(
-            imageVector = if (recordedKeyCode == null) Icons.Default.SettingsRemote else Icons.Default.BluetoothConnected,
-            contentDescription = null,
-            modifier = Modifier.size(80.dp),
-            tint = if (recordedKeyCode == null) MaterialTheme.colorScheme.primary else Color(0xFF4CAF50)
-        )
+        // 타이머 원형 표시
+        Box(contentAlignment = Alignment.Center) {
+            CircularProgressIndicator(
+                progress = timeLeft / 5f,
+                modifier = Modifier.size(100.dp),
+                strokeWidth = 8.dp,
+                color = if (timeLeft > 1) MaterialTheme.colorScheme.primary else kr.disys.baedalin.ui.theme.AccentOrange
+            )
+            Text(
+                text = timeLeft.toString(),
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Black
+            )
+        }
+        
         Spacer(modifier = Modifier.height(24.dp))
         Text(
-            text = if (recordedKeyCode == null) "리모컨 버튼을 눌러주세요" else "[${selectedFunction.label}] 버튼이 인식되었습니다!",
+            text = "리모컨 버튼을 눌러주세요",
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold
         )
         Spacer(modifier = Modifier.height(8.dp))
         Text(
-            text = if (recordedKeyCode == null) 
-                "[${selectedFunction.label}] 기능에 연결할\n리모컨 버튼을 지금 눌러주세요." 
-                else "입력된 키 코드: $recordedKeyCode",
+            text = "[${selectedFunction.label}] 기능에 연결할\n리모컨 버튼을 5초 안에 눌러주세요.",
             textAlign = TextAlign.Center,
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        
-        if (recordedKeyCode != null) {
-            LaunchedEffect(recordedKeyCode) {
-                kotlinx.coroutines.delay(200) // 매우 짧은 지연 후 즉시 이동
-                onNext()
-            }
-            Spacer(modifier = Modifier.height(32.dp))
-            Surface(
-                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Text(
-                    "인식되었습니다. 다음 단계로 이동합니다...",
-                    modifier = Modifier.padding(16.dp),
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-        }
     }
 }
 
