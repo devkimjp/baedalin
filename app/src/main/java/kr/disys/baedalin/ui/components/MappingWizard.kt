@@ -88,12 +88,11 @@ fun MappingWizard(
 
     // 매핑 완료 후 다음 기능을 찾는 로직 (자동화)
     val moveToNextFunction = {
-        val remaining = getUnmappedFunctions()
-        if (remaining.isNotEmpty()) {
-            selectedFunction = remaining.first()
-            // 다음 기능 매핑 시에는 '키 입력(단계 2)'으로 바로 점프
-            val keyStepIdx = activeSteps.indexOf(2)
-            if (keyStepIdx != -1) currentStepIdx = keyStepIdx
+        // 매핑 완료 후 다음으로 자동 점프하지 않고, 
+        // 사용자가 상태를 확인할 수 있도록 기능 선택 목록(Step 1)으로 돌아갑니다.
+        val listStepIdx = activeSteps.indexOf(1)
+        if (listStepIdx != -1) {
+            currentStepIdx = listStepIdx
         } else {
             onDismiss()
         }
