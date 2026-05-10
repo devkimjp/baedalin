@@ -84,54 +84,74 @@ fun DevicePickerDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("입력 장치 선택") },
+        title = { Text("연결할 장치 선택", fontWeight = FontWeight.Black, fontSize = 22.sp) },
         text = {
-            LazyColumn {
+            LazyColumn(modifier = Modifier.fillMaxWidth()) {
                 items(devices) { device ->
                     val isSelected = device.descriptor == selectedDescriptor
-                    Row(
+                    Surface(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable { onDeviceSelected(device) }
-                            .padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
+                            .padding(vertical = 4.dp),
+                        shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+                        color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
+                        border = if (isSelected) androidx.compose.foundation.BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null
                     ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            val statusColor = if (device.isConnected) Color(0xFF4CAF50) else Color.Gray
-                            val statusText = when {
-                                isSelected && device.isConnected -> "사용 중 (연결됨)"
-                                isSelected && !device.isConnected -> "연결 대기 중..."
-                                device.isConnected -> "연결됨"
-                                else -> "연결 안 됨"
+                        Row(
+                            modifier = Modifier.padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                val statusColor = if (device.isConnected) Color(0xFF22C55E) else Color.Gray
+                                val statusText = when {
+                                    isSelected && device.isConnected -> "사용 중 (연결됨)"
+                                    isSelected && !device.isConnected -> "연결 대기 중..."
+                                    device.isConnected -> "연결됨"
+                                    else -> "연결 안 됨"
+                                }
+                                
+                                Text(
+                                    text = device.name, 
+                                    style = MaterialTheme.typography.titleLarge, 
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
+                                )
+                                
+                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
+                                    Box(modifier = Modifier.size(10.dp).background(statusColor, CircleShape))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = statusText, 
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = if (isSelected && !device.isConnected) MaterialTheme.colorScheme.error else statusColor
+                                    )
+                                }
                             }
                             
-                            Text(text = device.name, style = MaterialTheme.typography.bodyLarge, 
-                                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal)
-                            
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Box(modifier = Modifier.size(8.dp).background(statusColor, CircleShape))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(text = statusText, style = MaterialTheme.typography.bodySmall, 
-                                     color = if (isSelected && !device.isConnected) MaterialTheme.colorScheme.error else statusColor)
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(text = device.descriptor.take(12) + "...", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                            if (isSelected) {
+                                Icon(
+                                    imageVector = Icons.Default.Check,
+                                    contentDescription = "선택됨",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(32.dp)
+                                )
                             }
-                        }
-                        
-                        if (isSelected) {
-                            Icon(
-                                imageVector = Icons.Default.Check,
-                                contentDescription = "선택됨",
-                                tint = MaterialTheme.colorScheme.primary
-                            )
                         }
                     }
                 }
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) { Text("닫기") }
+            Button(
+                onClick = onDismiss,
+                modifier = Modifier.fillMaxWidth().height(56.dp),
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp)
+            ) { 
+                Text("닫기", fontSize = 18.sp, fontWeight = FontWeight.Bold) 
+            }
         }
     )
 }

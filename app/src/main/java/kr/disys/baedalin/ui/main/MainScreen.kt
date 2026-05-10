@@ -42,6 +42,7 @@ import kr.disys.baedalin.model.ShareConfig
 import kr.disys.baedalin.service.FloatingWidgetService
 import kr.disys.baedalin.util.ShareManager
 import kr.disys.baedalin.ui.components.MappingWizard
+import kr.disys.baedalin.ui.components.DevicePickerDialog
 import kr.disys.baedalin.ui.theme.AccentOrange
 import kr.disys.baedalin.ui.theme.ErrorRed
 import kr.disys.baedalin.ui.theme.SuccessGreen
@@ -57,6 +58,9 @@ fun MainScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val prefs = remember { context.getSharedPreferences("mappings", Context.MODE_PRIVATE) }
     val isNight by FloatingWidgetService.isNightMode.collectAsStateWithLifecycle()
+    
+    // 설정 관련 상태
+    var showImportDialog by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -81,13 +85,48 @@ fun MainScreen(
                             modifier = Modifier.size(32.dp)
                         )
                     }
-                    IconButton(onClick = { viewModel.showDevicePicker = true }) {
-                        Icon(
-                            imageVector = Icons.Default.SettingsRemote, 
-                            contentDescription = "장치 설정",
-                            tint = if (uiState.selectedDeviceDescriptor != null) SuccessGreen else MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.size(32.dp)
-                        )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = { viewModel.showDevicePicker = true }) {
+                            Icon(
+                                imageVector = Icons.Default.SettingsRemote, 
+                                contentDescription = "장치 설정",
+                                tint = if (uiState.selectedDeviceDescriptor != null) SuccessGreen else MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.size(32.dp)
+                            )
+                        }
+
+                        // 설정 메뉴 추가
+                        var showMenu by remember { mutableStateOf(false) }
+                        Box {
+                            IconButton(onClick = { showMenu = true }) {
+                                Icon(
+                                    imageVector = Icons.Default.Settings,
+                                    contentDescription = "설정",
+                                    modifier = Modifier.size(32.dp)
+                                )
+                            }
+                            DropdownMenu(
+                                expanded = showMenu,
+                                onDismissRequest = { showMenu = false }
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("설정 보내기 (백업)", fontSize = 18.sp) },
+                                    leadingIcon = { Icon(Icons.Default.Share, null) },
+                                    onClick = {
+                                        showMenu = false
+                                        viewModel.exportConfig()
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("설정 받기 (복구)", fontSize = 18.sp) },
+                                    leadingIcon = { Icon(Icons.Default.Download, null) },
+                                    onClick = {
+                                        showMenu = false
+                                        showImportDialog = true 
+                                    }
+                                )
+                            }
+                        }
                     }
                 }
             )
@@ -105,7 +144,8 @@ fun MainScreen(
             ServiceStatusCard(
                 isEnabled = uiState.isMappingEnabled,
                 deviceName = uiState.selectedDeviceName,
-                onToggle = { viewModel.toggleService() }
+                onToggle = { viewModel.toggleService() },
+                onDeviceClick = { viewModel.showDevicePicker = true }
             )
 
             // 2. 빠른 실행 메뉴 (Grid)
@@ -122,11 +162,11 @@ fun MainScreen(
                     modifier = Modifier.weight(1f)
                 )
                 MenuCard(
-                    title = "백업/공유",
-                    description = "설정 옮기기",
-                    icon = Icons.Default.CloudUpload,
+                    title = "도움말",
+                    description = "사용법 보기",
+                    icon = Icons.Default.Info,
                     color = MaterialTheme.colorScheme.primary,
-                    onClick = { viewModel.exportConfig() },
+                    onClick = { /* TODO */ },
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -154,10 +194,14 @@ fun MainScreen(
                     )
                 }
             }
-
-            // 하단 섹션
-            SharingSection(onUpdateMappingVersion = { viewModel.updateMappingVersion() })
         }
+    }
+
+    if (showImportDialog) {
+        ConfigImportDialog(
+            onDismiss = { showImportDialog = false },
+            onImport = { viewModel.updateMappingVersion() }
+        )
     }
 
     if (uiState.isMappingWizardActive) {
@@ -167,13 +211,26 @@ fun MainScreen(
             recordedKeyCode = uiState.pendingKeyCode
         )
     }
+
+    if (viewModel.showDevicePicker) {
+        DevicePickerDialog(
+            devices = uiState.devices,
+            selectedDescriptor = uiState.selectedDeviceDescriptor,
+            onDismiss = { viewModel.showDevicePicker = false },
+            onDeviceSelected = { device ->
+                viewModel.selectDevice(device)
+                viewModel.showDevicePicker = false
+            }
+        )
+    }
 }
 
 @Composable
 fun ServiceStatusCard(
     isEnabled: Boolean,
     deviceName: String,
-    onToggle: () -> Unit
+    onToggle: () -> Unit,
+    onDeviceClick: () -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -188,7 +245,11 @@ fun ServiceStatusCard(
             modifier = Modifier.padding(28.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(modifier = Modifier.weight(1f)) {
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .clickable { onDeviceClick() }
+            ) {
                 Text(
                     text = if (isEnabled) "서비스 작동 중" else "서비스 꺼짐",
                     style = MaterialTheme.typography.headlineMedium,
@@ -198,13 +259,14 @@ fun ServiceStatusCard(
                 Text(
                     text = "장치: $deviceName",
                     style = MaterialTheme.typography.titleMedium,
-                    color = if (isEnabled) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    color = if (isEnabled) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                    textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline
                 )
             }
             Switch(
                 checked = isEnabled,
                 onCheckedChange = { onToggle() },
-                modifier = Modifier.scale(1.5f), // 스위치 크기 확대
+                modifier = Modifier.scale(1.5f),
                 colors = SwitchDefaults.colors(
                     checkedThumbColor = MaterialTheme.colorScheme.primary,
                     checkedTrackColor = MaterialTheme.colorScheme.onPrimary,
@@ -356,106 +418,17 @@ fun MappingChip(
 }
 
 @Composable
-fun SharingSection(
-    onUpdateMappingVersion: () -> Unit
+fun ConfigImportDialog(
+    onDismiss: () -> Unit,
+    onImport: () -> Unit
 ) {
     val context = LocalContext.current
-    var showShareDialog by remember { mutableStateOf(false) }
-    var showImportDialog by remember { mutableStateOf(false) }
-    var showConfirmDialog by remember { mutableStateOf<ShareConfig?>(null) }
-    var shareCode by remember { mutableStateOf("") }
     var importCode by remember { mutableStateOf("") }
+    var showConfirmDialog by remember { mutableStateOf<kr.disys.baedalin.model.ShareConfig?>(null) }
 
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("설정 공유 및 백업", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.ExtraBold)
-        
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-            Button(
-                onClick = {
-                    val code = ShareManager.exportConfig(context)
-                    if (code.isNotEmpty()) {
-                        shareCode = ShareManager.createShareMessage(context, code)
-                        showShareDialog = true
-                    } else {
-                        Toast.makeText(context, "공유할 좌표 설정이 없습니다.", Toast.LENGTH_SHORT).show()
-                    }
-                },
-                modifier = Modifier.weight(1f).height(56.dp),
-                shape = RoundedCornerShape(16.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
-            ) {
-                Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(24.dp))
-                Spacer(Modifier.width(8.dp))
-                Text("보내기", fontSize = 18.sp, fontWeight = FontWeight.Bold)
-            }
-            
-            Button(
-                onClick = {
-                    importCode = ""
-                    showImportDialog = true
-                },
-                modifier = Modifier.weight(1f).height(56.dp),
-                shape = RoundedCornerShape(16.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
-            ) {
-                Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(24.dp))
-                Spacer(Modifier.width(8.dp))
-                Text("받기", fontSize = 18.sp, fontWeight = FontWeight.Bold)
-            }
-        }
-    }
-
-    if (showShareDialog) {
-        val deviceInfo = ShareManager.getDeviceInfo(context)
+    if (showConfirmDialog == null) {
         AlertDialog(
-            onDismissRequest = { showShareDialog = false },
-            title = { Text("내 설정 공유 코드", fontWeight = FontWeight.Black) },
-            text = {
-                Column {
-                    Card(
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
-                        modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)
-                    ) {
-                        Column(modifier = Modifier.padding(16.dp)) {
-                            Text("현재 기기 정보", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-                            Text("모델: ${deviceInfo.model}", fontWeight = FontWeight.ExtraBold, fontSize = 18.sp)
-                            Text("해상도: ${deviceInfo.width}x${deviceInfo.height}")
-                        }
-                    }
-                    Text("아래 내용을 복사해서 다른 분께 전달해 주세요.", fontSize = 16.sp, fontWeight = FontWeight.Medium)
-                    Spacer(Modifier.height(12.dp))
-                    OutlinedTextField(
-                        value = shareCode,
-                        onValueChange = {},
-                        readOnly = true,
-                        modifier = Modifier.fillMaxWidth().height(150.dp),
-                        textStyle = MaterialTheme.typography.bodyMedium
-                    )
-                }
-            },
-            confirmButton = {
-                Button(onClick = {
-                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                    val clip = ClipData.newPlainText("BaedalinConfig", shareCode)
-                    clipboard.setPrimaryClip(clip)
-                    
-                    val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                        type = "text/plain"
-                        putExtra(Intent.EXTRA_TEXT, shareCode)
-                    }
-                    context.startActivity(Intent.createChooser(shareIntent, "설정 공유하기"))
-                    showShareDialog = false
-                }) { Text("복사 및 공유", fontSize = 16.sp, fontWeight = FontWeight.Bold) }
-            },
-            dismissButton = {
-                TextButton(onClick = { showShareDialog = false }) { Text("닫기", fontSize = 16.sp) }
-            }
-        )
-    }
-
-    if (showImportDialog) {
-        AlertDialog(
-            onDismissRequest = { showImportDialog = false },
+            onDismissRequest = onDismiss,
             title = { Text("설정 불러오기", fontWeight = FontWeight.Black) },
             text = {
                 Column {
@@ -474,21 +447,18 @@ fun SharingSection(
                     try {
                         val base64Code = ShareManager.extractBase64(importCode)
                         val json = String(android.util.Base64.decode(base64Code, android.util.Base64.NO_WRAP))
-                        val config = ShareConfig.fromJSONString(json)
+                        val config = kr.disys.baedalin.model.ShareConfig.fromJSONString(json)
                         showConfirmDialog = config
-                        showImportDialog = false
                     } catch (e: Exception) {
                         Toast.makeText(context, "코드가 올바르지 않습니다.", Toast.LENGTH_SHORT).show()
                     }
                 }) { Text("확인", fontSize = 16.sp, fontWeight = FontWeight.Bold) }
             },
             dismissButton = {
-                TextButton(onClick = { showImportDialog = false }) { Text("취소", fontSize = 16.sp) }
+                TextButton(onClick = onDismiss) { Text("취소", fontSize = 16.sp) }
             }
         )
-    }
-
-    if (showConfirmDialog != null) {
+    } else {
         val config = showConfirmDialog!!
         val currentDevice = ShareManager.getDeviceInfo(context)
         val isDifferent = config.deviceInfo.model != currentDevice.model || 
@@ -523,9 +493,10 @@ fun SharingSection(
                 Button(onClick = {
                     if (ShareManager.importConfig(context, importCode) != null) {
                         Toast.makeText(context, "설정이 성공적으로 적용되었습니다.", Toast.LENGTH_SHORT).show()
-                        onUpdateMappingVersion()
+                        onImport()
                     }
                     showConfirmDialog = null
+                    onDismiss()
                 }) { Text("지금 적용하기", fontSize = 16.sp, fontWeight = FontWeight.Bold) }
             },
             dismissButton = {

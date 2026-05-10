@@ -15,7 +15,7 @@ data class MainUiState(
     // Device States
     val selectedDeviceDescriptor: String? = null,
     val selectedDeviceName: String = "장치를 추가하세요",
-    val inputDevices: List<InputDeviceInfo> = emptyList(),
+    val devices: List<InputDeviceInfo> = emptyList(),
     val shakeDeviceSelector: Int = 0,
     
     // UI Visibility States

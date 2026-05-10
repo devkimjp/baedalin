@@ -57,7 +57,7 @@ class MainViewModel @Inject constructor(
         get() = _uiState.value.showDevicePicker
         set(value) { _uiState.update { state -> state.copy(showDevicePicker = value) } }
 
-    val inputDevices: List<InputDeviceInfo> get() = _uiState.value.inputDevices
+    val devices: List<InputDeviceInfo> get() = _uiState.value.devices
     val selectedDeviceDescriptor: String? get() = _uiState.value.selectedDeviceDescriptor
     val selectedDeviceName: String get() = _uiState.value.selectedDeviceName
     val shakeDeviceSelector: Int get() = _uiState.value.shakeDeviceSelector
@@ -114,8 +114,19 @@ class MainViewModel @Inject constructor(
         val currentDevices = InputDevice.getDeviceIds().toList().mapNotNull { id ->
             InputDevice.getDevice(id)
         }.filter { device ->
-            // 필터링 완화: 가상 장치가 아니며, 키보드/D-PAD/게임패드 등 외부 입력 장치면 대상으로 고려
-            !device.isVirtual && (device.sources and (InputDevice.SOURCE_KEYBOARD or InputDevice.SOURCE_DPAD or InputDevice.SOURCE_GAMEPAD) != 0)
+            // 리모컨 프로파일 한정 필터링:
+            // 1. 가상 장치가 아닐 것
+            // 2. 방향키(DPAD)를 지원하거나, 게임패드 혹은 특수 키보드일 것
+            // 3. 일반적인 타이핑용 알파벳 키보드(KEYBOARD_TYPE_ALPHABETIC)는 제외하여 리모컨 위주로 표시
+            val isExternal = !device.isVirtual
+            val hasRemoteFeatures = (device.sources and (InputDevice.SOURCE_DPAD or InputDevice.SOURCE_GAMEPAD)) != 0
+            val isNotStandardKeyboard = device.keyboardType != InputDevice.KEYBOARD_TYPE_ALPHABETIC
+            
+            // 시스템 내부 장치 이름 제외 목록
+            val systemDeviceNames = listOf("gpio-keys", "pwrkey", "vbus", "sec_jack", "Virtual", "uinput")
+            val isNotSystemDevice = systemDeviceNames.none { device.name.lowercase().contains(it.lowercase()) }
+            
+            isExternal && isNotSystemDevice && (hasRemoteFeatures || isNotStandardKeyboard)
         }.map { device ->
             InputDeviceInfo(
                 name = device.name,
@@ -124,8 +135,8 @@ class MainViewModel @Inject constructor(
             )
         }
 
-        val previousDevices = _uiState.value.inputDevices
-        _uiState.update { state -> state.copy(inputDevices = currentDevices) }
+        val previousDevices = _uiState.value.devices
+        _uiState.update { state -> state.copy(devices = currentDevices) }
 
         // 새로 추가된 장치가 있는지 확인
         val newlyAdded = currentDevices.find { current -> 
@@ -182,7 +193,7 @@ class MainViewModel @Inject constructor(
         prefs.edit { putBoolean("is_mapping_enabled", nextStatus) }
     }
 
-    fun saveSelectedDevice(device: InputDeviceInfo?) {
+    fun selectDevice(device: InputDeviceInfo?) {
         _uiState.update { state ->
             state.copy(
                 selectedDeviceDescriptor = device?.descriptor,

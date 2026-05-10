@@ -107,7 +107,6 @@ class ToolbarManager(
 
         val iconColor = if (isNightMode) Color.WHITE else Color.parseColor("#1E293B")
         btnFoldView?.setColorFilter(iconColor)
-        settingsIcon.setColorFilter(iconColor)
     }
 
     private fun setupTouchListener(params: WindowManager.LayoutParams): View.OnTouchListener {
@@ -181,6 +180,7 @@ class ToolbarManager(
             setOnClickListener { callbacks.onToggleMoveMode() }
         }
 
+        /* 
         val btnAdd = OverlayFactory.createToolbarIcon(context, R.drawable.ic_toolbar_add, 100).apply {
             setColorFilter(if (isNightMode()) Color.WHITE else Color.parseColor("#1E293B"))
             setOnTouchListener(touchListener)
@@ -192,6 +192,7 @@ class ToolbarManager(
             setOnTouchListener(touchListener)
             setOnClickListener { onOpenSettings() }
         }
+        */
         
         val btnBaemin = OverlayFactory.createToolbarIcon(context, R.drawable.ic_toolbar_baemin, 100).apply {
             setOnTouchListener(touchListener)
@@ -216,8 +217,8 @@ class ToolbarManager(
 
         container.addView(btnFoldView)
         container.addView(btnMoveView)
-        container.addView(btnAdd)
-        container.addView(settingsIcon)
+        // container.addView(btnAdd)
+        // container.addView(settingsIcon)
         container.addView(btnBaemin)
         container.addView(btnCoupang)
         container.addView(btnYogiyo)
