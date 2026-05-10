@@ -31,6 +31,7 @@ import kr.disys.baedalin.model.ClickType
 import kr.disys.baedalin.model.DeliveryFunction
 import android.Manifest
 import android.content.Intent
+import android.content.Context
 import android.provider.Settings
 import android.net.Uri
 
@@ -40,6 +41,7 @@ fun MappingWizard(
     onComplete: (DeliveryFunction, ClickType, Int) -> Unit,
     onDismiss: () -> Unit,
     getUnmappedFunctions: () -> List<DeliveryFunction>,
+    devicePrefix: String, // 추가
     recordedKeyCode: Int? = null
 ) {
     val context = LocalContext.current
@@ -171,6 +173,8 @@ fun MappingWizard(
                         onNext = { if (currentStepIdx < totalSteps - 1) currentStepIdx++ }
                     )
                     1 -> FunctionSelectionStep(
+                        prefs = context.getSharedPreferences("mappings", Context.MODE_PRIVATE),
+                        devicePrefix = devicePrefix,
                         onFunctionSelected = {
                             selectedFunction = it
                             if (currentStepIdx < totalSteps - 1) currentStepIdx++
@@ -195,7 +199,11 @@ fun MappingWizard(
 }
 
 @Composable
-fun FunctionSelectionStep(onFunctionSelected: (DeliveryFunction) -> Unit) {
+fun FunctionSelectionStep(
+    prefs: android.content.SharedPreferences,
+    devicePrefix: String,
+    onFunctionSelected: (DeliveryFunction) -> Unit
+) {
     Column {
         Text(
             "설정할 기능을 선택해주세요",
@@ -207,17 +215,26 @@ fun FunctionSelectionStep(onFunctionSelected: (DeliveryFunction) -> Unit) {
             columns = GridCells.Fixed(2),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.height(300.dp)
+            modifier = Modifier.height(400.dp)
         ) {
             items(DeliveryFunction.entries) { function ->
+                val singleKey = prefs.getInt("${devicePrefix}_${function.name}_SINGLE_keycode", -1)
+                val doubleKey = prefs.getInt("${devicePrefix}_${function.name}_DOUBLE_keycode", -1)
+                val isAnyMapped = singleKey != -1 || doubleKey != -1
+
                 Card(
                     onClick = { onFunctionSelected(function) },
                     modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (isAnyMapped) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f) 
+                                       else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                    ),
+                    border = if (isAnyMapped) androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)) else null
                 ) {
-                    Box(
-                        modifier = Modifier.padding(16.dp).fillMaxSize(),
-                        contentAlignment = Alignment.Center
+                    Column(
+                        modifier = Modifier.padding(12.dp).fillMaxSize(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
                     ) {
                         Text(
                             function.label,
@@ -225,6 +242,39 @@ fun FunctionSelectionStep(onFunctionSelected: (DeliveryFunction) -> Unit) {
                             style = MaterialTheme.typography.labelLarge,
                             fontWeight = FontWeight.Bold
                         )
+                        
+                        if (isAnyMapped) {
+                            Spacer(Modifier.height(4.dp))
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                if (singleKey != -1) {
+                                    Box(Modifier.size(6.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary))
+                                }
+                                if (doubleKey != -1) {
+                                    Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                                        Box(Modifier.size(6.dp).clip(CircleShape).background(kr.disys.baedalin.ui.theme.AccentOrange))
+                                        Box(Modifier.size(6.dp).clip(CircleShape).background(kr.disys.baedalin.ui.theme.AccentOrange))
+                                    }
+                                }
+                            }
+                            
+                            val keyLabel = when {
+                                singleKey != -1 -> android.view.KeyEvent.keyCodeToString(singleKey).replace("KEYCODE_", "")
+                                doubleKey != -1 -> android.view.KeyEvent.keyCodeToString(doubleKey).replace("KEYCODE_", "")
+                                else -> ""
+                            }
+                            if (keyLabel.isNotEmpty()) {
+                                Text(
+                                    keyLabel, 
+                                    fontSize = 10.sp, 
+                                    color = MaterialTheme.colorScheme.primary, 
+                                    fontWeight = FontWeight.Medium,
+                                    maxLines = 1
+                                )
+                            }
+                        }
                     }
                 }
             }
