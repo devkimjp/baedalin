@@ -122,11 +122,18 @@ class MainViewModel @Inject constructor(
             val hasRemoteFeatures = (device.sources and (InputDevice.SOURCE_DPAD or InputDevice.SOURCE_GAMEPAD)) != 0
             val isNotStandardKeyboard = device.keyboardType != InputDevice.KEYBOARD_TYPE_ALPHABETIC
             
-            // 시스템 내부 장치 이름 제외 목록
-            val systemDeviceNames = listOf("gpio-keys", "pwrkey", "vbus", "sec_jack", "Virtual", "uinput")
+            // 시스템 내부 하드웨어 장치 제외 목록 (리모컨이 아님)
+            val systemDeviceNames = listOf(
+                "gpio-keys", "pwrkey", "vbus", "sec_jack", "Virtual", 
+                "uinput", "qpnp_pon", "s2mpg13", "hall_ic", "sensor", 
+                "snd_soc", "touchscreen", "panel"
+            )
             val isNotSystemDevice = systemDeviceNames.none { device.name.lowercase().contains(it.lowercase()) }
             
-            isExternal && isNotSystemDevice && (hasRemoteFeatures || isNotStandardKeyboard)
+            // 리모컨은 보통 알파벳 키보드가 아님 (NON_ALPHABETIC)
+            val isRemoteType = device.keyboardType != InputDevice.KEYBOARD_TYPE_ALPHABETIC
+            
+            isExternal && isNotSystemDevice && isRemoteType && (hasRemoteFeatures || isNotStandardKeyboard)
         }.map { device ->
             InputDeviceInfo(
                 name = device.name,

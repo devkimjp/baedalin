@@ -193,12 +193,23 @@ class KeyMapperAccessibilityService : AccessibilityService() {
                 startService(intent)
             } else if (isRunning) {
                 // 배달 앱이 아닌 경우 숨기기 여부 결정
+                val isBaedalinApp = packageName == "kr.disys.baedalin"
                 val isIgnorePackage = packageName == "com.android.systemui" || 
                                     packageName == "android" || 
-                                    packageName == "kr.disys.baedalin" ||
                                     packageName == "com.samsung.android.sidegesturepad" ||
                                     packageName == "com.samsung.android.app.cocktailbarservice"
                                     
+                if (isBaedalinApp) {
+                    Log.d("KeyMapper", "Baedalin app detected. Keeping interception active for testing.")
+                    // 메인 앱에서도 키 가로채기가 작동하도록 설정 활성화
+                    val intent = Intent(this, FloatingWidgetService::class.java).apply {
+                        action = "ACTION_SET_INTERCEPTION"
+                        putExtra("active", true)
+                    }
+                    startService(intent)
+                    return
+                }
+
                 if (isIgnorePackage || !isFullScreen) {
                     Log.d("KeyMapper", "Ignoring window change: $packageName (isIgnore=$isIgnorePackage, isFull=$isFullScreen)")
                     FloatingWidgetService.instance?.updateToolbarState()
