@@ -59,45 +59,49 @@ class GestureManager(private var service: AccessibilityService) {
 
     fun performZoom(centerX: Float, centerY: Float, zoomIn: Boolean) {
         Log.d("GestureManager", "[TOUCH] Attempting ZOOM (in=$zoomIn) at ($centerX, $centerY)")
+        
+        val metrics = service.resources.displayMetrics
+        val width = metrics.widthPixels.toFloat()
+        
         val gestureBuilder = GestureDescription.Builder()
         
-        // 두 손가락의 시작과 끝 지점 계산
+        // 화면 가장자리 간섭(사이드 툴바 등)을 피하기 위해 중앙 부근에서만 동작하도록 계산
+        // 시작 지점: 중앙에서 15% 떨어진 곳
+        // 이동 거리: 중앙에서 35% 지점까지만 (가장자리 15%는 침범하지 않음)
+        val startOffset = width * 0.15f
+        val endOffset = width * 0.35f
+        
         val startX1: Float
-        val startY1: Float
         val endX1: Float
-        val endY1: Float
-        
         val startX2: Float
-        val startY2: Float
         val endX2: Float
-        val endY2: Float
-        
-        val offset = 200f
-        val move = 300f
         
         if (zoomIn) {
-            // 밖으로 벌리기 (확대)
-            startX1 = centerX - offset; startY1 = centerY
-            endX1 = centerX - (offset + move); endY1 = centerY
+            // 확대 (안에서 밖으로)
+            startX1 = centerX - startOffset
+            endX1 = centerX - endOffset
             
-            startX2 = centerX + offset; startY2 = centerY
-            endX2 = centerX + (offset + move); endY2 = centerY
+            startX2 = centerX + startOffset
+            endX2 = centerX + endOffset
         } else {
-            // 안으로 모으기 (축소)
-            startX1 = centerX - (offset + move); startY1 = centerY
-            endX1 = centerX - offset; endY1 = centerY
+            // 축소 (밖에서 안으로)
+            startX1 = centerX - endOffset
+            endX1 = centerX - startOffset
             
-            startX2 = centerX + (offset + move); startY2 = centerY
-            endX2 = centerX + offset; endY2 = centerY
+            startX2 = centerX + endOffset
+            endX2 = centerX + startOffset
         }
         
+        val startY = centerY
+        val endY = centerY
+        
         val path1 = Path()
-        path1.moveTo(startX1, startY1)
-        path1.lineTo(endX1, endY1)
+        path1.moveTo(startX1, startY)
+        path1.lineTo(endX1, endY)
         
         val path2 = Path()
-        path2.moveTo(startX2, startY2)
-        path2.lineTo(endX2, endY2)
+        path2.moveTo(startX2, startY)
+        path2.lineTo(endX2, endY)
         
         gestureBuilder.addStroke(GestureDescription.StrokeDescription(path1, 0, 400))
         gestureBuilder.addStroke(GestureDescription.StrokeDescription(path2, 0, 400))
