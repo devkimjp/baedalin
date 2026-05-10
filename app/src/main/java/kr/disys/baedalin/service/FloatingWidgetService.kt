@@ -404,7 +404,12 @@ class FloatingWidgetService : Service() {
                         loadPresetInternal(name) 
                     }
                     override fun onFold(folded: Boolean) { isToolbarFolded = folded }
-                    override fun onSavePosition(x: Int, y: Int) {}
+                    override fun onSavePosition(x: Int, y: Int) {
+                        getSharedPreferences("mappings", Context.MODE_PRIVATE).edit {
+                            putInt("toolbar_x", x)
+                            putInt("toolbar_y", y)
+                        }
+                    }
                 },
                 onOpenSettings = {
                     val intent = Intent(this@FloatingWidgetService, MainActivity::class.java).apply {
@@ -415,7 +420,12 @@ class FloatingWidgetService : Service() {
                 isNightMode = { _isNightMode.value }
             )
         }
-        toolbarManager.showToolbar(800, 200, 1.0f, isToolbarFolded)
+
+        val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
+        val initialX = prefs.getInt("toolbar_x", 800)
+        val initialY = prefs.getInt("toolbar_y", 500) // 초기 위치를 스위치 아래쪽으로 조정
+
+        toolbarManager.showToolbar(initialX, initialY, 1.0f, isToolbarFolded)
         toolbarManager.root?.let {
             overlayManager.showOverlay(functionName, it, toolbarManager.currentParams!!)
         }

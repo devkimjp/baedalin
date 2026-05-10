@@ -388,31 +388,13 @@ fun FunctionMappingRow(
             modifier = Modifier.padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(modifier = Modifier.weight(1f)) {
+            Box(modifier = Modifier.weight(1f)) {
                 Text(function.label, fontWeight = FontWeight.ExtraBold, fontSize = 18.sp, color = MaterialTheme.colorScheme.onSurface)
-                
-                val devicePrefix = uiState.selectedDeviceDescriptor ?: "GLOBAL"
-                val singleKey = prefs.getInt("${devicePrefix}_${function.name}_SINGLE_keycode", -1)
-                val doubleKey = prefs.getInt("${devicePrefix}_${function.name}_DOUBLE_keycode", -1)
-                
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (singleKey != -1) {
-                        val keyName = KeyEvent.keyCodeToString(singleKey).replace("KEYCODE_", "")
-                        Text("단일: $keyName", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-                    }
-                    if (doubleKey != -1) {
-                        val keyName = KeyEvent.keyCodeToString(doubleKey).replace("KEYCODE_", "")
-                        Text("더블: $keyName", fontSize = 12.sp, color = AccentOrange, fontWeight = FontWeight.Bold)
-                    }
-                    if (singleKey == -1 && doubleKey == -1) {
-                        Text("미설정", fontSize = 12.sp, color = Color.Gray)
-                    }
-                }
             }
             
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                MappingChip("단일", function, ClickType.SINGLE, uiState, viewModel)
-                MappingChip("더블", function, ClickType.DOUBLE, uiState, viewModel)
+                MappingChip("단일", function, ClickType.SINGLE, uiState, prefs, viewModel)
+                MappingChip("더블", function, ClickType.DOUBLE, uiState, prefs, viewModel)
             }
         }
     }
@@ -424,9 +406,13 @@ fun MappingChip(
     function: DeliveryFunction,
     type: ClickType,
     uiState: MainUiState,
+    prefs: android.content.SharedPreferences,
     viewModel: MainViewModel
 ) {
     val isRecording = uiState.recordingFunction == function && uiState.recordingClickType == type
+    val devicePrefix = uiState.selectedDeviceDescriptor ?: "GLOBAL"
+    val mappedKey = prefs.getInt("${devicePrefix}_${function.name}_${type.name}_keycode", -1)
+    val isMapped = mappedKey != -1
     
     Surface(
         modifier = Modifier
@@ -434,15 +420,30 @@ fun MappingChip(
             .widthIn(min = 60.dp)
             .clickable { viewModel.startRecording(function, type) },
         shape = RoundedCornerShape(12.dp),
-        color = if (isRecording) ErrorRed else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f)
+        color = when {
+            isRecording -> ErrorRed
+            isMapped -> MaterialTheme.colorScheme.primary.copy(alpha = 0.9f)
+            else -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f)
+        }
     ) {
         Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(horizontal = 12.dp)) {
-            Text(
-                text = label, 
-                fontSize = 14.sp, 
-                fontWeight = FontWeight.Black,
-                color = if (isRecording) Color.White else MaterialTheme.colorScheme.onSurface
-            )
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = label, 
+                    fontSize = 13.sp, 
+                    fontWeight = FontWeight.Black,
+                    color = if (isRecording || isMapped) Color.White else MaterialTheme.colorScheme.onSurface
+                )
+                if (isMapped && !isRecording) {
+                    val keyName = KeyEvent.keyCodeToString(mappedKey).replace("KEYCODE_", "")
+                    Text(
+                        text = keyName,
+                        fontSize = 9.sp,
+                        color = Color.White.copy(alpha = 0.8f),
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
         }
     }
 }
