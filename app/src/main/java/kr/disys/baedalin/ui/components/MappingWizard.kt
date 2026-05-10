@@ -21,8 +21,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.ContextCompat
+import android.content.pm.PackageManager
+import android.os.Build
 import kr.disys.baedalin.model.ClickType
 import kr.disys.baedalin.model.DeliveryFunction
+import android.Manifest
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -36,7 +43,30 @@ fun MappingWizard(
     var selectedFunction by remember { mutableStateOf<DeliveryFunction?>(null) }
     var selectedClickType by remember { mutableStateOf<ClickType?>(null) }
     
-    val totalSteps = 3
+    val context = LocalContext.current
+    val bluetoothPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        Manifest.permission.BLUETOOTH_CONNECT
+    } else {
+        null
+    }
+
+    var hasPermission by remember {
+        mutableStateOf(
+            bluetoothPermission == null || 
+            ContextCompat.checkSelfPermission(context, bluetoothPermission) == PackageManager.PERMISSION_GRANTED
+        )
+    }
+
+    val launcher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        hasPermission = isGranted
+        if (isGranted) {
+            currentStep = 1 // 권한 획득 시 바로 다음 단계로
+        }
+    }
+
+    val totalSteps = 4
 
     // 매핑 완료 후 다음 기능을 찾는 로직
     val moveToNextFunction = {
@@ -112,18 +142,25 @@ fun MappingWizard(
                 label = "wizardStep"
             ) { step ->
                 when (step) {
-                    0 -> FunctionSelectionStep(
+                    0 -> BluetoothPermissionStep(
+                        hasPermission = hasPermission,
+                        onRequestPermission = {
+                            bluetoothPermission?.let { launcher.launch(it) }
+                        },
+                        onNext = { currentStep = 1 }
+                    )
+                    1 -> FunctionSelectionStep(
                         onFunctionSelected = {
                             selectedFunction = it
-                            currentStep = 1
+                            currentStep = 2
                         }
                     )
-                    1 -> KeyRecordingStep(
+                    2 -> KeyRecordingStep(
                         selectedFunction = selectedFunction!!,
                         recordedKeyCode = recordedKeyCode,
-                        onNext = { currentStep = 2 }
+                        onNext = { currentStep = 3 }
                     )
-                    2 -> ClickTypeSelectionStep(
+                    3 -> ClickTypeSelectionStep(
                         onTypeSelected = {
                             selectedClickType = it
                             onComplete(selectedFunction!!, it, recordedKeyCode!!)
@@ -246,6 +283,58 @@ fun ClickTypeSelectionStep(onTypeSelected: (ClickType) -> Unit) {
                 onClick = { onTypeSelected(ClickType.DOUBLE) },
                 modifier = Modifier.weight(1f)
             )
+        }
+    }
+}
+
+@Composable
+fun BluetoothPermissionStep(
+    hasPermission: Boolean,
+    onRequestPermission: () -> Unit,
+    onNext: () -> Unit
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp)
+    ) {
+        Icon(
+            imageVector = Icons.Default.Bluetooth,
+            contentDescription = null,
+            modifier = Modifier.size(80.dp),
+            tint = if (hasPermission) Color(0xFF4CAF50) else MaterialTheme.colorScheme.primary
+        )
+        Spacer(modifier = Modifier.height(24.dp))
+        Text(
+            text = if (hasPermission) "블루투스 준비 완료" else "블루투스 권한이 필요합니다",
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+        Text(
+            text = "리모컨 장치를 정확하게 찾기 위해\n'근처 기기' 접근 권한이 필요합니다.\n이 권한이 있어야 시스템 장치를 제외할 수 있습니다.",
+            textAlign = TextAlign.Center,
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(modifier = Modifier.height(40.dp))
+        
+        if (!hasPermission) {
+            Button(
+                onClick = onRequestPermission,
+                modifier = Modifier.fillMaxWidth().height(56.dp),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Text("권한 허용하기", fontSize = 16.sp)
+            }
+        } else {
+            Button(
+                onClick = onNext,
+                modifier = Modifier.fillMaxWidth().height(56.dp),
+                shape = RoundedCornerShape(16.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50))
+            ) {
+                Text("다음 단계로", fontSize = 16.sp)
+            }
         }
     }
 }

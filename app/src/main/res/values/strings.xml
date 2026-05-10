@@ -1,4 +1,5 @@
 <resources>
     <string name="app_name">달마링</string>
     <string name="accessibility_service_label">달마링 키매퍼 서비스</string>
+    <string name="accessibility_description">블루투스 리모컨의 버튼 입력을 감지하여 배달 앱의 주요 기능을 자동화합니다. 실제 리모컨 장치만 식별하기 위해 블루투스 연결 권한을 사용하며, 개인 정보는 수집하지 않습니다.</string>
 </resources>

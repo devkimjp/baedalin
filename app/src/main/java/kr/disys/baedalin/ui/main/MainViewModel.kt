@@ -1,6 +1,7 @@
 package kr.disys.baedalin.ui.main
 
 import android.content.Context
+import android.bluetooth.BluetoothManager
 import android.hardware.input.InputManager
 import android.view.InputDevice
 import androidx.lifecycle.ViewModel
@@ -111,29 +112,54 @@ class MainViewModel @Inject constructor(
     }
 
     private fun refreshDeviceList() {
+        // Android 12(API 31) 이상에서는 BLUETOOTH_CONNECT 권한이 필요합니다.
+        val hasBtPermission = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+            context.checkSelfPermission(android.Manifest.permission.BLUETOOTH_CONNECT) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        } else {
+            true
+        }
+
+        // 블루투스 페어링된 장치 이름 수집 (연결 이력 확인용)
+        val bondedNames = try {
+            if (hasBtPermission) {
+                val bm = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
+                bm?.adapter?.bondedDevices?.map { it.name.lowercase() } ?: emptyList()
+            } else {
+                emptyList()
+            }
+        } catch (e: Exception) {
+            emptyList()
+        }
+
         val currentDevices = InputDevice.getDeviceIds().toList().mapNotNull { id ->
             InputDevice.getDevice(id)
         }.filter { device ->
-            // 리모컨 프로파일 한정 필터링:
+            // 필터링 기준:
             // 1. 가상 장치가 아닐 것
-            // 2. 방향키(DPAD)를 지원하거나, 게임패드 혹은 특수 키보드일 것
-            // 3. 일반적인 타이핑용 알파벳 키보드(KEYBOARD_TYPE_ALPHABETIC)는 제외하여 리모컨 위주로 표시
+            // 2. 키보드, DPAD, 게임패드 등 입력 소스를 가지고 있을 것
+            // 3. 벤더 ID가 0이나 1이 아닌 경우 (시스템 장치 제외)
             val isExternal = !device.isVirtual
-            val hasRemoteFeatures = (device.sources and (InputDevice.SOURCE_DPAD or InputDevice.SOURCE_GAMEPAD)) != 0
-            val isNotStandardKeyboard = device.keyboardType != InputDevice.KEYBOARD_TYPE_ALPHABETIC
+            val hasInputSource = (device.sources and (InputDevice.SOURCE_KEYBOARD or InputDevice.SOURCE_DPAD or InputDevice.SOURCE_GAMEPAD)) != 0
+            val isNotInternal = device.vendorId > 1 || device.productId > 1
             
-            // 시스템 내부 하드웨어 장치 제외 목록 (리모컨이 아님)
+            // 시스템 내부 하드웨어 장치 제외 목록 (블랙리스트)
             val systemDeviceNames = listOf(
-                "gpio-keys", "pwrkey", "vbus", "sec_jack", "Virtual", 
-                "uinput", "qpnp_pon", "s2mpg13", "hall_ic", "sensor", 
-                "snd_soc", "touchscreen", "panel"
+                "gpio", "s2mps", "s2mpg", "pwrkey", "vbus", "sec_jack", "virtual", 
+                "uinput", "qpnp", "hall_ic", "sensor", "snd_soc", "touchscreen", "panel", 
+                "pmic", "st-i2c", "i2c", "headset", "mouse", "trackpad"
             )
             val isNotSystemDevice = systemDeviceNames.none { device.name.lowercase().contains(it.lowercase()) }
             
-            // 리모컨은 보통 알파벳 키보드가 아님 (NON_ALPHABETIC)
-            val isRemoteType = device.keyboardType != InputDevice.KEYBOARD_TYPE_ALPHABETIC
+            // 블루투스 연결 이력 확인
+            val isBluetoothBonded = bondedNames.any { device.name.lowercase().contains(it) || it.contains(device.name.lowercase()) }
             
-            isExternal && isNotSystemDevice && isRemoteType && (hasRemoteFeatures || isNotStandardKeyboard)
+            if (hasBtPermission && bondedNames.isNotEmpty()) {
+                // 블루투스 권한이 있고 페어링 이력이 있다면, 이력이 있는 장치만 우선 표시
+                isBluetoothBonded && !device.isVirtual
+            } else {
+                // 권한이 없거나 이력이 없는 경우, 엄격한 물리 장치 필터 적용
+                isExternal && isNotSystemDevice && hasInputSource && isNotInternal
+            }
         }.map { device ->
             InputDeviceInfo(
                 name = device.name,
