@@ -180,6 +180,12 @@ class KeyMapperAccessibilityService : AccessibilityService() {
             
             if (preset != null) {
                 Log.d("KeyMapper", "Delivery App Detected: $packageName -> Loading $preset")
+                
+                // 접근성 서비스에서 직접 active_preset 업데이트
+                getSharedPreferences("mappings", Context.MODE_PRIVATE).edit(commit = true) {
+                    putString("active_preset", preset)
+                }
+
                 val intent = Intent(this, FloatingWidgetService::class.java).apply {
                     action = FloatingWidgetService.ACTION_LOAD_PRESET
                     putExtra("preset_name", preset)
@@ -432,13 +438,13 @@ class KeyMapperAccessibilityService : AccessibilityService() {
         val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
         val isMappingEnabled = prefs.getBoolean("is_mapping_enabled", false)
         if (!isMappingEnabled) {
-            Log.d("KeyMapper", "[DEBUG] handleAction aborted: isMappingEnabled is FALSE")
+            Log.d("KeyMapper", "[TOUCH] handleAction aborted: isMappingEnabled is FALSE")
             return false
         }
         
         val activePreset = prefs.getString("active_preset", "DEFAULT") ?: "DEFAULT"
         
-        Log.d("KeyMapper", "handleAction: keyCode=$keyCode, clickType=$clickType, prefix=$prefix, activePreset=$activePreset")
+        Log.d("KeyMapper", "[TOUCH] handleAction: keyCode=$keyCode, clickType=$clickType, prefix=$prefix, activePreset=$activePreset")
         
         val function = DeliveryFunction.entries.find { func ->
             val mappedKey = prefs.getInt("${prefix}_${func.name}_keycode", -1)
@@ -453,13 +459,13 @@ class KeyMapperAccessibilityService : AccessibilityService() {
 
             when (function) {
                 DeliveryFunction.ZOOM_OUT -> {
-                    Log.d("KeyMapper", "PERFORMING ZOOM_OUT")
+                    Log.d("KeyMapper", "[TOUCH] PERFORMING ZOOM_OUT")
                     gestureManager.performZoom(centerX, centerY, false)
                     return true
                 }
 
                 DeliveryFunction.ZOOM_IN -> {
-                    Log.d("KeyMapper", "PERFORMING ZOOM_IN")
+                    Log.d("KeyMapper", "[TOUCH] PERFORMING ZOOM_IN")
                     gestureManager.performZoom(centerX, centerY, true)
                     return true
                 }
@@ -469,6 +475,7 @@ class KeyMapperAccessibilityService : AccessibilityService() {
                     var y = widgetPrefs.getInt("${activePreset}_${function.name}_y", -1).toFloat()
                     
                     if (x == -1f || y == -1f) {
+                        Log.d("KeyMapper", "[TOUCH] Saved position not found for ${function.name} in $activePreset. Using default preset position.")
                         val presetList = when(activePreset) {
                             "BAEMIN" -> Presets.BAEMIN
                             "COUPANG" -> Presets.COUPANG
@@ -483,14 +490,20 @@ class KeyMapperAccessibilityService : AccessibilityService() {
                     }
                     
                     if (x != -1f && y != -1f) {
+                        // 위젯 컨테이너 오프셋 보정:
+                        // x는 중심(50), y는 인디케이터(20) + 툴팁(약 30) + 아이콘 중심(50) = 약 100
                         val tapX = x + 50f
-                        val tapY = y + 100f // 90f에서 100f로 상향 (인디케이터+툴팁 높이 반영)
-                        Log.d("KeyMapper", "PERFORMING ACTION: ${function.name} at ($tapX, $tapY)")
+                        val tapY = y + 100f
+                        Log.d("KeyMapper", "[TOUCH] PERFORMING TAP: ${function.name} at ($tapX, $tapY) for preset $activePreset")
                         gestureManager.performTap(tapX, tapY)
                         return true
+                    } else {
+                        Log.e("KeyMapper", "[TOUCH] FAILED: No coordinates found for ${function.name}")
                     }
                 }
             }
+        } else {
+            Log.d("KeyMapper", "[TOUCH] No function mapped to keyCode=$keyCode with clickType=$clickType")
         }
         return false
     }

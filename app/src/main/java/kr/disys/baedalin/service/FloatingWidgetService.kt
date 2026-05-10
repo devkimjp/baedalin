@@ -201,6 +201,12 @@ class FloatingWidgetService : Service() {
 
     private fun loadPresetInternal(presetName: String) {
         currentPreset = presetName
+        
+        // 접근성 서비스와의 공유를 위해 SharedPreferences 업데이트
+        getSharedPreferences("mappings", Context.MODE_PRIVATE).edit(commit = true) {
+            putString("active_preset", presetName)
+        }
+        
         val presetList = when(presetName) {
             "BAEMIN" -> Presets.BAEMIN
             "COUPANG" -> Presets.COUPANG

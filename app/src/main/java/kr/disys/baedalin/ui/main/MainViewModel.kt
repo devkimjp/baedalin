@@ -220,7 +220,6 @@ class MainViewModel @Inject constructor(
         prefs.edit(commit = true) {
             putInt("${prefix}_${func.name}_keycode", keyCode)
             putString("${prefix}_${func.name}_clicktype", type.name)
-            putBoolean("is_recording", false)
         }
         
         stopRecording()
