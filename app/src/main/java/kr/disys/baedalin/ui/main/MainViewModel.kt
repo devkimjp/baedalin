@@ -255,10 +255,20 @@ class MainViewModel @Inject constructor(
     fun executeSaveMapping(func: DeliveryFunction, type: ClickType, keyCode: Int) {
         val prefix = selectedDeviceDescriptor ?: "GLOBAL"
         prefs.edit(commit = true) {
-            // 구 버전 호환성을 위해 기본 키도 유지하거나, 아예 타입별로 분리
+            // 1. 중복 키 제거: 현재 입력된 keyCode를 사용하는 다른 모든 매핑을 먼저 지웁니다.
+            DeliveryFunction.entries.forEach { f ->
+                ClickType.entries.forEach { t ->
+                    val key = "${prefix}_${f.name}_${t.name}_keycode"
+                    if (prefs.getInt(key, -1) == keyCode) {
+                        remove(key)
+                    }
+                }
+            }
+
+            // 2. 새 매핑 저장 (덮어쓰기)
             putInt("${prefix}_${func.name}_${type.name}_keycode", keyCode)
             
-            // UI 표시를 위한 호환성 (마지막 설정된 키 정보)
+            // UI 표시 및 하위 호환성을 위한 정보 업데이트
             putInt("${prefix}_${func.name}_keycode", keyCode)
             putString("${prefix}_${func.name}_clicktype", type.name)
         }
