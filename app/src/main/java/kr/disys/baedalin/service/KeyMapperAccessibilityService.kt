@@ -438,9 +438,8 @@ class KeyMapperAccessibilityService : AccessibilityService() {
     private fun isKeyMappedToDouble(keyCode: Int, prefix: String): Boolean {
         val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
         return DeliveryFunction.entries.any { func ->
-            val mappedKey = prefs.getInt("${prefix}_${func.name}_keycode", -1)
-            val mappedType = prefs.getString("${prefix}_${func.name}_clicktype", ClickType.SINGLE.name)
-            mappedKey == keyCode && mappedType == ClickType.DOUBLE.name
+            val mappedKey = prefs.getInt("${prefix}_${func.name}_DOUBLE_keycode", -1)
+            mappedKey == keyCode
         }
     }
 
@@ -463,14 +462,11 @@ class KeyMapperAccessibilityService : AccessibilityService() {
 
     private fun isKeyMapped(keyCode: Int, prefix: String): Boolean {
         val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
-        var found = false
-        DeliveryFunction.entries.forEach { function ->
-            val storedKey = prefs.getInt("${prefix}_${function.name}_keycode", -1)
-            if (storedKey == keyCode) {
-                found = true
-            }
+        return DeliveryFunction.entries.any { function ->
+            val singleKey = prefs.getInt("${prefix}_${function.name}_SINGLE_keycode", -1)
+            val doubleKey = prefs.getInt("${prefix}_${function.name}_DOUBLE_keycode", -1)
+            singleKey == keyCode || doubleKey == keyCode
         }
-        return found
     }
 
     private fun handleAction(keyCode: Int, clickType: ClickType, prefix: String): Boolean {
@@ -486,9 +482,8 @@ class KeyMapperAccessibilityService : AccessibilityService() {
         Log.d("KeyMapper", "[TOUCH] handleAction: keyCode=$keyCode, clickType=$clickType, prefix=$prefix, activePreset=$activePreset")
         
         val function = DeliveryFunction.entries.find { func ->
-            val mappedKey = prefs.getInt("${prefix}_${func.name}_keycode", -1)
-            val mappedClick = prefs.getString("${prefix}_${func.name}_clicktype", ClickType.SINGLE.name)
-            mappedKey == keyCode && mappedClick == clickType.name
+            val mappedKey = prefs.getInt("${prefix}_${func.name}_${clickType.name}_keycode", -1)
+            mappedKey == keyCode
         }
         
         if (function != null) {

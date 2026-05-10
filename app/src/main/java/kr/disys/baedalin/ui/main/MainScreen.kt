@@ -392,12 +392,21 @@ fun FunctionMappingRow(
                 Text(function.label, fontWeight = FontWeight.ExtraBold, fontSize = 18.sp, color = MaterialTheme.colorScheme.onSurface)
                 
                 val devicePrefix = uiState.selectedDeviceDescriptor ?: "GLOBAL"
-                val singleKey = prefs.getInt("${devicePrefix}_${function.name}_keycode", -1)
-                if (singleKey != -1) {
-                    val keyName = KeyEvent.keyCodeToString(singleKey).replace("KEYCODE_", "")
-                    Text("연결됨: $keyName", fontSize = 14.sp, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-                } else {
-                    Text("버튼을 설정해 주세요", fontSize = 14.sp, color = Color.Gray)
+                val singleKey = prefs.getInt("${devicePrefix}_${function.name}_SINGLE_keycode", -1)
+                val doubleKey = prefs.getInt("${devicePrefix}_${function.name}_DOUBLE_keycode", -1)
+                
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (singleKey != -1) {
+                        val keyName = KeyEvent.keyCodeToString(singleKey).replace("KEYCODE_", "")
+                        Text("단일: $keyName", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                    }
+                    if (doubleKey != -1) {
+                        val keyName = KeyEvent.keyCodeToString(doubleKey).replace("KEYCODE_", "")
+                        Text("더블: $keyName", fontSize = 12.sp, color = AccentOrange, fontWeight = FontWeight.Bold)
+                    }
+                    if (singleKey == -1 && doubleKey == -1) {
+                        Text("미설정", fontSize = 12.sp, color = Color.Gray)
+                    }
                 }
             }
             

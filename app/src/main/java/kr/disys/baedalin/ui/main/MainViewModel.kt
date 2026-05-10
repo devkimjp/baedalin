@@ -255,6 +255,10 @@ class MainViewModel @Inject constructor(
     fun executeSaveMapping(func: DeliveryFunction, type: ClickType, keyCode: Int) {
         val prefix = selectedDeviceDescriptor ?: "GLOBAL"
         prefs.edit(commit = true) {
+            // 구 버전 호환성을 위해 기본 키도 유지하거나, 아예 타입별로 분리
+            putInt("${prefix}_${func.name}_${type.name}_keycode", keyCode)
+            
+            // UI 표시를 위한 호환성 (마지막 설정된 키 정보)
             putInt("${prefix}_${func.name}_keycode", keyCode)
             putString("${prefix}_${func.name}_clicktype", type.name)
         }
