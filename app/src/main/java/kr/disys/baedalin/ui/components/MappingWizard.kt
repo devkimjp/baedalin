@@ -57,13 +57,19 @@ fun MappingWizard(
     }
 
     val unmappedFunctions = getUnmappedFunctions()
-    var currentStep by remember { 
-        mutableStateOf(
-            if (!hasPermission) 0 
-            else if (unmappedFunctions.isNotEmpty()) 2 // 미매핑 기능이 있으면 바로 키 입력 단계로
-            else 1 // 없으면 기능 선택 단계로
-        ) 
+    
+    // 권한 여부에 따라 실제 진행할 단계 정의 (0: 권한, 1: 기능선택, 2: 키입력, 3: 타입선택)
+    val activeSteps = remember(hasPermission) {
+        if (hasPermission) listOf(1, 2, 3) else listOf(0, 1, 2, 3)
     }
+    
+    var currentStepIdx by remember(activeSteps) { 
+        mutableStateOf(0) 
+    }
+    
+    val currentStep = activeSteps.getOrElse(currentStepIdx) { 1 }
+    val totalSteps = activeSteps.size
+
     var selectedFunction by remember { 
         mutableStateOf(if (hasPermission && unmappedFunctions.isNotEmpty()) unmappedFunctions.first() else null) 
     }
@@ -74,20 +80,20 @@ fun MappingWizard(
     ) { isGranted ->
         hasPermission = isGranted
         if (isGranted) {
-            currentStep = 1 // 권한 획득 시 바로 다음 단계로
+            currentStepIdx = 0 // 권한 획득 후 새로운 activeSteps(1,2,3)의 0번 인덱스(기능 선택)로
         }
     }
-
-    val totalSteps = 4
 
     // 매핑 완료 후 다음 기능을 찾는 로직 (자동화)
     val moveToNextFunction = {
         val remaining = getUnmappedFunctions()
         if (remaining.isNotEmpty()) {
             selectedFunction = remaining.first()
-            currentStep = 2 // 다음 미매핑 기능의 키 입력 단계로 바로 이동
+            // 다음 기능 매핑 시에는 '키 입력(단계 2)'으로 바로 점프
+            val keyStepIdx = activeSteps.indexOf(2)
+            if (keyStepIdx != -1) currentStepIdx = keyStepIdx
         } else {
-            onDismiss() // 모든 기능 매핑 완료 시 닫기
+            onDismiss()
         }
     }
 
@@ -137,11 +143,14 @@ fun MappingWizard(
                     Box(
                         modifier = Modifier
                             .weight(1f)
-                            .height(4.dp)
+                            .height(6.dp) // 조금 더 두껍게
                             .clip(CircleShape)
                             .background(
-                                if (index <= currentStep) MaterialTheme.colorScheme.primary 
-                                else MaterialTheme.colorScheme.surfaceVariant
+                                when {
+                                    index < currentStepIdx -> MaterialTheme.colorScheme.primary // 완료됨
+                                    index == currentStepIdx -> kr.disys.baedalin.ui.theme.AccentOrange // 현재 단계 강조
+                                    else -> MaterialTheme.colorScheme.surfaceVariant // 대기 중
+                                }
                             )
                     )
                 }
@@ -159,18 +168,18 @@ fun MappingWizard(
                         onRequestPermission = {
                             bluetoothPermission?.let { launcher.launch(it) }
                         },
-                        onNext = { currentStep = 1 }
+                        onNext = { if (currentStepIdx < totalSteps - 1) currentStepIdx++ }
                     )
                     1 -> FunctionSelectionStep(
                         onFunctionSelected = {
                             selectedFunction = it
-                            currentStep = 2
+                            if (currentStepIdx < totalSteps - 1) currentStepIdx++
                         }
                     )
                     2 -> KeyRecordingStep(
                         selectedFunction = selectedFunction!!,
                         recordedKeyCode = recordedKeyCode,
-                        onNext = { currentStep = 3 }
+                        onNext = { if (currentStepIdx < totalSteps - 1) currentStepIdx++ }
                     )
                     3 -> ClickTypeSelectionStep(
                         onTypeSelected = {
