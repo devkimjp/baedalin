@@ -404,6 +404,16 @@ class KeyMapperAccessibilityService : AccessibilityService() {
         }
 
         if (action == KeyEvent.ACTION_UP) {
+            val isDoubleMapped = isKeyMappedToDouble(keyCode, prefix)
+            
+            if (!isDoubleMapped) {
+                // 더블 클릭이 매핑되지 않은 키는 대기 없이 즉시 싱글 클릭으로 처리 (반응성 향상)
+                Log.d("KeyMapper", "[TOUCH] Immediate Action (Single only): keyCode=$keyCode, device=$prefix")
+                handleAction(keyCode, ClickType.SINGLE, prefix)
+                clickCount = 0
+                return true
+            }
+
             clickCount++
             
             pendingClickRunnable?.let { handler.removeCallbacks(it) }
@@ -411,7 +421,7 @@ class KeyMapperAccessibilityService : AccessibilityService() {
             pendingClickRunnable = Runnable {
                 val type = if (clickCount >= 2) ClickType.DOUBLE else ClickType.SINGLE
                 
-                Log.d("KeyMapper", "[TOUCH] handleAction Start: keyCode=$keyCode, type=$type, device=$prefix")
+                Log.d("KeyMapper", "[TOUCH] Delayed Action: keyCode=$keyCode, type=$type, device=$prefix")
                 val handled = handleAction(keyCode, type, prefix)
                 if (!handled) {
                     Log.e("KeyMapper", "[TOUCH] handleAction Failed or Not Handled for keyCode=$keyCode")
@@ -423,6 +433,15 @@ class KeyMapperAccessibilityService : AccessibilityService() {
         }
 
         return super.onKeyEvent(event)
+    }
+
+    private fun isKeyMappedToDouble(keyCode: Int, prefix: String): Boolean {
+        val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
+        return DeliveryFunction.entries.any { func ->
+            val mappedKey = prefs.getInt("${prefix}_${func.name}_keycode", -1)
+            val mappedType = prefs.getString("${prefix}_${func.name}_clicktype", ClickType.SINGLE.name)
+            mappedKey == keyCode && mappedType == ClickType.DOUBLE.name
+        }
     }
 
     private fun cancelAllTimers() {

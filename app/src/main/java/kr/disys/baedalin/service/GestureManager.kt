@@ -60,16 +60,48 @@ class GestureManager(private var service: AccessibilityService) {
     fun performZoom(centerX: Float, centerY: Float, zoomIn: Boolean) {
         Log.d("GestureManager", "[TOUCH] Attempting ZOOM (in=$zoomIn) at ($centerX, $centerY)")
         val gestureBuilder = GestureDescription.Builder()
-        val tapPath = Path()
-        tapPath.moveTo(centerX, centerY)
-        gestureBuilder.addStroke(GestureDescription.StrokeDescription(tapPath, 0, 50))
-
-        val swipePath = Path()
-        swipePath.moveTo(centerX, centerY)
-        val offset = if (zoomIn) 200f else -200f
-        swipePath.lineTo(centerX, centerY + offset)
-        gestureBuilder.addStroke(GestureDescription.StrokeDescription(swipePath, 100, 200))
-
+        
+        // 두 손가락의 시작과 끝 지점 계산
+        val startX1: Float
+        val startY1: Float
+        val endX1: Float
+        val endY1: Float
+        
+        val startX2: Float
+        val startY2: Float
+        val endX2: Float
+        val endY2: Float
+        
+        val offset = 200f
+        val move = 300f
+        
+        if (zoomIn) {
+            // 밖으로 벌리기 (확대)
+            startX1 = centerX - offset; startY1 = centerY
+            endX1 = centerX - (offset + move); endY1 = centerY
+            
+            startX2 = centerX + offset; startY2 = centerY
+            endX2 = centerX + (offset + move); endY2 = centerY
+        } else {
+            // 안으로 모으기 (축소)
+            startX1 = centerX - (offset + move); startY1 = centerY
+            endX1 = centerX - offset; endY1 = centerY
+            
+            startX2 = centerX + (offset + move); startY2 = centerY
+            endX2 = centerX + offset; endY2 = centerY
+        }
+        
+        val path1 = Path()
+        path1.moveTo(startX1, startY1)
+        path1.lineTo(endX1, endY1)
+        
+        val path2 = Path()
+        path2.moveTo(startX2, startY2)
+        path2.lineTo(endX2, endY2)
+        
+        gestureBuilder.addStroke(GestureDescription.StrokeDescription(path1, 0, 400))
+        gestureBuilder.addStroke(GestureDescription.StrokeDescription(path2, 0, 400))
+        
         service.dispatchGesture(gestureBuilder.build(), object : AccessibilityService.GestureResultCallback() {
             override fun onCompleted(gestureDescription: GestureDescription?) {
                 Log.d("GestureManager", "[TOUCH] ZOOM Success")
