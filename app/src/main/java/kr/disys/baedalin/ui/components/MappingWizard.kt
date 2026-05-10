@@ -66,11 +66,21 @@ fun MappingWizard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = "버튼 매핑 마법사",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold
-                )
+                Column {
+                    Text(
+                        text = "버튼 매핑 마법사",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                    selectedFunction?.let {
+                        Text(
+                            text = "[${it.label}] 설정 중",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
                 IconButton(onClick = onDismiss) {
                     Icon(Icons.Default.Close, contentDescription = "닫기")
                 }
@@ -182,7 +192,7 @@ fun KeyRecordingStep(
         )
         Spacer(modifier = Modifier.height(24.dp))
         Text(
-            text = if (recordedKeyCode == null) "리모컨 버튼을 눌러주세요" else "버튼이 인식되었습니다!",
+            text = if (recordedKeyCode == null) "리모컨 버튼을 눌러주세요" else "[${selectedFunction.label}] 버튼이 인식되었습니다!",
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold
         )

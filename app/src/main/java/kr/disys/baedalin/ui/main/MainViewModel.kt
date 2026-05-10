@@ -227,7 +227,8 @@ class MainViewModel @Inject constructor(
         // closeMappingWizard() // 연속 매핑을 위해 여기서 닫지 않음
         _uiState.update { state ->
             state.copy(
-                mappingVersion = state.mappingVersion + 1
+                mappingVersion = state.mappingVersion + 1,
+                pendingKeyCode = null // 다음 매핑을 위해 초기화
             )
         }
     }
