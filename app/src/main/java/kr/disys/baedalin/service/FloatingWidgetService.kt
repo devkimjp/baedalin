@@ -196,6 +196,10 @@ class FloatingWidgetService : Service() {
                     }
                 }
             }
+            "ACTION_SET_INTERCEPTION" -> {
+                val active = intent.getBooleanExtra("active", false)
+                _isInterceptionActive.value = active
+            }
         }
     }
 

@@ -348,18 +348,18 @@ class KeyMapperAccessibilityService : AccessibilityService() {
             return true 
         }
         
-        // 2. 서비스 중지 상태면 즉시 바이패스
+        // 2. 서비스 작동 스위치 확인
         if (!isMappingEnabled) {
             if (event.action == KeyEvent.ACTION_DOWN) {
-                Log.d("KeyMapper", "[DEBUG] BYPASS: isMappingEnabled is FALSE. Letting system handle code=${event.keyCode}")
+                Log.d("KeyMapper", "[DEBUG] BYPASS: isMappingEnabled is FALSE. (Check '작동' switch)")
             }
             return false
         }
 
-        // 3. 위젯이 숨겨진 상태(비활성 앱)면 바이패스
+        // 3. 위젯 활성화 상태 확인 (배달 앱 감지 여부)
         if (!isInterceptionActive) {
             if (event.action == KeyEvent.ACTION_DOWN) {
-                Log.d("KeyMapper", "[DEBUG] BYPASS: isInterceptionActive is FALSE. keyCode=${event.keyCode}")
+                Log.d("KeyMapper", "[DEBUG] BYPASS: isInterceptionActive is FALSE. (Is a delivery app active?)")
             }
             return false
         }
@@ -367,7 +367,7 @@ class KeyMapperAccessibilityService : AccessibilityService() {
         val targetDescriptor = prefs.getString("selected_device_descriptor", null)
         if (targetDescriptor == null) {
             if (event.action == KeyEvent.ACTION_DOWN) {
-                Log.d("KeyMapper", "[DEBUG] BYPASS: No target device selected.")
+                Log.d("KeyMapper", "[DEBUG] BYPASS: No target device selected in settings.")
             }
             return false
         }
@@ -375,7 +375,7 @@ class KeyMapperAccessibilityService : AccessibilityService() {
         val device = InputDevice.getDevice(event.deviceId)
         if (device == null || device.descriptor != targetDescriptor) {
             if (event.action == KeyEvent.ACTION_DOWN) {
-                Log.d("KeyMapper", "[DEBUG] BYPASS: Device mismatch or null. target=$targetDescriptor")
+                Log.d("KeyMapper", "[DEBUG] BYPASS: Device mismatch. Target: $targetDescriptor, Current: ${device?.descriptor ?: "null"}")
             }
             return false
         }
@@ -411,10 +411,10 @@ class KeyMapperAccessibilityService : AccessibilityService() {
             pendingClickRunnable = Runnable {
                 val type = if (clickCount >= 2) ClickType.DOUBLE else ClickType.SINGLE
                 
-                Log.d("KeyMapper", "[DEBUG] Executing Action: keyCode=$keyCode, type=$type, prefix=$prefix")
+                Log.d("KeyMapper", "[TOUCH] handleAction Start: keyCode=$keyCode, type=$type, device=$prefix")
                 val handled = handleAction(keyCode, type, prefix)
-                if (handled && (keyCode == KeyEvent.KEYCODE_VOLUME_UP || keyCode == KeyEvent.KEYCODE_VOLUME_DOWN)) {
-                    Log.d("KeyMapper", "[VOLUME] Key $keyCode handled successfully.")
+                if (!handled) {
+                    Log.e("KeyMapper", "[TOUCH] handleAction Failed or Not Handled for keyCode=$keyCode")
                 }
                 clickCount = 0
             }.also { handler.postDelayed(it, doubleClickTimeout) }
