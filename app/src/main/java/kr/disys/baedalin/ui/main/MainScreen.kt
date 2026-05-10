@@ -199,21 +199,8 @@ fun MainScreen(
                 PresetItem("쿠팡", R.drawable.ic_toolbar_coupang, "COUPANG", viewModel)
             }
 
-            // 4. 기능 리스트 (Compact)
-            Text("버튼 확인/수정", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.ExtraBold)
-            LazyColumn(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                items(DeliveryFunction.entries) { function ->
-                    FunctionMappingRow(
-                        function = function,
-                        uiState = uiState,
-                        prefs = prefs,
-                        viewModel = viewModel
-                    )
-                }
-            }
+            // 버튼 확인/수정 기능 삭제됨
+
         }
     }
 
