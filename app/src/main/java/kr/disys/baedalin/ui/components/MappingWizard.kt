@@ -135,25 +135,35 @@ fun MappingWizard(
                 }
             }
 
-            // Step Indicator
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                repeat(totalSteps) { index ->
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(6.dp) // 조금 더 두껍게
-                            .clip(CircleShape)
-                            .background(
-                                when {
-                                    index < currentStepIdx -> MaterialTheme.colorScheme.primary // 완료됨
-                                    index == currentStepIdx -> kr.disys.baedalin.ui.theme.AccentOrange // 현재 단계 강조
-                                    else -> MaterialTheme.colorScheme.surfaceVariant // 대기 중
+            // Step Indicator (권한 단계가 아닐 때만 표시)
+            val indicatorSteps = activeSteps.filter { it > 0 }
+            val currentIndicatorIdx = indicatorSteps.indexOf(activeSteps[currentStepIdx])
+            
+            if (currentIndicatorIdx != -1) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    repeat(indicatorSteps.size) { index ->
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(6.dp)
+                                .clip(CircleShape)
+                                .background(
+                                    when {
+                                        index < currentIndicatorIdx -> MaterialTheme.colorScheme.primary
+                                        index == currentIndicatorIdx -> kr.disys.baedalin.ui.theme.AccentOrange
+                                        else -> MaterialTheme.colorScheme.surfaceVariant
+                                    }
+                                )
+                                .clickable(enabled = index < currentIndicatorIdx) {
+                                    val targetStep = indicatorSteps[index]
+                                    val targetIdx = activeSteps.indexOf(targetStep)
+                                    if (targetIdx != -1) currentStepIdx = targetIdx
                                 }
-                            )
-                    )
+                        )
+                    }
                 }
             }
 
@@ -314,13 +324,21 @@ fun KeyRecordingStep(
         )
         
         if (recordedKeyCode != null) {
+            LaunchedEffect(recordedKeyCode) {
+                kotlinx.coroutines.delay(600) // 사용자가 인식 결과를 잠시 볼 수 있게 지연
+                onNext()
+            }
             Spacer(modifier = Modifier.height(32.dp))
-            Button(
-                onClick = onNext,
-                modifier = Modifier.fillMaxWidth().height(56.dp),
-                shape = RoundedCornerShape(16.dp)
+            Surface(
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                shape = RoundedCornerShape(12.dp)
             ) {
-                Text("다음 (클릭 방식 선택)", fontSize = 16.sp)
+                Text(
+                    "인식되었습니다. 다음 단계로 이동합니다...",
+                    modifier = Modifier.padding(16.dp),
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Bold
+                )
             }
         }
     }
