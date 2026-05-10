@@ -255,7 +255,8 @@ class MainViewModel @Inject constructor(
     fun executeSaveMapping(func: DeliveryFunction, type: ClickType, keyCode: Int) {
         val prefix = selectedDeviceDescriptor ?: "GLOBAL"
         prefs.edit(commit = true) {
-            // 1. 중복 키 제거: 동일한 keyCode와 동일한 ClickType을 사용하는 다른 매핑을 지웁니다.
+            // 1. 중복 키 제거 (동일 버튼 사용 방지): 
+            // 동일한 keyCode와 동일한 ClickType을 사용하는 다른 '기능' 매핑을 지웁니다.
             DeliveryFunction.entries.forEach { f ->
                 val key = "${prefix}_${f.name}_${type.name}_keycode"
                 if (prefs.getInt(key, -1) == keyCode) {
@@ -263,7 +264,14 @@ class MainViewModel @Inject constructor(
                 }
             }
 
-            // 2. 새 매핑 저장 (덮어쓰기)
+            // 2. 기능 내 배타적 매핑 보장:
+            // 동일한 '기능'에 대해 다른 ClickType이 이미 설정되어 있다면 지웁니다. (사용자 요청: 점이 한 종류만 보여야 함)
+            ClickType.entries.forEach { t ->
+                val key = "${prefix}_${func.name}_${t.name}_keycode"
+                remove(key)
+            }
+
+            // 3. 새 매핑 저장
             putInt("${prefix}_${func.name}_${type.name}_keycode", keyCode)
             
             // UI 표시 및 하위 호환성을 위한 정보 업데이트
