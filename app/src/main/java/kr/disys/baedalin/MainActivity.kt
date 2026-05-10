@@ -202,6 +202,22 @@ class MainActivity : ComponentActivity() {
             putExtra("preset_name", presetName)
         })
         
+        // 해당 배달 앱 실행
+        val packageName = kr.disys.baedalin.model.Presets.getPackageName(presetName)
+        if (packageName.isNotEmpty()) {
+            val launchIntent = packageManager.getLaunchIntentForPackage(packageName)
+            if (launchIntent != null) {
+                launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                try {
+                    startActivity(launchIntent)
+                } catch (e: Exception) {
+                    android.widget.Toast.makeText(this, "앱 실행 실패: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
+                }
+            } else {
+                android.widget.Toast.makeText(this, "앱이 설치되어 있지 않습니다: $packageName", android.widget.Toast.LENGTH_SHORT).show()
+            }
+        }
+        
         viewModel.updateMappingVersion()
     }
 
