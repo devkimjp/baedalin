@@ -31,5 +31,9 @@
 - 다단계 작업 시 단계별 계획과 검증 방법을 미리 제시합니다.
 - 강력한 성공 기준을 바탕으로 독립적으로 검증 루프를 수행합니다.
 
+### 5. 한글화 하세요
+- git commit message 도 한글로 작성해주세요.
+- 모든 산출되는 문서는 한글로하세요
+- 코드 주석도 한글로 해야합니다.
 ---
 *참고: [andrej-karpathy-skills](https://github.com/forrestchang/andrej-karpathy-skills)*

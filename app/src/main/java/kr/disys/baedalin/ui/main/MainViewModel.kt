@@ -224,7 +224,7 @@ class MainViewModel @Inject constructor(
         }
         
         stopRecording()
-        closeMappingWizard()
+        // closeMappingWizard() // 연속 매핑을 위해 여기서 닫지 않음
         _uiState.update { state ->
             state.copy(
                 mappingVersion = state.mappingVersion + 1
@@ -233,11 +233,20 @@ class MainViewModel @Inject constructor(
     }
 
     fun openMappingWizard() {
-        _uiState.update { it.copy(isMappingWizardActive = true) }
+        _uiState.update { it.copy(isMappingWizardActive = true, pendingKeyCode = null) }
+        prefs.edit { putBoolean("is_recording", true) }
     }
 
     fun closeMappingWizard() {
         _uiState.update { it.copy(isMappingWizardActive = false, pendingKeyCode = null) }
+        prefs.edit { putBoolean("is_recording", false) }
+    }
+
+    fun getUnmappedFunctions(): List<DeliveryFunction> {
+        val prefix = selectedDeviceDescriptor ?: "GLOBAL"
+        return DeliveryFunction.entries.filter { func ->
+            prefs.getInt("${prefix}_${func.name}_keycode", -1) == -1
+        }
     }
 
     fun stopRecording() {

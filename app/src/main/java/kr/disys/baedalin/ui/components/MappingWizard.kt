@@ -29,6 +29,7 @@ import kr.disys.baedalin.model.DeliveryFunction
 fun MappingWizard(
     onComplete: (DeliveryFunction, ClickType, Int) -> Unit,
     onDismiss: () -> Unit,
+    getUnmappedFunctions: () -> List<DeliveryFunction>,
     recordedKeyCode: Int? = null
 ) {
     var currentStep by remember { mutableStateOf(0) }
@@ -36,6 +37,17 @@ fun MappingWizard(
     var selectedClickType by remember { mutableStateOf<ClickType?>(null) }
     
     val totalSteps = 3
+
+    // 매핑 완료 후 다음 기능을 찾는 로직
+    val moveToNextFunction = {
+        val remaining = getUnmappedFunctions()
+        if (remaining.isNotEmpty()) {
+            selectedFunction = remaining.first()
+            currentStep = 1 // 키 입력 단계로 바로 이동
+        } else {
+            onDismiss() // 더 이상 설정할 기능이 없으면 닫기
+        }
+    }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -105,6 +117,7 @@ fun MappingWizard(
                         onTypeSelected = {
                             selectedClickType = it
                             onComplete(selectedFunction!!, it, recordedKeyCode!!)
+                            moveToNextFunction() // 매핑 완료 후 다음 기능으로!
                         }
                     )
                 }

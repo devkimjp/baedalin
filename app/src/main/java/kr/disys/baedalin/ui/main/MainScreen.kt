@@ -208,6 +208,7 @@ fun MainScreen(
         MappingWizard(
             onComplete = { func, type, code -> viewModel.executeSaveMapping(func, type, code) },
             onDismiss = { viewModel.closeMappingWizard() },
+            getUnmappedFunctions = { viewModel.getUnmappedFunctions() },
             recordedKeyCode = uiState.pendingKeyCode
         )
     }

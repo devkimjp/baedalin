@@ -37,11 +37,27 @@ import kr.disys.baedalin.ui.theme.BaedalinTheme
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     private val viewModel: MainViewModel by viewModels()
+    
+    private val keyReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action == "ACTION_KEY_RECORDED") {
+                val keyCode = intent.getIntExtra("keycode", -1)
+                handleKeyCodeInput(keyCode)
+            }
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         handleIntent(intent)
+        
+        val filter = android.content.IntentFilter("ACTION_KEY_RECORDED")
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(keyReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            registerReceiver(keyReceiver, filter)
+        }
 
         setContent {
             val isNight by FloatingWidgetService.isNightMode.collectAsStateWithLifecycle()
@@ -110,6 +126,13 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onDestroy() {
+        try {
+            unregisterReceiver(keyReceiver)
+        } catch (e: Exception) {}
+        super.onDestroy()
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -182,14 +205,22 @@ class MainActivity : ComponentActivity() {
         viewModel.updateMappingVersion()
     }
 
-    override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
-        // 녹화 중일 때는 볼륨 키도 가로채서 매핑에 사용
-        if (viewModel.uiState.value.isMappingWizardActive || 
-            (viewModel.recordingFunction != null && viewModel.recordingClickType != null)) {
-            handleKeyCodeInput(keyCode)
-            return true
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        val keyCode = event.keyCode
+        // 키가 눌렸을 때(Action Down)만 처리
+        if (event.action == KeyEvent.ACTION_DOWN) {
+            // 녹화 중이거나 매핑 마법사 중일 때는 모든 키(볼륨키 포함)를 가로챔
+            if (viewModel.uiState.value.isMappingWizardActive || 
+                (viewModel.recordingFunction != null && viewModel.recordingClickType != null)) {
+                
+                // 시스템 키(홈, 최근 앱 등)를 제외한 나머지 키 처리
+                if (keyCode != KeyEvent.KEYCODE_HOME && keyCode != KeyEvent.KEYCODE_APP_SWITCH) {
+                    handleKeyCodeInput(keyCode)
+                    return true // 이벤트를 소비하여 시스템 동작 방지
+                }
+            }
         }
-        return super.onKeyDown(keyCode, event)
+        return super.dispatchKeyEvent(event)
     }
 
     private fun isAccessibilityServiceEnabled(context: Context, service: Class<out AccessibilityService>): Boolean {

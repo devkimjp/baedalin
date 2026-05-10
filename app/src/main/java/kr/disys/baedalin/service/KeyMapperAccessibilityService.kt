@@ -308,6 +308,14 @@ class KeyMapperAccessibilityService : AccessibilityService() {
         if (isRecording) {
             if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
                 Log.d("KeyMapper", "[DEBUG] RECORDING MODE: KeyCode=${event.keyCode} captured.")
+                
+                // 1. 브로드캐스트 전송 (가장 빠름)
+                sendBroadcast(Intent("ACTION_KEY_RECORDED").apply {
+                    setPackage(packageName)
+                    putExtra("keycode", event.keyCode)
+                })
+
+                // 2. 혹시 앱이 백그라운드라면 전면으로 호출
                 val intent = Intent(this, kr.disys.baedalin.MainActivity::class.java).apply {
                     action = "ACTION_KEY_RECORDED"
                     putExtra("keycode", event.keyCode)
