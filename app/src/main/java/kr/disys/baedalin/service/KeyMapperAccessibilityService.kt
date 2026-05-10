@@ -94,7 +94,12 @@ class KeyMapperAccessibilityService : AccessibilityService() {
     }
 
     override fun onServiceConnected() {
-        Log.d("KeyMapper", "KeyMapperAccessibilityService connected")
+        super.onServiceConnected()
+        Log.d("KeyMapper", "onServiceConnected: Service Started")
+        
+        // GestureManager에 서비스 인스턴스 설정 (터치 실행을 위해 필수)
+        gestureManager.setService(this)
+
         updateKeyFilterState()
         
         getSharedPreferences("mappings", Context.MODE_PRIVATE)
@@ -406,7 +411,11 @@ class KeyMapperAccessibilityService : AccessibilityService() {
             pendingClickRunnable = Runnable {
                 val type = if (clickCount >= 2) ClickType.DOUBLE else ClickType.SINGLE
                 
-                handleAction(keyCode, type, prefix)
+                Log.d("KeyMapper", "[DEBUG] Executing Action: keyCode=$keyCode, type=$type, prefix=$prefix")
+                val handled = handleAction(keyCode, type, prefix)
+                if (handled && (keyCode == KeyEvent.KEYCODE_VOLUME_UP || keyCode == KeyEvent.KEYCODE_VOLUME_DOWN)) {
+                    Log.d("KeyMapper", "[VOLUME] Key $keyCode handled successfully.")
+                }
                 clickCount = 0
             }.also { handler.postDelayed(it, doubleClickTimeout) }
             

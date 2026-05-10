@@ -15,26 +15,50 @@ import java.io.FileWriter
 import java.text.SimpleDateFormat
 import java.util.*
 
-class GestureManager(private val service: AccessibilityService) {
+class GestureManager(private var service: AccessibilityService) {
+
+    fun setService(newService: AccessibilityService) {
+        this.service = newService
+    }
 
     fun performTap(x: Float, y: Float) {
+        Log.d("GestureManager", "[TOUCH] Attempting TAP at ($x, $y)")
         val path = Path()
         path.moveTo(x, y)
         val gestureBuilder = GestureDescription.Builder()
         gestureBuilder.addStroke(GestureDescription.StrokeDescription(path, 0, 50))
-        service.dispatchGesture(gestureBuilder.build(), null, null)
+        
+        val gesture = gestureBuilder.build()
+        service.dispatchGesture(gesture, object : AccessibilityService.GestureResultCallback() {
+            override fun onCompleted(gestureDescription: GestureDescription?) {
+                Log.d("GestureManager", "[TOUCH] TAP Success at ($x, $y)")
+            }
+            override fun onCancelled(gestureDescription: GestureDescription?) {
+                Log.e("GestureManager", "[TOUCH] TAP Cancelled/Failed at ($x, $y)")
+            }
+        }, null)
     }
 
     fun performSwipe(startX: Float, startY: Float, endX: Float, endY: Float, duration: Long = 100) {
+        Log.d("GestureManager", "[TOUCH] Attempting SWIPE from ($startX, $startY) to ($endX, $endY)")
         val path = Path()
         path.moveTo(startX, startY)
         path.lineTo(endX, endY)
         val gestureBuilder = GestureDescription.Builder()
         gestureBuilder.addStroke(GestureDescription.StrokeDescription(path, 0, duration))
-        service.dispatchGesture(gestureBuilder.build(), null, null)
+        
+        service.dispatchGesture(gestureBuilder.build(), object : AccessibilityService.GestureResultCallback() {
+            override fun onCompleted(gestureDescription: GestureDescription?) {
+                Log.d("GestureManager", "[TOUCH] SWIPE Success")
+            }
+            override fun onCancelled(gestureDescription: GestureDescription?) {
+                Log.e("GestureManager", "[TOUCH] SWIPE Cancelled/Failed")
+            }
+        }, null)
     }
 
     fun performZoom(centerX: Float, centerY: Float, zoomIn: Boolean) {
+        Log.d("GestureManager", "[TOUCH] Attempting ZOOM (in=$zoomIn) at ($centerX, $centerY)")
         val gestureBuilder = GestureDescription.Builder()
         val tapPath = Path()
         tapPath.moveTo(centerX, centerY)
@@ -46,7 +70,14 @@ class GestureManager(private val service: AccessibilityService) {
         swipePath.lineTo(centerX, centerY + offset)
         gestureBuilder.addStroke(GestureDescription.StrokeDescription(swipePath, 100, 200))
 
-        service.dispatchGesture(gestureBuilder.build(), null, null)
+        service.dispatchGesture(gestureBuilder.build(), object : AccessibilityService.GestureResultCallback() {
+            override fun onCompleted(gestureDescription: GestureDescription?) {
+                Log.d("GestureManager", "[TOUCH] ZOOM Success")
+            }
+            override fun onCancelled(gestureDescription: GestureDescription?) {
+                Log.e("GestureManager", "[TOUCH] ZOOM Cancelled/Failed")
+            }
+        }, null)
     }
 
     fun captureUISnapshot(): String? {
