@@ -613,23 +613,26 @@ class KeyMapperAccessibilityService : AccessibilityService() {
         val nextPackage = Presets.getPackageName(nextPreset)
         val currentPackage = Presets.getPackageName(activePreset)
         
-        Log.i("KeyMapper", "[APP_SWITCH] Start switching: $activePreset -> $nextPreset")
-        Log.d("KeyMapper", "[APP_SWITCH] Current Pkg: $currentPackage, Target Pkg: $nextPackage")
+        Log.i("KeyMapper", "[APP_SWITCH] Optimized switching: $activePreset -> $nextPreset")
         
         try {
             val intent = packageManager.getLaunchIntentForPackage(nextPackage)
             if (intent != null) {
-                // 전환 플래그 설정 (이전 앱 이벤트 무시용)
                 isSwitchingApp = true
                 lastSwitchedPackage = currentPackage
                 
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
-                startActivity(intent)
+                // [최적화] 기존 태스크를 최상단으로 올리고, 새로 만들지 않음 (Warm Start 강제)
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                intent.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+                intent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                intent.addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION)
                 
-                Log.i("KeyMapper", "[APP_SWITCH] Intent sent for $nextPackage")
-                Toast.makeText(this, "$nextPreset 앱으로 전환합니다.", Toast.LENGTH_SHORT).show()
+                // [최적화] 시스템 전환 애니메이션 제거로 체감 속도 극대화
+                val options = android.app.ActivityOptions.makeCustomAnimation(this, 0, 0).toBundle()
+                startActivity(intent, options)
                 
-                // 2초 후 전환 상태 해제
+                Log.i("KeyMapper", "[APP_SWITCH] Fast Intent sent for $nextPackage")
+                
                 handler.postDelayed({
                     isSwitchingApp = false
                     lastSwitchedPackage = null
@@ -640,7 +643,7 @@ class KeyMapperAccessibilityService : AccessibilityService() {
                 Toast.makeText(this, "$nextPreset 앱을 찾을 수 없습니다.", Toast.LENGTH_SHORT).show()
             }
         } catch (e: Exception) {
-            Log.e("KeyMapper", "[APP_SWITCH] Error during transition", e)
+            Log.e("KeyMapper", "[APP_SWITCH] Error during fast transition", e)
             isSwitchingApp = false
         }
     }
