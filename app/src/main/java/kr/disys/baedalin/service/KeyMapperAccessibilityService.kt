@@ -84,8 +84,9 @@ class KeyMapperAccessibilityService : AccessibilityService() {
             updateKeyFilterState()
         }
         if (key == "double_click_timeout") {
-            doubleClickTimeout = prefs.getLong("double_click_timeout", 300L)
-            Log.d("KeyMapper", "Updated doubleClickTimeout: $doubleClickTimeout")
+            val measured = prefs.getLong("double_click_timeout", 300L)
+            doubleClickTimeout = (measured * 1.1).toLong() // 10% 여유 추가
+            Log.d("KeyMapper", "Updated doubleClickTimeout (with 10% margin): $doubleClickTimeout ms")
         }
     }
 
@@ -117,7 +118,8 @@ class KeyMapperAccessibilityService : AccessibilityService() {
         setupMediaSession()
         
         val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
-        doubleClickTimeout = prefs.getLong("double_click_timeout", 500L)
+        val measured = prefs.getLong("double_click_timeout", 500L)
+        doubleClickTimeout = (measured * 1.1).toLong() // 10% 여유 추가
         prefs.registerOnSharedPreferenceChangeListener(prefsListener)
             
         CoroutineScope(Dispatchers.Main).launch {
@@ -471,19 +473,19 @@ class KeyMapperAccessibilityService : AccessibilityService() {
             }
 
             clickCount++
-            val timeout = prefs.getLong("double_click_timeout", 500L) 
+            // [개선] 클래스 필드에 저장된 10% 가산된 타임아웃 사용
             pendingClickRunnable?.let { handler.removeCallbacks(it) }
             
             pendingClickRunnable = Runnable {
                 val type = if (clickCount >= 2) ClickType.DOUBLE else ClickType.SINGLE
                 val usedPrefix = if (isKeyMapped(keyCode, prefix)) prefix else "GLOBAL"
-                Log.d("KeyMapper", "[TOUCH] Dispatching $type (Total=$clickCount) via $usedPrefix")
+                Log.d("KeyMapper", "[TOUCH] Dispatching $type (Total=$clickCount, Timeout=${doubleClickTimeout}ms) via $usedPrefix")
                 handleAction(keyCode, type, usedPrefix)
                 clickCount = 0
                 lastKeyCode = -1
                 pendingClickRunnable = null
             }.also { 
-                handler.postDelayed(it, timeout)
+                handler.postDelayed(it, doubleClickTimeout)
             }
             return true
         }
