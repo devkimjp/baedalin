@@ -120,7 +120,7 @@ class MainActivity : ComponentActivity() {
                                     getSharedPreferences("mappings", Context.MODE_PRIVATE).edit { putBoolean("is_recording", false) }
                                 },
                                 title = { Text("키 중복 확인") },
-                                text = { Text("'${uiState.conflictFunction?.label}' 기능에 이미 설정된 키입니다.\n현재 기능으로 변경하시겠습니까?") },
+                                text = { Text("'${uiState.conflictFunction?.let { getString(it.labelResId) }}' 기능에 이미 설정된 키입니다.\n현재 기능으로 변경하시겠습니까?") },
                                 confirmButton = {
                                     Button(onClick = {
                                         viewModel.executeSaveMapping(uiState.recordingFunction!!, uiState.recordingClickType!!, uiState.pendingKeyCode!!)

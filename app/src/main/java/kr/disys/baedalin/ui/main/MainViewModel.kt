@@ -1,6 +1,7 @@
 package kr.disys.baedalin.ui.main
 
 import android.content.Context
+import android.util.Log
 import android.bluetooth.BluetoothManager
 import android.hardware.input.InputManager
 import android.view.InputDevice

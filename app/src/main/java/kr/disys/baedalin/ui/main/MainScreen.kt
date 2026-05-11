@@ -48,6 +48,7 @@ import kr.disys.baedalin.ui.theme.ErrorRed
 import kr.disys.baedalin.ui.theme.SuccessGreen
 import kr.disys.baedalin.ui.theme.BaedalinTheme
 import android.view.KeyEvent
+import androidx.compose.ui.res.stringResource
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -378,7 +379,7 @@ fun FunctionMappingRow(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(modifier = Modifier.weight(1f)) {
-                Text(function.label, fontWeight = FontWeight.ExtraBold, fontSize = 18.sp, color = MaterialTheme.colorScheme.onSurface)
+                Text(stringResource(function.labelResId), fontWeight = FontWeight.ExtraBold, fontSize = 18.sp, color = MaterialTheme.colorScheme.onSurface)
             }
             
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

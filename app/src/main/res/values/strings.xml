@@ -2,4 +2,37 @@
     <string name="app_name">달마링</string>
     <string name="accessibility_service_label">달마링 키매퍼 서비스</string>
     <string name="accessibility_description">블루투스 리모컨의 버튼 입력을 감지하여 배달 앱의 주요 기능을 자동화합니다. 실제 리모컨 장치만 식별하기 위해 블루투스 연결 권한을 사용하며, 개인 정보는 수집하지 않습니다.</string>
+
+    <!-- Functions -->
+    <string name="func_call_check">콜확인(배민)</string>
+    <string name="func_accept">수락</string>
+    <string name="func_reject">거절</string>
+    <string name="func_path">경로보기</string>
+    <string name="func_zoom_in">지도 확대</string>
+    <string name="func_zoom_out">지도 축소</string>
+
+    <!-- Wizard -->
+    <string name="wizard_step">단계</string>
+    <string name="wizard_press_button">리모컨 버튼을 눌러주세요</string>
+    <string name="wizard_press_desc">[%1$s] 기능에 연결할\n리모컨 버튼을 5초 안에 눌러주세요.</string>
+    <string name="wizard_click_type_title">어떻게 눌렀을 때 동작할까요?</string>
+    <string name="wizard_click_single">한 번 누르기</string>
+    <string name="wizard_click_double">두 번 누르기</string>
+    <string name="wizard_complete_title">매핑 완료</string>
+    <string name="wizard_complete_desc">설정이 완료되었습니다.\n다음 버튼을 이어서 매핑할까요?</string>
+    <string name="wizard_btn_continue">이어서 하기</string>
+    <string name="wizard_btn_finish">종료</string>
+    <string name="wizard_btn_back">이전</string>
+    <string name="wizard_toast_recorded">버튼이 인식되었습니다: %1$d</string>
+    <string name="wizard_toast_timeout">시간이 초과되었습니다. 다시 시도해주세요.</string>
+
+    <!-- Main Screen -->
+    <string name="main_title">기능 설정</string>
+    <string name="main_active_switch">작동</string>
+    <string name="main_remote_settings">리모컨 설정</string>
+    <string name="main_select_device">장치를 선택하세요</string>
+    <string name="main_start_mapping">매핑 시작</string>
+    <string name="main_add_device">장치 추가</string>
+    <string name="main_device_unknown">연결됨 (이름 불명)</string>
+    <string name="main_device_none">장치를 추가하세요</string>
 </resources>

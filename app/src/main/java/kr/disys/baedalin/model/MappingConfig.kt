@@ -1,5 +1,7 @@
 package kr.disys.baedalin.model
 
+import kr.disys.baedalin.R
+
 enum class ActionType {
     TAP, SWIPE
 }
@@ -8,13 +10,13 @@ enum class ClickType {
     SINGLE, DOUBLE, LONG
 }
 
-enum class DeliveryFunction(val label: String) {
-    CALL_CHECK("콜확인(배민)"),
-    ACCEPT("수락"),
-    REJECT("거절"),
-    PATH("경로보기"),
-    ZOOM_IN("지도 확대"),
-    ZOOM_OUT("지도 축소")
+enum class DeliveryFunction(val labelResId: Int) {
+    CALL_CHECK(R.string.func_call_check),
+    ACCEPT(R.string.func_accept),
+    REJECT(R.string.func_reject),
+    PATH(R.string.func_path),
+    ZOOM_IN(R.string.func_zoom_in),
+    ZOOM_OUT(R.string.func_zoom_out)
 }
 
 data class Mapping(

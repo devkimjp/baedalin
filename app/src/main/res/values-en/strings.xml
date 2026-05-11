@@ -1,0 +1,38 @@
+<resources>
+    <string name="app_name">Dalmaling</string>
+    <string name="accessibility_service_label">Dalmaling KeyMapper Service</string>
+    <string name="accessibility_description">Automates key functions of delivery apps by detecting Bluetooth remote button inputs. Uses Bluetooth permissions solely to identify physical remote devices and does not collect personal information.</string>
+
+    <!-- Functions -->
+    <string name="func_call_check">Check Call (Baemin)</string>
+    <string name="func_accept">Accept</string>
+    <string name="func_reject">Reject</string>
+    <string name="func_path">View Path</string>
+    <string name="func_zoom_in">Zoom In</string>
+    <string name="func_zoom_out">Zoom Out</string>
+
+    <!-- Wizard -->
+    <string name="wizard_step">Step</string>
+    <string name="wizard_press_button">Press Remote Button</string>
+    <string name="wizard_press_desc">Press the remote button to link with\n[%1$s] within 5 seconds.</string>
+    <string name="wizard_click_type_title">How should it be triggered?</string>
+    <string name="wizard_click_single">Single Click</string>
+    <string name="wizard_click_double">Double Click</string>
+    <string name="wizard_complete_title">Mapping Complete</string>
+    <string name="wizard_complete_desc">Settings updated.\nContinue mapping the next button?</string>
+    <string name="wizard_btn_continue">Continue</string>
+    <string name="wizard_btn_finish">Finish</string>
+    <string name="wizard_btn_back">Back</string>
+    <string name="wizard_toast_recorded">Button detected: %1$d</string>
+    <string name="wizard_toast_timeout">Timed out. Please try again.</string>
+
+    <!-- Main Screen -->
+    <string name="main_title">Function Settings</string>
+    <string name="main_active_switch">Active</string>
+    <string name="main_remote_settings">Remote Settings</string>
+    <string name="main_select_device">Select Device</string>
+    <string name="main_start_mapping">Start Mapping</string>
+    <string name="main_add_device">Add Device</string>
+    <string name="main_device_unknown">Connected (Unknown)</string>
+    <string name="main_device_none">Please add a device</string>
+</resources>

@@ -34,6 +34,8 @@ import android.content.Intent
 import android.content.Context
 import android.provider.Settings
 import android.net.Uri
+import androidx.compose.ui.res.stringResource
+import kr.disys.baedalin.R
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -150,13 +152,13 @@ fun MappingWizard(
 
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "버튼 매핑 마법사",
+                        text = stringResource(R.string.app_name),
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold
                     )
                     selectedFunction?.let {
                         Text(
-                            text = "[${it.label}] 설정 중",
+                            text = stringResource(it.labelResId),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.primary,
                             fontWeight = FontWeight.Medium
@@ -164,7 +166,7 @@ fun MappingWizard(
                     }
                 }
                 IconButton(onClick = onDismiss) {
-                    Icon(Icons.Default.Close, contentDescription = "닫기")
+                    Icon(Icons.Default.Close, contentDescription = null)
                 }
             }
 
@@ -249,12 +251,17 @@ fun MappingWizard(
                             
                             // 매핑 완료 피드백 및 다음 매핑 진행 여부 확인
                             val keyName = android.view.KeyEvent.keyCodeToString(code).replace("KEYCODE_", "")
-                            val typeLabel = if (type == ClickType.SINGLE) "한 번 누르기" else "두 번 누르기"
-                            android.widget.Toast.makeText(context, "[${func.label}] 매핑 완료: $keyName ($typeLabel)", android.widget.Toast.LENGTH_SHORT).show()
+                            val funcLabel = context.getString(func.labelResId)
+                            val typeLabel = if (type == ClickType.SINGLE) context.getString(R.string.wizard_click_single) else context.getString(R.string.wizard_click_double)
+                            
+                            android.widget.Toast.makeText(
+                                context, 
+                                "[$funcLabel] ${context.getString(R.string.wizard_complete_title)}: $keyName ($typeLabel)", 
+                                android.widget.Toast.LENGTH_SHORT
+                            ).show()
                             
                             val remaining = getUnmappedFunctions()
                             if (remaining.isNotEmpty()) {
-                                // 다음 버튼 매핑 여부 확인 다이얼로그 표시 로직 (여기서는 간단한 알림 후 선택 상태로 전환)
                                 showContinueDialog = true
                             } else {
                                 moveToNextFunction()
@@ -270,14 +277,14 @@ fun MappingWizard(
                         showContinueDialog = false
                         moveToNextFunction()
                     },
-                    title = { Text("매핑 완료") },
-                    text = { Text("설정이 완료되었습니다.\n다음 버튼을 이어서 매핑할까요?") },
+                    title = { Text(stringResource(R.string.wizard_complete_title)) },
+                    text = { Text(stringResource(R.string.wizard_complete_desc)) },
                     confirmButton = {
                         Button(onClick = {
                             showContinueDialog = false
                             startNextMapping()
                         }) {
-                            Text("예")
+                            Text(stringResource(R.string.wizard_btn_continue))
                         }
                     },
                     dismissButton = {
@@ -285,7 +292,7 @@ fun MappingWizard(
                             showContinueDialog = false
                             moveToNextFunction()
                         }) {
-                            Text("아니오")
+                            Text(stringResource(R.string.wizard_btn_finish))
                         }
                     }
                 )
@@ -302,7 +309,7 @@ fun FunctionSelectionStep(
 ) {
     Column {
         Text(
-            "설정할 기능을 선택해주세요",
+            stringResource(R.string.main_select_device),
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -333,7 +340,7 @@ fun FunctionSelectionStep(
                         verticalArrangement = Arrangement.Center
                     ) {
                         Text(
-                            function.label,
+                            stringResource(function.labelResId),
                             textAlign = TextAlign.Center,
                             style = MaterialTheme.typography.labelLarge,
                             fontWeight = FontWeight.Bold
@@ -419,13 +426,13 @@ fun KeyRecordingStep(
         
         Spacer(modifier = Modifier.height(24.dp))
         Text(
-            text = "리모컨 버튼을 눌러주세요",
+            text = stringResource(R.string.wizard_press_button),
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold
         )
         Spacer(modifier = Modifier.height(8.dp))
         Text(
-            text = "[${selectedFunction.label}] 기능에 연결할\n리모컨 버튼을 5초 안에 눌러주세요.",
+            text = stringResource(R.string.wizard_press_desc, stringResource(selectedFunction.labelResId)),
             textAlign = TextAlign.Center,
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -439,9 +446,9 @@ fun ClickTypeSelectionStep(
     onTypeSelected: (ClickType) -> Unit
 ) {
     Column {
-        val keyName = recordedKeyCode?.let { android.view.KeyEvent.keyCodeToString(it).replace("KEYCODE_", "") } ?: "알 수 없음"
+        val keyName = recordedKeyCode?.let { android.view.KeyEvent.keyCodeToString(it).replace("KEYCODE_", "") } ?: "???"
         Text(
-            "입력코드: $keyName\n어떻게 눌렀을 때 동작할까요?",
+            "Code: $keyName\n${stringResource(R.string.wizard_click_type_title)}",
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             lineHeight = 24.sp
@@ -452,15 +459,15 @@ fun ClickTypeSelectionStep(
             horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             ClickTypeCard(
-                title = "한 번 누르기",
-                description = "일반적인 입력",
+                title = stringResource(R.string.wizard_click_single),
+                description = "Single",
                 icon = Icons.Default.TouchApp,
                 onClick = { onTypeSelected(ClickType.SINGLE) },
                 modifier = Modifier.weight(1f)
             )
             ClickTypeCard(
-                title = "두 번 누르기",
-                description = "빠르게 두 번",
+                title = stringResource(R.string.wizard_click_double),
+                description = "Double",
                 icon = Icons.Default.AdsClick,
                 onClick = { onTypeSelected(ClickType.DOUBLE) },
                 modifier = Modifier.weight(1f)

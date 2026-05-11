@@ -12,6 +12,7 @@ import android.view.InputDevice
 import android.view.accessibility.AccessibilityEvent
 import android.util.Log
 import android.content.Intent
+import kr.disys.baedalin.R
 import kr.disys.baedalin.KeyRecordingState
 import kr.disys.baedalin.model.ClickType
 import kr.disys.baedalin.model.DeliveryFunction
@@ -305,14 +306,14 @@ class KeyMapperAccessibilityService : AccessibilityService() {
                 
                 // 기능명으로 라벨 찾기 (사전 정의된 기능 또는 커스텀 위젯)
                 val function = DeliveryFunction.entries.find { it.name == funcName }
-                val label = function?.label ?: "커스텀 $funcName"
+                val label = function?.let { getString(it.labelResId) } ?: "Custom $funcName"
                 
                 saveDirectMapping(funcName, keyCode)
                 playSuccessSound()
                 updateKeyFilterState() // 필터 상태 즉시 업데이트
                 
                 val keyName = KeyEvent.keyCodeToString(keyCode).replace("KEYCODE_", "")
-                Toast.makeText(this, "[$label] 매핑 완료: $keyName", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "[$label] ${getString(R.string.wizard_complete_title)}: $keyName", Toast.LENGTH_SHORT).show()
                 
                 // FloatingWidgetService에 UI 갱신 및 메시지 표시 알림
                 val updateIntent = Intent(this, FloatingWidgetService::class.java).apply {
