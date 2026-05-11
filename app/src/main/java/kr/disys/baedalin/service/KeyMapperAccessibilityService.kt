@@ -47,6 +47,8 @@ class KeyMapperAccessibilityService : AccessibilityService() {
     private var lastKeyCode = -1
     private var clickCount = 0
     private var doubleClickTimeout = 300L
+    private var isSwitchingApp = false
+    private var lastSwitchedPackage: String? = null
     private val longPressTimeout = 500L
     
     private var pendingClickRunnable: Runnable? = null
@@ -268,6 +270,13 @@ class KeyMapperAccessibilityService : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event?.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
             val packageName = event.packageName?.toString() ?: return
+            
+            // [개선] 앱 전환 직후 2초 동안은 이전 앱의 이벤트를 무시하여 위젯 깜빡임 방지
+            if (isSwitchingApp && packageName == lastSwitchedPackage) {
+                Log.d("KeyMapper", "Ignoring window change for old app during transition: $packageName")
+                return
+            }
+            
             val isFullScreen = event.isFullScreen
             
             currentPackageName = packageName 
@@ -598,26 +607,41 @@ class KeyMapperAccessibilityService : AccessibilityService() {
     }
     private fun switchBetweenDeliveryApps() {
         val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
-        // 현재 활성화된 프리셋 확인 (접근성 서비스가 감지한 현재 패키지 기반)
         val activePreset = prefs.getString("active_preset", "BAEMIN") ?: "BAEMIN"
         
-        // 전환할 대상 결정 (배민이면 쿠팡, 아니면 배민)
         val nextPreset = if (activePreset == "BAEMIN") "COUPANG" else "BAEMIN"
         val nextPackage = Presets.getPackageName(nextPreset)
+        val currentPackage = Presets.getPackageName(activePreset)
         
-        Log.d("KeyMapper", "Switching app: $activePreset -> $nextPreset ($nextPackage)")
+        Log.i("KeyMapper", "[APP_SWITCH] Start switching: $activePreset -> $nextPreset")
+        Log.d("KeyMapper", "[APP_SWITCH] Current Pkg: $currentPackage, Target Pkg: $nextPackage")
         
         try {
             val intent = packageManager.getLaunchIntentForPackage(nextPackage)
             if (intent != null) {
+                // 전환 플래그 설정 (이전 앱 이벤트 무시용)
+                isSwitchingApp = true
+                lastSwitchedPackage = currentPackage
+                
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
                 startActivity(intent)
+                
+                Log.i("KeyMapper", "[APP_SWITCH] Intent sent for $nextPackage")
                 Toast.makeText(this, "$nextPreset 앱으로 전환합니다.", Toast.LENGTH_SHORT).show()
+                
+                // 2초 후 전환 상태 해제
+                handler.postDelayed({
+                    isSwitchingApp = false
+                    lastSwitchedPackage = null
+                    Log.d("KeyMapper", "[APP_SWITCH] Transition mode cleared")
+                }, 2000)
             } else {
+                Log.w("KeyMapper", "[APP_SWITCH] Target app not found: $nextPackage")
                 Toast.makeText(this, "$nextPreset 앱을 찾을 수 없습니다.", Toast.LENGTH_SHORT).show()
             }
         } catch (e: Exception) {
-            Log.e("KeyMapper", "Failed to switch app", e)
+            Log.e("KeyMapper", "[APP_SWITCH] Error during transition", e)
+            isSwitchingApp = false
         }
     }
 }
