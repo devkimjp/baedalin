@@ -561,6 +561,10 @@ class KeyMapperAccessibilityService : AccessibilityService() {
                     gestureManager.performZoom(centerX, centerY, true)
                     return true
                 }
+                DeliveryFunction.SWITCH_APP -> {
+                    switchBetweenDeliveryApps()
+                    return true
+                }
                 else -> {
                     val widgetPrefs = getSharedPreferences("WidgetPositions", Context.MODE_PRIVATE)
                     var x = widgetPrefs.getInt("${activePreset}_${function.name}_x", -1).toFloat()
@@ -591,5 +595,29 @@ class KeyMapperAccessibilityService : AccessibilityService() {
             }
         }
         return false
+    }
+    private fun switchBetweenDeliveryApps() {
+        val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
+        // 현재 활성화된 프리셋 확인 (접근성 서비스가 감지한 현재 패키지 기반)
+        val activePreset = prefs.getString("active_preset", "BAEMIN") ?: "BAEMIN"
+        
+        // 전환할 대상 결정 (배민이면 쿠팡, 아니면 배민)
+        val nextPreset = if (activePreset == "BAEMIN") "COUPANG" else "BAEMIN"
+        val nextPackage = Presets.getPackageName(nextPreset)
+        
+        Log.d("KeyMapper", "Switching app: $activePreset -> $nextPreset ($nextPackage)")
+        
+        try {
+            val intent = packageManager.getLaunchIntentForPackage(nextPackage)
+            if (intent != null) {
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+                startActivity(intent)
+                Toast.makeText(this, "$nextPreset 앱으로 전환합니다.", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(this, "$nextPreset 앱을 찾을 수 없습니다.", Toast.LENGTH_SHORT).show()
+            }
+        } catch (e: Exception) {
+            Log.e("KeyMapper", "Failed to switch app", e)
+        }
     }
 }

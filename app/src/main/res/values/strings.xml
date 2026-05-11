@@ -10,6 +10,7 @@
     <string name="func_path">경로보기</string>
     <string name="func_zoom_in">지도 확대</string>
     <string name="func_zoom_out">지도 축소</string>
+    <string name="func_switch_app">배민↔쿠팡 전환</string>
 
     <!-- Wizard -->
     <string name="wizard_step">단계</string>

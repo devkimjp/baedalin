@@ -16,7 +16,8 @@ enum class DeliveryFunction(val labelResId: Int) {
     REJECT(R.string.func_reject),
     PATH(R.string.func_path),
     ZOOM_IN(R.string.func_zoom_in),
-    ZOOM_OUT(R.string.func_zoom_out)
+    ZOOM_OUT(R.string.func_zoom_out),
+    SWITCH_APP(R.string.func_switch_app)
 }
 
 data class Mapping(
