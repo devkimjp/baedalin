@@ -56,6 +56,10 @@ class MainViewModel @Inject constructor(
     var isBluetoothEnabled: Boolean
         get() = _uiState.value.isBluetoothEnabled
         set(value) { _uiState.update { state -> state.copy(isBluetoothEnabled = value) } }
+        
+    var isBatteryOptimized: Boolean
+        get() = _uiState.value.isBatteryOptimized
+        set(value) { _uiState.update { state -> state.copy(isBatteryOptimized = value) } }
 
     val isMappingEnabled: Boolean get() = _uiState.value.isMappingEnabled
 
@@ -232,10 +236,42 @@ class MainViewModel @Inject constructor(
     }
 
     fun toggleService() {
+        // [CRITICAL] 매핑 위저드 중에는 서비스 상태 변경 금지
+        if (_uiState.value.isMappingWizardActive) return
+
         val currentStatus = _uiState.value.isMappingEnabled
         val nextStatus = !currentStatus
+        
+        // 서비스 시작 시 위저드가 켜져 있다면 자동 저장 후 닫기
+        if (nextStatus && _uiState.value.isMappingWizardActive) {
+            saveWizardMapping()
+            closeMappingWizard()
+        }
+
         _uiState.update { state -> state.copy(isMappingEnabled = nextStatus) }
         prefs.edit { putBoolean("is_mapping_enabled", nextStatus) }
+    }
+
+    private fun saveWizardMapping() {
+        val state = _uiState.value
+        val func = state.wizardSelectedFunction ?: return
+        val code = state.pendingKeyCode ?: return
+        val type = state.wizardSelectedClickType ?: ClickType.SINGLE
+        
+        Log.d("MainViewModel", "Auto-saving wizard mapping on service start: $func, $type, $code")
+        executeSaveMapping(func, type, code)
+    }
+
+    fun updateWizardStep(step: Int) {
+        _uiState.update { it.copy(currentMappingStep = step) }
+    }
+
+    fun updateWizardFunction(function: DeliveryFunction?) {
+        _uiState.update { it.copy(wizardSelectedFunction = function) }
+    }
+
+    fun updateWizardClickType(type: ClickType?) {
+        _uiState.update { it.copy(wizardSelectedClickType = type) }
     }
 
     fun selectDevice(device: InputDeviceInfo?) {
@@ -306,7 +342,17 @@ class MainViewModel @Inject constructor(
     }
 
     fun openMappingWizard() {
-        _uiState.update { it.copy(isMappingWizardActive = true, pendingKeyCode = null) }
+        // 위저드 시작 시 매핑 서비스 중지 (충돌 방지)
+        prefs.edit { putBoolean("is_mapping_enabled", false) }
+        
+        _uiState.update { it.copy(
+            isMappingEnabled = false,
+            isMappingWizardActive = true, 
+            pendingKeyCode = null,
+            wizardSelectedFunction = null,
+            wizardSelectedClickType = null,
+            currentMappingStep = 0
+        ) }
     }
 
     fun resetPendingKeyCode() {
@@ -315,7 +361,12 @@ class MainViewModel @Inject constructor(
     }
 
     fun closeMappingWizard() {
-        _uiState.update { it.copy(isMappingWizardActive = false, pendingKeyCode = null) }
+        _uiState.update { it.copy(
+            isMappingWizardActive = false, 
+            pendingKeyCode = null,
+            wizardSelectedFunction = null,
+            wizardSelectedClickType = null
+        ) }
         prefs.edit { putBoolean("is_recording", false) }
     }
 

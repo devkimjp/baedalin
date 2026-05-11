@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.provider.Settings
+import android.util.Log
 import android.view.KeyEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -77,8 +78,9 @@ class MainActivity : ComponentActivity() {
                             viewModel.isAccessibilityEnabled = isAccessibilityServiceEnabled(this@MainActivity, KeyMapperAccessibilityService::class.java)
                             viewModel.isOverlayEnabled = Settings.canDrawOverlays(this@MainActivity)
                             viewModel.isBluetoothEnabled = checkBluetoothPermission()
+                            viewModel.isBatteryOptimized = checkBatteryOptimization()
                             
-                            if (viewModel.isMappingEnabled) {
+                            if (viewModel.isMappingEnabled && !uiState.isMappingWizardActive) {
                                 startService(Intent(this@MainActivity, FloatingWidgetService::class.java).apply {
                                     action = FloatingWidgetService.ACTION_START_SERVICE_ONLY
                                 })
@@ -91,11 +93,15 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                if (!uiState.isAccessibilityEnabled || !uiState.isOverlayEnabled || !uiState.isBluetoothEnabled) {
+                val isBatteryExempt = !uiState.isBatteryOptimized
+                val allPermissionsGranted = uiState.isAccessibilityEnabled && uiState.isOverlayEnabled && uiState.isBluetoothEnabled && isBatteryExempt
+
+                if (!allPermissionsGranted) {
                     PermissionWizard(
                         isAccessibilityEnabled = uiState.isAccessibilityEnabled,
                         isOverlayEnabled = uiState.isOverlayEnabled,
                         isBluetoothEnabled = uiState.isBluetoothEnabled,
+                        isBatteryOptimized = uiState.isBatteryOptimized,
                         onRequestBluetoothPermission = {
                             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
                                 bluetoothPermissionLauncher.launch(android.Manifest.permission.BLUETOOTH_CONNECT)
@@ -106,6 +112,7 @@ class MainActivity : ComponentActivity() {
                             viewModel.isAccessibilityEnabled = isAccessibilityServiceEnabled(this@MainActivity, KeyMapperAccessibilityService::class.java)
                             viewModel.isOverlayEnabled = Settings.canDrawOverlays(this@MainActivity)
                             viewModel.isBluetoothEnabled = checkBluetoothPermission()
+                            viewModel.isBatteryOptimized = checkBatteryOptimization()
                         }
                     )
                 } else {
@@ -161,6 +168,9 @@ class MainActivity : ComponentActivity() {
         }
 
         if (intent?.action == FloatingWidgetService.ACTION_START_RECORDING) {
+            // [CRITICAL] 매핑 위저드 중에는 개별 녹화 명령 무시
+            if (viewModel.uiState.value.isMappingWizardActive) return
+            
             val funcName = intent.getStringExtra("function_name")
             val function = DeliveryFunction.entries.find { it.name == funcName }
             if (function != null) {
@@ -170,11 +180,6 @@ class MainActivity : ComponentActivity() {
 
         if (intent?.action == FloatingWidgetService.ACTION_UPDATE_UI) {
             viewModel.updateMappingVersion()
-        }
-
-        if (intent?.action == "ACTION_KEY_RECORDED") {
-            val keyCode = intent.getIntExtra("keycode", -1)
-            handleKeyCodeInput(keyCode)
         }
     }
 
@@ -239,12 +244,15 @@ class MainActivity : ComponentActivity() {
         val keyCode = event.keyCode
         // 키가 눌렸을 때(Action Down)만 처리
         if (event.action == KeyEvent.ACTION_DOWN) {
-            // 녹화 중이거나 매핑 마법사 중일 때는 모든 키(볼륨키 포함)를 가로챔
-            if (viewModel.uiState.value.isMappingWizardActive || 
+            val uiState = viewModel.uiState.value
+            
+            // 매핑 위저드 중이거나 개별 녹화 중일 때는 모든 키(볼륨키 포함)를 가로챔
+            if (uiState.isMappingWizardActive || 
                 (viewModel.recordingFunction != null && viewModel.recordingClickType != null)) {
                 
                 // 시스템 키(홈, 최근 앱 등)를 제외한 나머지 키 처리
                 if (keyCode != KeyEvent.KEYCODE_HOME && keyCode != KeyEvent.KEYCODE_APP_SWITCH) {
+                    Log.d("MainActivity", "Intercepting key for mapping: $keyCode")
                     handleKeyCodeInput(keyCode)
                     return true // 이벤트를 소비하여 시스템 동작 방지
                 }
@@ -260,6 +268,11 @@ class MainActivity : ComponentActivity() {
         if (enabledServices == null) return false
         
         return enabledServices.split(':').any { it.equals(expectedComponentName, ignoreCase = true) }
+    }
+
+    private fun checkBatteryOptimization(): Boolean {
+        val powerManager = getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+        return !powerManager.isIgnoringBatteryOptimizations(packageName)
     }
 
     private fun checkBluetoothPermission(): Boolean {

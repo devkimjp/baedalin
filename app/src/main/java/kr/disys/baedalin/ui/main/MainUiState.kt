@@ -10,6 +10,7 @@ data class MainUiState(
     val isAccessibilityEnabled: Boolean = false,
     val isOverlayEnabled: Boolean = false,
     val isBluetoothEnabled: Boolean = false,
+    val isBatteryOptimized: Boolean = true, // 기본값은 최적화 중으로 설정
     val isLoading: Boolean = false,
     val errorMessage: String? = null,
     
@@ -36,7 +37,9 @@ data class MainUiState(
     // Wizard States
     val currentPermissionStep: Int = 0,
     val isMappingWizardActive: Boolean = false,
-    val currentMappingStep: Int = 0
+    val currentMappingStep: Int = 0,
+    val wizardSelectedFunction: DeliveryFunction? = null,
+    val wizardSelectedClickType: ClickType? = null
 )
 
 data class InputDeviceInfo(

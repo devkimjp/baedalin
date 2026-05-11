@@ -21,6 +21,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
@@ -177,10 +178,11 @@ fun MainScreen(
             ) {
                 MenuCard(
                     title = "매핑 시작",
-                    description = "쉽게 설정하기",
+                    description = if (isServiceRunning) "서비스 중지 후 가능" else "쉽게 설정하기",
                     icon = Icons.Default.AutoFixHigh,
-                    color = AccentOrange,
+                    color = if (isServiceRunning) MaterialTheme.colorScheme.outline else AccentOrange,
                     onClick = { viewModel.openMappingWizard() },
+                    enabled = !isServiceRunning,
                     modifier = Modifier.weight(1f)
                 )
                 MenuCard(
@@ -298,23 +300,32 @@ fun MenuCard(
     icon: ImageVector,
     color: Color,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true
 ) {
+    val alpha = if (enabled) 1f else 0.4f
     Card(
-        modifier = modifier.clickable { onClick() },
+        modifier = modifier
+            .alpha(alpha)
+            .clickable(enabled = enabled) { onClick() },
         shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        border = BorderStroke(2.dp, color.copy(alpha = 0.2f))
+        elevation = CardDefaults.cardElevation(defaultElevation = if (enabled) 2.dp else 0.dp),
+        border = BorderStroke(2.dp, if (enabled) color.copy(alpha = 0.2f) else MaterialTheme.colorScheme.outline.copy(alpha = 0.1f))
     ) {
         Column(modifier = Modifier.padding(20.dp)) {
             Surface(
                 modifier = Modifier.size(56.dp),
                 shape = RoundedCornerShape(16.dp),
-                color = color.copy(alpha = 0.15f)
+                color = if (enabled) color.copy(alpha = 0.15f) else MaterialTheme.colorScheme.outline.copy(alpha = 0.05f)
             ) {
                 Box(contentAlignment = Alignment.Center) {
-                    Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(32.dp))
+                    Icon(
+                        icon, 
+                        contentDescription = null, 
+                        tint = if (enabled) color else MaterialTheme.colorScheme.outline, 
+                        modifier = Modifier.size(32.dp)
+                    )
                 }
             }
             Spacer(Modifier.height(16.dp))

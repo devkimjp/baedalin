@@ -28,6 +28,7 @@ fun PermissionWizard(
     isAccessibilityEnabled: Boolean,
     isOverlayEnabled: Boolean,
     isBluetoothEnabled: Boolean,
+    isBatteryOptimized: Boolean, // 추가: 배터리 최적화 여부 (true면 최적화 중)
     onRequestBluetoothPermission: () -> Unit,
     onComplete: () -> Unit = {}
 ) {
@@ -35,15 +36,17 @@ fun PermissionWizard(
         mutableStateOf(
             if (!isOverlayEnabled) 0 
             else if (!isAccessibilityEnabled) 1 
-            else 2
+            else if (!isBluetoothEnabled) 2
+            else 3
         ) 
     }
-    val totalSteps = 3
+    val totalSteps = 4
     val context = LocalContext.current
 
+    val isBatteryExempt = !isBatteryOptimized
     // 모든 권한이 허용되면 완료 호출
-    LaunchedEffect(isAccessibilityEnabled, isOverlayEnabled, isBluetoothEnabled) {
-        if (isAccessibilityEnabled && isOverlayEnabled && isBluetoothEnabled) {
+    LaunchedEffect(isAccessibilityEnabled, isOverlayEnabled, isBluetoothEnabled, isBatteryExempt) {
+        if (isAccessibilityEnabled && isOverlayEnabled && isBluetoothEnabled && isBatteryExempt) {
             onComplete()
         }
     }
@@ -52,34 +55,12 @@ fun PermissionWizard(
         bottomBar = {
             Box(modifier = Modifier.padding(bottom = 48.dp, start = 24.dp, end = 24.dp).fillMaxWidth()) {
                 if (currentStep == 0 && isOverlayEnabled) {
-                    Button(
-                        onClick = { currentStep = 1 },
-                        modifier = Modifier.fillMaxWidth().height(80.dp),
-                        shape = RoundedCornerShape(24.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50)),
-                        elevation = ButtonDefaults.buttonElevation(defaultElevation = 6.dp)
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("다음 단계로 진행하기", fontSize = 24.sp, fontWeight = FontWeight.ExtraBold)
-                            Spacer(Modifier.width(12.dp))
-                            Icon(Icons.Default.ArrowForward, contentDescription = null, modifier = Modifier.size(28.dp))
-                        }
-                    }
+                    NextStepButton { currentStep = 1 }
                 } else if (currentStep == 1 && isAccessibilityEnabled) {
-                    Button(
-                        onClick = { currentStep = 2 },
-                        modifier = Modifier.fillMaxWidth().height(80.dp),
-                        shape = RoundedCornerShape(24.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50)),
-                        elevation = ButtonDefaults.buttonElevation(defaultElevation = 6.dp)
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("다음 단계로 진행하기", fontSize = 24.sp, fontWeight = FontWeight.ExtraBold)
-                            Spacer(Modifier.width(12.dp))
-                            Icon(Icons.Default.ArrowForward, contentDescription = null, modifier = Modifier.size(28.dp))
-                        }
-                    }
+                    NextStepButton { currentStep = 2 }
                 } else if (currentStep == 2 && isBluetoothEnabled) {
+                    NextStepButton { currentStep = 3 }
+                } else if (currentStep == 3 && isBatteryExempt) {
                     Button(
                         onClick = { onComplete() },
                         modifier = Modifier.fillMaxWidth().height(80.dp),
@@ -159,14 +140,18 @@ fun PermissionWizard(
                         isGranted = isBluetoothEnabled,
                         onAction = {
                             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
-                                // 1차적으로 권한 요청 시도
                                 onRequestBluetoothPermission()
                             }
-                        },
-                        onSecondaryAction = {
-                            // 권한이 거부되었을 경우를 대비해 설정 화면으로 이동하는 옵션 제공
-                            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                                data = android.net.Uri.fromParts("package", context.packageName, null)
+                        }
+                    )
+                    3 -> PermissionStepContent(
+                        title = "배터리 최적화 제외 (필수)",
+                        description = "시스템이 백그라운드에서 앱을 강제로 종료하는 것을 방지합니다.\n부팅 후에도 서비스가 안정적으로 유지되도록 '허용'을 선택해주세요.",
+                        icon = Icons.Default.BatteryChargingFull,
+                        isGranted = isBatteryExempt,
+                        onAction = {
+                            val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                                data = "package:${context.packageName}".toUri()
                             }
                             context.startActivity(intent)
                         }
@@ -267,6 +252,23 @@ fun PermissionStepContent(
                     Text("설정이 완료되었습니다!", color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun NextStepButton(onClick: () -> Unit) {
+    Button(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth().height(80.dp),
+        shape = RoundedCornerShape(24.dp),
+        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50)),
+        elevation = ButtonDefaults.buttonElevation(defaultElevation = 6.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("다음 단계로 진행하기", fontSize = 24.sp, fontWeight = FontWeight.ExtraBold)
+            Spacer(Modifier.width(12.dp))
+            Icon(Icons.Default.ArrowForward, contentDescription = null, modifier = Modifier.size(28.dp))
         }
     }
 }

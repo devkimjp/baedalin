@@ -52,6 +52,7 @@ class KeyMapperAccessibilityService : AccessibilityService() {
     private var pendingClickRunnable: Runnable? = null
     private var longPressRunnable: Runnable? = null
     private var isLongPressed = false
+    private var mediaSession: android.media.session.MediaSession? = null
     
     private lateinit var gestureManager: GestureManager
 
@@ -102,18 +103,23 @@ class KeyMapperAccessibilityService : AccessibilityService() {
         super.onServiceConnected()
         Log.d("KeyMapper", "onServiceConnected: Service Started")
         
+        instance = this
         // GestureManager에 서비스 인스턴스 설정 (터치 실행을 위해 필수)
         gestureManager.setService(this)
 
         updateKeyFilterState()
+        setupMediaSession()
         
         val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
-        doubleClickTimeout = prefs.getLong("double_click_timeout", 300L)
+        doubleClickTimeout = prefs.getLong("double_click_timeout", 500L)
         prefs.registerOnSharedPreferenceChangeListener(prefsListener)
             
         CoroutineScope(Dispatchers.Main).launch {
             launch {
-                FloatingWidgetService.isInterceptionActive.collect {
+                FloatingWidgetService.isInterceptionActive.collect { active ->
+                    // [CRITICAL] 배달 앱이 활성화된 상태에서만 세션 활성화
+                    mediaSession?.isActive = active
+                    Log.d("KeyMapper", "[SYSTEM] MediaSession isActive set to: $active")
                     updateKeyFilterState()
                 }
             }
@@ -124,6 +130,54 @@ class KeyMapperAccessibilityService : AccessibilityService() {
             }
         }
     }
+
+    private fun setupMediaSession() {
+        try {
+            mediaSession?.release()
+            mediaSession = android.media.session.MediaSession(this, "DalmalingMediaHijacker").apply {
+                setFlags(android.media.session.MediaSession.FLAG_HANDLES_MEDIA_BUTTONS or 
+                         android.media.session.MediaSession.FLAG_HANDLES_TRANSPORT_CONTROLS)
+                
+                // [CRITICAL] 시스템을 속이기 위해 '재생 중' 상태를 강제로 보고하고 모든 미디어 버튼 가로채기
+                val state = android.media.session.PlaybackState.Builder()
+                    .setActions(android.media.session.PlaybackState.ACTION_PLAY or 
+                               android.media.session.PlaybackState.ACTION_PAUSE or 
+                               android.media.session.PlaybackState.ACTION_PLAY_PAUSE or
+                               android.media.session.PlaybackState.ACTION_SKIP_TO_NEXT or
+                               android.media.session.PlaybackState.ACTION_SKIP_TO_PREVIOUS)
+                    .setState(android.media.session.PlaybackState.STATE_PLAYING, 0, 1.0f)
+                    .build()
+                setPlaybackState(state)
+
+                setCallback(object : android.media.session.MediaSession.Callback() {
+                    override fun onMediaButtonEvent(mediaButtonIntent: android.content.Intent): Boolean {
+                        val event = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                            mediaButtonIntent.getParcelableExtra(android.content.Intent.EXTRA_KEY_EVENT, android.view.KeyEvent::class.java)
+                        } else {
+                            @Suppress("DEPRECATION")
+                            mediaButtonIntent.getParcelableExtra(android.content.Intent.EXTRA_KEY_EVENT)
+                        }
+                        
+                        if (event != null && event.action == android.view.KeyEvent.ACTION_DOWN) {
+                            Log.d("KeyMapper", "[MEDIA] Session capture: ${event.keyCode}")
+                            // onKeyEvent 로직을 직접 수행하거나 이벤트를 다시 흘려보냄
+                            // 여기서는 직접 onKeyEvent를 호출하여 기존 로직(레코딩, 매핑 등)이 작동하게 함
+                            onKeyEvent(event)
+                            return true
+                        }
+                        return super.onMediaButtonEvent(mediaButtonIntent)
+                    }
+                })
+                
+                val isInterceptionActive = FloatingWidgetService.isInterceptionActive.value
+                isActive = isInterceptionActive
+                Log.i("KeyMapper", "[SYSTEM] MediaSession initial isActive: $isInterceptionActive")
+            }
+        } catch (e: Exception) {
+            Log.e("KeyMapper", "Failed to setup MediaSession", e)
+        }
+    }
+
 
     private fun updateKeyFilterState() {
         val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
@@ -168,8 +222,13 @@ class KeyMapperAccessibilityService : AccessibilityService() {
 
     override fun onDestroy() {
         super.onDestroy()
+        mediaSession?.release()
+        try {
+            unregisterReceiver(serviceReceiver)
+        } catch (e: Exception) {}
         getSharedPreferences("mappings", Context.MODE_PRIVATE)
             .unregisterOnSharedPreferenceChangeListener(prefsListener)
+        instance = null
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
@@ -283,6 +342,8 @@ class KeyMapperAccessibilityService : AccessibilityService() {
     }
 
     companion object {
+        var instance: KeyMapperAccessibilityService? = null
+            private set
         var currentPackageName: String = ""
             private set
     }
@@ -290,54 +351,68 @@ class KeyMapperAccessibilityService : AccessibilityService() {
     override fun onInterrupt() {}
 
     override fun onKeyEvent(event: KeyEvent): Boolean {
-        val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
-        val isMappingEnabled = prefs.getBoolean("is_mapping_enabled", false)
-        val isRecording = KeyRecordingState.isRecording || prefs.getBoolean("is_recording", false)
-        val isInterceptionActive = FloatingWidgetService.isInterceptionActive.value
-
         val keyCode = event.keyCode
         val keyAction = event.action
+        val eventTime = event.eventTime
         
-        Log.d("KeyMapper", ">>> onKeyEvent [START]: code=$keyCode, action=$keyAction, time=${event.eventTime}, device=${event.deviceId}")
+        // [VERBOSE] 원천 데이터 로그
+        Log.v("KeyMapper", ">>> RAW: code=$keyCode, action=$keyAction, time=$eventTime")
 
-        // 1. 레코딩 모드 처리
+        val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
+        val targetDescriptor = prefs.getString("selected_device_descriptor", null) ?: "GLOBAL"
+        
+        // 1. 장치 필터링
+        val device = InputDevice.getDevice(event.deviceId)
+        if (device != null && targetDescriptor != "GLOBAL" && device.descriptor != targetDescriptor) {
+            return false
+        }
+        val prefix = targetDescriptor
+
+        // 2. 핵심 상태 확인
+        val isRecording = KeyRecordingState.isRecording || prefs.getBoolean("is_recording", false)
+        val isMappingEnabled = prefs.getBoolean("is_mapping_enabled", false)
+        val isInterceptionActive = FloatingWidgetService.isInterceptionActive.value
+        val isMapped = isKeyMapped(keyCode, prefix)
         val directRecordingFunction = KeyRecordingState.recordingFunction
-        if (directRecordingFunction != null) {
-            Log.d("KeyMapper", "[RECORDING] Intercepting for $directRecordingFunction: code=$keyCode")
-            if (keyAction == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
-                val funcName = directRecordingFunction
+        
+        // 3. 시스템 간섭 차단 및 선제적 처리 (ACTION_DOWN)
+        // 매핑된 키거나 녹화 중이라면 시스템이 가로채기 전에 즉시 true를 반환해야 함
+        val shouldIntercept = isRecording || directRecordingFunction != null || (isMappingEnabled && isInterceptionActive && isMapped)
+        
+        if (shouldIntercept && keyAction == KeyEvent.ACTION_DOWN) {
+            if (event.repeatCount > 0) return true
+            Log.i("KeyMapper", "[INTERCEPT] Strongly consuming DOWN: $keyCode")
+            
+            // 더블 클릭 타이머 관리
+            if (keyCode != lastKeyCode) {
+                pendingClickRunnable?.let { handler.removeCallbacks(it) }
+                clickCount = 0
+                lastKeyCode = keyCode
+            } else {
+                pendingClickRunnable?.let { 
+                    Log.d("KeyMapper", "[DEBUG] Continued sequence, stopping timer")
+                    handler.removeCallbacks(it) 
+                }
+            }
+            
+            // 레코딩 트리거 (Toolbar)
+            if (directRecordingFunction != null) {
+                saveDirectMapping(directRecordingFunction, keyCode)
                 KeyRecordingState.recordingFunction = null
-                
-                val function = DeliveryFunction.entries.find { it.name == funcName }
-                val label = function?.let { getString(it.labelResId) } ?: "Custom $funcName"
-                
-                saveDirectMapping(funcName, keyCode)
                 playSuccessSound()
                 updateKeyFilterState()
-                
-                val keyName = KeyEvent.keyCodeToString(keyCode).replace("KEYCODE_", "")
-                Toast.makeText(this, "[$label] ${getString(R.string.wizard_complete_title)}: $keyName", Toast.LENGTH_SHORT).show()
-                
-                val updateIntent = Intent(this, FloatingWidgetService::class.java).apply {
-                    action = FloatingWidgetService.ACTION_UPDATE_KEY
-                    putExtra("function_name", funcName)
-                    putExtra("keycode", keyCode)
-                    putExtra("key_name", keyName)
-                    putExtra("label", label)
-                }
-                startService(updateIntent)
+                Toast.makeText(this, "매핑 완료: $keyCode", Toast.LENGTH_SHORT).show()
             }
-            return true
-        }
-
-        if (isRecording) {
-            if (keyAction == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
-                Log.d("KeyMapper", "[RECORDING] Global mode: $keyCode")
+            
+            // 레코딩 트리거 (Wizard)
+            // [FIX] 패키지명 체크가 간혹 누락될 수 있으므로, 녹화 중일 때는 더 공격적으로 가로챔
+            if (isRecording) {
+                Log.d("KeyMapper", "[RECORDING] Capture in Wizard: $keyCode")
                 sendBroadcast(Intent("ACTION_KEY_RECORDED").apply {
                     setPackage(packageName)
                     putExtra("keycode", keyCode)
                 })
-
+                // MainActivity를 다시 전면으로 불러와 이벤트 확실히 전달
                 val intent = Intent(this, kr.disys.baedalin.MainActivity::class.java).apply {
                     action = "ACTION_KEY_RECORDED"
                     putExtra("keycode", keyCode)
@@ -345,58 +420,42 @@ class KeyMapperAccessibilityService : AccessibilityService() {
                 }
                 startActivity(intent)
             }
-            return true 
-        }
-        
-        if (!isMappingEnabled || !isInterceptionActive) return false
-
-        val targetDescriptor = prefs.getString("selected_device_descriptor", null) ?: return false
-        val device = InputDevice.getDevice(event.deviceId)
-        if (device == null || device.descriptor != targetDescriptor) return false
-        
-        val prefix = targetDescriptor
-        if (!isKeyMapped(keyCode, prefix)) return false
-
-        Log.d("KeyMapper", "[INTERCEPT] Processing: $keyCode, action=$keyAction")
-        
-        if (keyAction == KeyEvent.ACTION_DOWN) {
-            if (event.repeatCount > 0) return true
             
-            if (keyCode != lastKeyCode) {
-                Log.d("KeyMapper", "[DEBUG] New Key Sequence: $keyCode")
-                pendingClickRunnable?.let { handler.removeCallbacks(it) }
-                clickCount = 0
-            } else {
-                pendingClickRunnable?.let { 
-                    Log.d("KeyMapper", "[DEBUG] Continued sequence for $keyCode")
-                    handler.removeCallbacks(it) 
-                }
-            }
-            lastKeyCode = keyCode
             return true
         }
 
-        if (keyAction == KeyEvent.ACTION_UP) {
-            val isDoubleMapped = isKeyMappedToDouble(keyCode, prefix)
-            Log.d("KeyMapper", "[DEBUG] ACTION_UP: $keyCode, doubleMapped=$isDoubleMapped, count=$clickCount")
+        // 4. 매핑 실행 처리 (ACTION_UP)
+        if (shouldIntercept && keyAction == KeyEvent.ACTION_UP) {
+            // [CRITICAL] 녹화 중일 때는 터치 동작을 절대로 실행하지 않음
+            if (isRecording || directRecordingFunction != null) {
+                return true
+            }
+
+            val prefixFinal = targetDescriptor
+            val isDoubleMapped = isKeyMappedToDouble(keyCode, prefixFinal)
+            Log.d("KeyMapper", "[INTERCEPT] UP: $keyCode, doubleMapped=$isDoubleMapped")
             
             if (!isDoubleMapped) {
-                handleAction(keyCode, ClickType.SINGLE, prefix)
+                handleAction(keyCode, ClickType.SINGLE, prefixFinal)
                 clickCount = 0
+                lastKeyCode = -1
                 return true
             }
 
             clickCount++
+            val timeout = prefs.getLong("double_click_timeout", 500L) 
+            Log.d("KeyMapper", "[TIMER] Waiting $timeout ms for next click (Count=$clickCount)")
             pendingClickRunnable?.let { handler.removeCallbacks(it) }
             
             pendingClickRunnable = Runnable {
                 val type = if (clickCount >= 2) ClickType.DOUBLE else ClickType.SINGLE
-                Log.d("KeyMapper", "[TOUCH] Dispatching: $type (count=$clickCount)")
-                handleAction(keyCode, type, prefix)
+                Log.d("KeyMapper", "[TOUCH] Dispatching $type (Total=$clickCount)")
+                handleAction(keyCode, type, prefixFinal)
                 clickCount = 0
+                lastKeyCode = -1
                 pendingClickRunnable = null
             }.also { 
-                handler.postDelayed(it, doubleClickTimeout)
+                handler.postDelayed(it, timeout)
             }
             return true
         }
@@ -441,18 +500,28 @@ class KeyMapperAccessibilityService : AccessibilityService() {
     private fun handleAction(keyCode: Int, clickType: ClickType, prefix: String): Boolean {
         val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
         val isMappingEnabled = prefs.getBoolean("is_mapping_enabled", false)
-        if (!isMappingEnabled) {
-            Log.d("KeyMapper", "[TOUCH] handleAction aborted: isMappingEnabled is FALSE")
+        val isRecording = prefs.getBoolean("is_recording", false)
+        
+        if (!isMappingEnabled && !isRecording) {
+            Log.d("KeyMapper", "[TOUCH] handleAction aborted: Both Mapping and Recording are OFF")
             return false
         }
         
         val activePreset = prefs.getString("active_preset", "DEFAULT") ?: "DEFAULT"
-        
         Log.d("KeyMapper", "[TOUCH] handleAction: keyCode=$keyCode, clickType=$clickType, prefix=$prefix, activePreset=$activePreset")
         
-        val function = DeliveryFunction.entries.find { func ->
+        // 1. 구체적인 클릭 타입 매핑 확인 (SINGLE/DOUBLE)
+        var function = DeliveryFunction.entries.find { func ->
             val mappedKey = prefs.getInt("${prefix}_${func.name}_${clickType.name}_keycode", -1)
             mappedKey == keyCode
+        }
+        
+        // 2. 만약 위에서 못 찾았고 clickType이 SINGLE이라면, 구버전 매핑(타입 구분 없음) 확인
+        if (function == null && clickType == ClickType.SINGLE) {
+            function = DeliveryFunction.entries.find { func ->
+                val mappedKey = prefs.getInt("${prefix}_${func.name}_keycode", -1)
+                mappedKey == keyCode
+            }
         }
         
         if (function != null) {
