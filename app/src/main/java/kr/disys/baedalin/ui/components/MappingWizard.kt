@@ -620,18 +620,33 @@ fun ClickTypeSelectionStep(
         )
         
         if (isMediaKey) {
-            Spacer(modifier = Modifier.height(12.dp))
-            Surface(
-                color = kr.disys.baedalin.ui.theme.AccentOrange.copy(alpha = 0.1f),
-                shape = RoundedCornerShape(8.dp)
+            Spacer(modifier = Modifier.height(16.dp))
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = kr.disys.baedalin.ui.theme.AccentOrange.copy(alpha = 0.15f)
+                ),
+                border = androidx.compose.foundation.BorderStroke(1.dp, kr.disys.baedalin.ui.theme.AccentOrange.copy(alpha = 0.5f)),
+                shape = RoundedCornerShape(12.dp)
             ) {
-                Text(
-                    text = "⚠️ 미디어 버튼은 시스템 제약으로 인해 '단일 클릭'만 안정적으로 지원됩니다.",
-                    modifier = Modifier.padding(12.dp),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = kr.disys.baedalin.ui.theme.AccentOrange,
-                    fontWeight = FontWeight.Bold
-                )
+                Row(
+                    modifier = Modifier.padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Warning,
+                        contentDescription = null,
+                        tint = kr.disys.baedalin.ui.theme.AccentOrange,
+                        modifier = Modifier.size(28.dp)
+                    )
+                    Text(
+                        text = "이 버튼은 미디어 전용 키입니다.\n리모컨 하드웨어 특성에 따라 더블 클릭이 인식되지 않거나 반응이 늦을 수 있습니다.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = kr.disys.baedalin.ui.theme.AccentOrange,
+                        fontWeight = FontWeight.Bold,
+                        lineHeight = 20.sp
+                    )
+                }
             }
         }
 

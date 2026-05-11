@@ -69,6 +69,11 @@ class KeyMapperAccessibilityService : AccessibilityService() {
                         Log.d("KeyMapper", "Cancelled direct recording for: ${kr.disys.baedalin.KeyRecordingState.recordingFunction}")
                         kr.disys.baedalin.KeyRecordingState.recordingFunction = null
                     }
+                    updateKeyFilterState()
+                }
+                "ACTION_REFRESH_FILTER" -> {
+                    Log.d("KeyMapper", "Force refreshing key filter via broadcast")
+                    updateKeyFilterState()
                 }
             }
         }
@@ -91,6 +96,7 @@ class KeyMapperAccessibilityService : AccessibilityService() {
         val filter = IntentFilter().apply {
             addAction("ACTION_START_DIRECT_RECORDING")
             addAction("ACTION_CANCEL_DIRECT_RECORDING")
+            addAction("ACTION_REFRESH_FILTER")
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(serviceReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
@@ -139,15 +145,7 @@ class KeyMapperAccessibilityService : AccessibilityService() {
                          android.media.session.MediaSession.FLAG_HANDLES_TRANSPORT_CONTROLS)
                 
                 // [CRITICAL] 시스템을 속이기 위해 '재생 중' 상태를 강제로 보고하고 모든 미디어 버튼 가로채기
-                val state = android.media.session.PlaybackState.Builder()
-                    .setActions(android.media.session.PlaybackState.ACTION_PLAY or 
-                               android.media.session.PlaybackState.ACTION_PAUSE or 
-                               android.media.session.PlaybackState.ACTION_PLAY_PAUSE or
-                               android.media.session.PlaybackState.ACTION_SKIP_TO_NEXT or
-                               android.media.session.PlaybackState.ACTION_SKIP_TO_PREVIOUS)
-                    .setState(android.media.session.PlaybackState.STATE_PLAYING, 0, 1.0f)
-                    .build()
-                setPlaybackState(state)
+                reportPlayingState()
 
                 setCallback(object : android.media.session.MediaSession.Callback() {
                     override fun onMediaButtonEvent(mediaButtonIntent: android.content.Intent): Boolean {
@@ -160,8 +158,6 @@ class KeyMapperAccessibilityService : AccessibilityService() {
                         
                         if (event != null) {
                             Log.d("KeyMapper", "[MEDIA] Session capture: ${event.keyCode} (Action: ${event.action})")
-                            // [CRITICAL] 더블 클릭 로직은 ACTION_UP에서 클릭 횟수를 계산하므로, 
-                            // DOWN과 UP 이벤트를 모두 onKeyEvent로 전달해야 함
                             onKeyEvent(event)
                             return true
                         }
@@ -178,6 +174,22 @@ class KeyMapperAccessibilityService : AccessibilityService() {
         }
     }
 
+    private fun reportPlayingState() {
+        try {
+            val state = android.media.session.PlaybackState.Builder()
+                .setActions(android.media.session.PlaybackState.ACTION_PLAY or 
+                           android.media.session.PlaybackState.ACTION_PAUSE or 
+                           android.media.session.PlaybackState.ACTION_PLAY_PAUSE or
+                           android.media.session.PlaybackState.ACTION_SKIP_TO_NEXT or
+                           android.media.session.PlaybackState.ACTION_SKIP_TO_PREVIOUS)
+                .setState(android.media.session.PlaybackState.STATE_PLAYING, 0, 1.0f)
+                .build()
+            mediaSession?.setPlaybackState(state)
+        } catch (e: Exception) {
+            Log.e("KeyMapper", "Failed to report playing state", e)
+        }
+    }
+
 
     private fun updateKeyFilterState() {
         val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
@@ -188,40 +200,47 @@ class KeyMapperAccessibilityService : AccessibilityService() {
         val info = serviceInfo ?: AccessibilityServiceInfo()
         
         if (isMappingEnabled || isRecording || kr.disys.baedalin.KeyRecordingState.recordingFunction != null) {
-            // 중요: 윈도우 변화 감지는 서비스가 활성화된 동안 항상 켜두어야 배달 앱 진입을 감지할 수 있음
             info.eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or AccessibilityEvent.TYPE_WINDOWS_CHANGED
             info.feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC
             info.notificationTimeout = 100
             
-            // 키 가로채기 플래그는 실제 위젯이 떠 있거나 레코딩 중, 또는 언락 모드일 때 활성화
             val isDirectRecording = kr.disys.baedalin.KeyRecordingState.recordingFunction != null
             val isMoveMode = FloatingWidgetService.isMoveMode.value
-            val shouldFilterKeys = isRecording || isDirectRecording || isMoveMode || (isMappingEnabled && isInterceptionActive)
+            val shouldFilterKeys = isRecording || isDirectRecording || isMoveMode || isInterceptionActive
             var targetFlags = AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS or
                             AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS
             
-            Log.d("KeyMapper", "updateKeyFilterState: isRecording=$isRecording, isMappingEnabled=$isMappingEnabled, isInterceptionActive=$isInterceptionActive, isDirectRecording=$isDirectRecording")
-
             if (shouldFilterKeys) {
                 targetFlags = targetFlags or AccessibilityServiceInfo.FLAG_REQUEST_FILTER_KEY_EVENTS
                 Log.d("KeyMapper", "Key Filter: ACTIVE (INTERCEPTING ALL KEYS)")
-                
-                // 가로채기 활성 시 미디어 세션도 함께 활성화하여 우선권 확보 (원래 상태 복구)
+            }
+
+            // [강력 조치] 툴바 표시 중(배달 앱 인식)이라면 미디어 세션 우선권을 강제로 뺏어옴
+            if (isInterceptionActive) {
+                if (mediaSession == null || mediaSession?.isActive == false) {
+                    setupMediaSession()
+                    mediaSession?.isActive = true
+                    Log.d("KeyMapper", "[SYSTEM] MediaSession RE-INITIALIZED for priority")
+                }
+                reportPlayingState()
+            } else if (shouldFilterKeys) {
                 if (mediaSession?.isActive == false) {
                     mediaSession?.isActive = true
-                    Log.d("KeyMapper", "[SYSTEM] MediaSession activated for priority")
+                    Log.d("KeyMapper", "[SYSTEM] MediaSession activated")
                 }
             } else {
                 Log.d("KeyMapper", "Key Filter: WINDOW_ONLY (NOT INTERCEPTING)")
-                if (mediaSession?.isActive == true) {
-                    mediaSession?.isActive = false
-                    Log.d("KeyMapper", "[SYSTEM] MediaSession deactivated")
-                }
+                mediaSession?.isActive = false
             }
             
-            info.flags = targetFlags
+            // [강력 조치] 시스템에 서비스 정보 명시적 재등록
+            val currentInfo = serviceInfo
+            if (currentInfo != null) {
+                currentInfo.flags = targetFlags
+                serviceInfo = currentInfo
+                Log.d("KeyMapper", "[SYSTEM] ServiceInfo flags updated and re-registered: $targetFlags")
+            }
         } else {
-            // 완전 중지 상태 (STEALTH)
             info.eventTypes = 0
             info.feedbackType = 0
             info.notificationTimeout = 0
@@ -229,7 +248,9 @@ class KeyMapperAccessibilityService : AccessibilityService() {
             Log.d("KeyMapper", "Key Filter: STEALTH (Fully Disabled)")
         }
         
-        serviceInfo = info
+        // [강력 조치] 명시적 메서드 호출을 통해 시스템에 즉각 반영
+        setServiceInfo(info)
+        Log.d("KeyMapper", "[SYSTEM] setServiceInfo called with flags: ${info.flags}")
     }
 
     override fun onDestroy() {
@@ -248,7 +269,7 @@ class KeyMapperAccessibilityService : AccessibilityService() {
             val packageName = event.packageName?.toString() ?: return
             val isFullScreen = event.isFullScreen
             
-            currentPackageName = packageName // 정적 변수 업데이트
+            currentPackageName = packageName 
             
             val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
             val isMappingEnabled = prefs.getBoolean("is_mapping_enabled", false)
@@ -263,7 +284,6 @@ class KeyMapperAccessibilityService : AccessibilityService() {
             if (preset != null) {
                 Log.d("KeyMapper", "Delivery App Detected: $packageName -> Loading $preset")
                 
-                // 접근성 서비스에서 직접 active_preset 업데이트
                 getSharedPreferences("mappings", Context.MODE_PRIVATE).edit(commit = true) {
                     putString("active_preset", preset)
                 }
@@ -274,7 +294,6 @@ class KeyMapperAccessibilityService : AccessibilityService() {
                 }
                 startService(intent)
             } else if (isRunning) {
-                // 배달 앱이 아닌 경우 숨기기 여부 결정
                 val isBaedalinApp = packageName == "kr.disys.baedalin"
                 val isIgnorePackage = packageName == "com.android.systemui" || 
                                     packageName == "android" || 
@@ -283,7 +302,6 @@ class KeyMapperAccessibilityService : AccessibilityService() {
                                     
                 if (isBaedalinApp) {
                     Log.d("KeyMapper", "Baedalin app detected. Keeping interception active for testing.")
-                    // 메인 앱에서도 키 가로채기가 작동하도록 설정 활성화
                     val intent = Intent(this, FloatingWidgetService::class.java).apply {
                         action = "ACTION_SET_INTERCEPTION"
                         putExtra("active", true)
@@ -367,8 +385,11 @@ class KeyMapperAccessibilityService : AccessibilityService() {
         val keyAction = event.action
         val eventTime = event.eventTime
         
-        // [DEBUG] 모든 키 입력 원천 데이터 로그 (DOWN=0, UP=1)
-        Log.d("KeyMapper", ">>> RAW: code=$keyCode, action=$keyAction, time=$eventTime")
+        // 1. 모든 RAW 키 입력 로깅 (진단을 위해 INFO 레벨로 출력)
+        Log.i("KeyMapper", ">>> RAW EVENT: code=$keyCode, action=$keyAction, time=$eventTime")
+        
+        // 미디어 세션 우선권 유지를 위해 주기적으로 재생 상태 보고
+        if (keyAction == KeyEvent.ACTION_DOWN) reportPlayingState()
 
         val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
         val targetDescriptor = prefs.getString("selected_device_descriptor", null) ?: "GLOBAL"
@@ -379,41 +400,38 @@ class KeyMapperAccessibilityService : AccessibilityService() {
             Log.v("KeyMapper", "Ignored: Device mismatch (${device.descriptor} != $targetDescriptor)")
             return false
         }
-        val prefix = targetDescriptor
-
+        
         // 2. 핵심 상태 확인
         val isRecording = KeyRecordingState.isRecording || prefs.getBoolean("is_recording", false)
         val isMappingEnabled = prefs.getBoolean("is_mapping_enabled", false)
         val isInterceptionActive = FloatingWidgetService.isInterceptionActive.value
-        val isMapped = isKeyMapped(keyCode, prefix)
         val directRecordingFunction = KeyRecordingState.recordingFunction
         
-        Log.d("KeyMapper", "Status: isRecording=$isRecording, isMappingEnabled=$isMappingEnabled, isInterceptionActive=$isInterceptionActive, isMapped=$isMapped")
+        // [강력 조치] 기기 전용 매핑과 GLOBAL 매핑을 모두 확인하여 인식률 극대화 (Dual Lookup)
+        val prefix = targetDescriptor
+        val isMapped = isKeyMapped(keyCode, prefix) || isKeyMapped(keyCode, "GLOBAL")
+        
+        Log.d("KeyMapper", "Status: isRecording=$isRecording, isMappingEnabled=$isMappingEnabled, isInterceptionActive=$isInterceptionActive, isMapped=$isMapped (Prefix: $prefix)")
 
-        // 3. 시스템 간섭 차단 및 선제적 처리 (ACTION_DOWN)
-        val shouldIntercept = isRecording || directRecordingFunction != null || (isMappingEnabled && isInterceptionActive && isMapped)
+        // 3. 시스템 가로채기 판단
+        val shouldIntercept = isRecording || directRecordingFunction != null || 
+                             ((isMappingEnabled || isInterceptionActive) && isInterceptionActive && isMapped)
         
         if (shouldIntercept && keyAction == KeyEvent.ACTION_DOWN) {
-            // 녹화 중일 때는 반복 입력(Repeat)도 개별 클릭으로 인정하여 가로챔
             if (!isRecording && event.repeatCount > 0) {
                 Log.d("KeyMapper", "Ignored: Repeat count > 0")
                 return true
             }
             Log.i("KeyMapper", "[INTERCEPT] Strongly consuming DOWN: $keyCode (Repeat=${event.repeatCount})")
             
-            // 더블 클릭 타이머 관리
             if (keyCode != lastKeyCode) {
                 pendingClickRunnable?.let { handler.removeCallbacks(it) }
                 clickCount = 0
                 lastKeyCode = keyCode
             } else {
-                pendingClickRunnable?.let { 
-                    Log.d("KeyMapper", "[DEBUG] Continued sequence, stopping timer")
-                    handler.removeCallbacks(it) 
-                }
+                pendingClickRunnable?.let { handler.removeCallbacks(it) }
             }
             
-            // 레코딩 트리거 (Toolbar)
             if (directRecordingFunction != null) {
                 saveDirectMapping(directRecordingFunction, keyCode)
                 KeyRecordingState.recordingFunction = null
@@ -422,15 +440,12 @@ class KeyMapperAccessibilityService : AccessibilityService() {
                 Toast.makeText(this, "매핑 완료: $keyCode", Toast.LENGTH_SHORT).show()
             }
             
-            // 레코딩 트리거 (Wizard)
-            // [FIX] 패키지명 체크가 간혹 누락될 수 있으므로, 녹화 중일 때는 더 공격적으로 가로챔
             if (isRecording) {
                 Log.d("KeyMapper", "[RECORDING] Capture in Wizard: $keyCode")
                 sendBroadcast(Intent("ACTION_KEY_RECORDED").apply {
                     setPackage(packageName)
                     putExtra("keycode", keyCode)
                 })
-                // MainActivity를 다시 전면으로 불러와 이벤트 확실히 전달
                 val intent = Intent(this, kr.disys.baedalin.MainActivity::class.java).apply {
                     action = "ACTION_KEY_RECORDED"
                     putExtra("keycode", keyCode)
@@ -442,19 +457,19 @@ class KeyMapperAccessibilityService : AccessibilityService() {
             return true
         }
 
-        // 4. 매핑 실행 처리 (ACTION_UP)
         if (shouldIntercept && keyAction == KeyEvent.ACTION_UP) {
-            // [CRITICAL] 녹화 중일 때는 터치 동작을 절대로 실행하지 않음
             if (isRecording || directRecordingFunction != null) {
                 return true
             }
 
-            val prefixFinal = targetDescriptor
-            val isDoubleMapped = isKeyMappedToDouble(keyCode, prefixFinal)
+            // UP 이벤트에서도 기기 전용 매핑과 GLOBAL 매핑을 모두 고려
+            val isDoubleMapped = isKeyMappedToDouble(keyCode, prefix) || isKeyMappedToDouble(keyCode, "GLOBAL")
             Log.d("KeyMapper", "[INTERCEPT] UP: $keyCode, doubleMapped=$isDoubleMapped")
             
             if (!isDoubleMapped) {
-                handleAction(keyCode, ClickType.SINGLE, prefixFinal)
+                // 더블 클릭 매핑이 없는 경우 즉시 실행 (이때도 우선순위 기기 -> GLOBAL 순으로 확인)
+                val usedPrefix = if (isKeyMapped(keyCode, prefix)) prefix else "GLOBAL"
+                handleAction(keyCode, ClickType.SINGLE, usedPrefix)
                 clickCount = 0
                 lastKeyCode = -1
                 return true
@@ -462,13 +477,13 @@ class KeyMapperAccessibilityService : AccessibilityService() {
 
             clickCount++
             val timeout = prefs.getLong("double_click_timeout", 500L) 
-            Log.d("KeyMapper", "[TIMER] Waiting $timeout ms for next click (Count=$clickCount)")
             pendingClickRunnable?.let { handler.removeCallbacks(it) }
             
             pendingClickRunnable = Runnable {
                 val type = if (clickCount >= 2) ClickType.DOUBLE else ClickType.SINGLE
-                Log.d("KeyMapper", "[TOUCH] Dispatching $type (Total=$clickCount)")
-                handleAction(keyCode, type, prefixFinal)
+                val usedPrefix = if (isKeyMapped(keyCode, prefix)) prefix else "GLOBAL"
+                Log.d("KeyMapper", "[TOUCH] Dispatching $type (Total=$clickCount) via $usedPrefix")
+                handleAction(keyCode, type, usedPrefix)
                 clickCount = 0
                 lastKeyCode = -1
                 pendingClickRunnable = null
@@ -487,12 +502,6 @@ class KeyMapperAccessibilityService : AccessibilityService() {
             val mappedKey = prefs.getInt("${prefix}_${func.name}_DOUBLE_keycode", -1)
             mappedKey == keyCode
         }
-    }
-
-    private fun cancelAllTimers() {
-        handler.removeCallbacksAndMessages(null)
-        pendingClickRunnable = null
-        longPressRunnable = null
     }
 
     private fun saveDirectMapping(functionName: String, keyCode: Int) {
@@ -519,22 +528,21 @@ class KeyMapperAccessibilityService : AccessibilityService() {
         val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
         val isMappingEnabled = prefs.getBoolean("is_mapping_enabled", false)
         val isRecording = prefs.getBoolean("is_recording", false)
-        
-        if (!isMappingEnabled && !isRecording) {
-            Log.d("KeyMapper", "[TOUCH] handleAction aborted: Both Mapping and Recording are OFF")
+        val isInterceptionActive = FloatingWidgetService.isInterceptionActive.value
+
+        if (!isMappingEnabled && !isRecording && !isInterceptionActive) {
+            Log.d("KeyMapper", "[TOUCH] handleAction aborted: All triggers are OFF")
             return false
         }
         
         val activePreset = prefs.getString("active_preset", "DEFAULT") ?: "DEFAULT"
         Log.d("KeyMapper", "[TOUCH] handleAction: keyCode=$keyCode, clickType=$clickType, prefix=$prefix, activePreset=$activePreset")
         
-        // 1. 구체적인 클릭 타입 매핑 확인 (SINGLE/DOUBLE)
         var function = DeliveryFunction.entries.find { func ->
             val mappedKey = prefs.getInt("${prefix}_${func.name}_${clickType.name}_keycode", -1)
             mappedKey == keyCode
         }
         
-        // 2. 만약 위에서 못 찾았고 clickType이 SINGLE이라면, 구버전 매핑(타입 구분 없음) 확인
         if (function == null && clickType == ClickType.SINGLE) {
             function = DeliveryFunction.entries.find { func ->
                 val mappedKey = prefs.getInt("${prefix}_${func.name}_keycode", -1)
@@ -549,13 +557,10 @@ class KeyMapperAccessibilityService : AccessibilityService() {
 
             when (function) {
                 DeliveryFunction.ZOOM_OUT -> {
-                    Log.d("KeyMapper", "[TOUCH] PERFORMING ZOOM_OUT")
                     gestureManager.performZoom(centerX, centerY, false)
                     return true
                 }
-
                 DeliveryFunction.ZOOM_IN -> {
-                    Log.d("KeyMapper", "[TOUCH] PERFORMING ZOOM_IN")
                     gestureManager.performZoom(centerX, centerY, true)
                     return true
                 }
@@ -565,7 +570,6 @@ class KeyMapperAccessibilityService : AccessibilityService() {
                     var y = widgetPrefs.getInt("${activePreset}_${function.name}_y", -1).toFloat()
                     
                     if (x == -1f || y == -1f) {
-                        Log.d("KeyMapper", "[TOUCH] Saved position not found for ${function.name} in $activePreset. Using default preset position.")
                         val presetList = when(activePreset) {
                             "BAEMIN" -> Presets.BAEMIN
                             "COUPANG" -> Presets.COUPANG
@@ -580,22 +584,15 @@ class KeyMapperAccessibilityService : AccessibilityService() {
                     }
                     
                     if (x != -1f && y != -1f) {
-                        // 위젯 컨테이너 오프셋 보정:
-                        // x는 중심(50), y는 인디케이터(20) + 툴팁(약 30) + 아이콘 중심(50) = 약 100
                         val tapX = x + 50f
                         val tapY = y + 100f
-                        Log.d("KeyMapper", "[TOUCH] PERFORMING TAP: ${function.name} at ($tapX, $tapY) for preset $activePreset")
+                        Log.d("KeyMapper", "[TOUCH] PERFORMING TAP: ${function.name} at ($tapX, $tapY)")
                         gestureManager.performTap(tapX, tapY)
                         return true
-                    } else {
-                        Log.e("KeyMapper", "[TOUCH] FAILED: No coordinates found for ${function.name}")
                     }
                 }
             }
-        } else {
-            Log.d("KeyMapper", "[TOUCH] No function mapped to keyCode=$keyCode with clickType=$clickType")
         }
         return false
     }
-
 }

@@ -136,6 +136,19 @@ class FloatingWidgetService : Service() {
         return START_NOT_STICKY
     }
 
+    private fun setInterceptionActive(active: Boolean) {
+        if (_isInterceptionActive.value != active) {
+            _isInterceptionActive.value = active
+            Log.d("KeyMapper", "FloatingWidgetService: setInterceptionActive=$active")
+            
+            // [강력 조치] 접근성 서비스에 즉시 필터 갱신 요청 (브로드캐스트)
+            val intent = Intent("ACTION_REFRESH_FILTER").apply {
+                setPackage(packageName)
+            }
+            sendBroadcast(intent)
+        }
+    }
+
     private fun handleAction(intent: Intent?) {
         val action = intent?.action ?: return
         Log.d("KeyMapper", "FloatingWidgetService.handleAction: action=$action")
@@ -154,7 +167,7 @@ class FloatingWidgetService : Service() {
                 loadStoredCustomWidgets()
                 showSettingsWidget()
                 _isMappingEnabled.value = true
-                _isInterceptionActive.value = true
+                setInterceptionActive(true)
             }
             ACTION_UPDATE_TRANSPARENCY -> {
                 val alpha = intent.getFloatExtra("transparency", 1.0f)
@@ -163,7 +176,7 @@ class FloatingWidgetService : Service() {
             ACTION_START_SERVICE_ONLY -> {
                 showSettingsWidget()
                 _isMappingEnabled.value = true
-                _isInterceptionActive.value = false
+                setInterceptionActive(false)
             }
             ACTION_SET_TOOLBAR_VISIBILITY -> {
                 val visible = intent.getBooleanExtra("visible", true)
@@ -198,7 +211,7 @@ class FloatingWidgetService : Service() {
             }
             "ACTION_SET_INTERCEPTION" -> {
                 val active = intent.getBooleanExtra("active", false)
-                _isInterceptionActive.value = active
+                setInterceptionActive(active)
             }
         }
     }
