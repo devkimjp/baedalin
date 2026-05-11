@@ -158,10 +158,10 @@ class KeyMapperAccessibilityService : AccessibilityService() {
                             mediaButtonIntent.getParcelableExtra(android.content.Intent.EXTRA_KEY_EVENT)
                         }
                         
-                        if (event != null && event.action == android.view.KeyEvent.ACTION_DOWN) {
-                            Log.d("KeyMapper", "[MEDIA] Session capture: ${event.keyCode}")
-                            // onKeyEvent 로직을 직접 수행하거나 이벤트를 다시 흘려보냄
-                            // 여기서는 직접 onKeyEvent를 호출하여 기존 로직(레코딩, 매핑 등)이 작동하게 함
+                        if (event != null) {
+                            Log.d("KeyMapper", "[MEDIA] Session capture: ${event.keyCode} (Action: ${event.action})")
+                            // [CRITICAL] 더블 클릭 로직은 ACTION_UP에서 클릭 횟수를 계산하므로, 
+                            // DOWN과 UP 이벤트를 모두 onKeyEvent로 전달해야 함
                             onKeyEvent(event)
                             return true
                         }
@@ -200,11 +200,23 @@ class KeyMapperAccessibilityService : AccessibilityService() {
             var targetFlags = AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS or
                             AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS
             
+            Log.d("KeyMapper", "updateKeyFilterState: isRecording=$isRecording, isMappingEnabled=$isMappingEnabled, isInterceptionActive=$isInterceptionActive, isDirectRecording=$isDirectRecording")
+
             if (shouldFilterKeys) {
                 targetFlags = targetFlags or AccessibilityServiceInfo.FLAG_REQUEST_FILTER_KEY_EVENTS
-                Log.d("KeyMapper", "Key Filter: ACTIVE (Recording=$isRecording, Direct=$isDirectRecording, Move=$isMoveMode, Mapping=$isMappingEnabled, Active=$isInterceptionActive)")
+                Log.d("KeyMapper", "Key Filter: ACTIVE (INTERCEPTING ALL KEYS)")
+                
+                // 가로채기 활성 시 미디어 세션도 함께 활성화하여 우선권 확보 (원래 상태 복구)
+                if (mediaSession?.isActive == false) {
+                    mediaSession?.isActive = true
+                    Log.d("KeyMapper", "[SYSTEM] MediaSession activated for priority")
+                }
             } else {
-                Log.d("KeyMapper", "Key Filter: WINDOW_ONLY")
+                Log.d("KeyMapper", "Key Filter: WINDOW_ONLY (NOT INTERCEPTING)")
+                if (mediaSession?.isActive == true) {
+                    mediaSession?.isActive = false
+                    Log.d("KeyMapper", "[SYSTEM] MediaSession deactivated")
+                }
             }
             
             info.flags = targetFlags
@@ -355,8 +367,8 @@ class KeyMapperAccessibilityService : AccessibilityService() {
         val keyAction = event.action
         val eventTime = event.eventTime
         
-        // [VERBOSE] 원천 데이터 로그
-        Log.v("KeyMapper", ">>> RAW: code=$keyCode, action=$keyAction, time=$eventTime")
+        // [DEBUG] 모든 키 입력 원천 데이터 로그 (DOWN=0, UP=1)
+        Log.d("KeyMapper", ">>> RAW: code=$keyCode, action=$keyAction, time=$eventTime")
 
         val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
         val targetDescriptor = prefs.getString("selected_device_descriptor", null) ?: "GLOBAL"
@@ -364,6 +376,7 @@ class KeyMapperAccessibilityService : AccessibilityService() {
         // 1. 장치 필터링
         val device = InputDevice.getDevice(event.deviceId)
         if (device != null && targetDescriptor != "GLOBAL" && device.descriptor != targetDescriptor) {
+            Log.v("KeyMapper", "Ignored: Device mismatch (${device.descriptor} != $targetDescriptor)")
             return false
         }
         val prefix = targetDescriptor
@@ -375,13 +388,18 @@ class KeyMapperAccessibilityService : AccessibilityService() {
         val isMapped = isKeyMapped(keyCode, prefix)
         val directRecordingFunction = KeyRecordingState.recordingFunction
         
+        Log.d("KeyMapper", "Status: isRecording=$isRecording, isMappingEnabled=$isMappingEnabled, isInterceptionActive=$isInterceptionActive, isMapped=$isMapped")
+
         // 3. 시스템 간섭 차단 및 선제적 처리 (ACTION_DOWN)
-        // 매핑된 키거나 녹화 중이라면 시스템이 가로채기 전에 즉시 true를 반환해야 함
         val shouldIntercept = isRecording || directRecordingFunction != null || (isMappingEnabled && isInterceptionActive && isMapped)
         
         if (shouldIntercept && keyAction == KeyEvent.ACTION_DOWN) {
-            if (event.repeatCount > 0) return true
-            Log.i("KeyMapper", "[INTERCEPT] Strongly consuming DOWN: $keyCode")
+            // 녹화 중일 때는 반복 입력(Repeat)도 개별 클릭으로 인정하여 가로챔
+            if (!isRecording && event.repeatCount > 0) {
+                Log.d("KeyMapper", "Ignored: Repeat count > 0")
+                return true
+            }
+            Log.i("KeyMapper", "[INTERCEPT] Strongly consuming DOWN: $keyCode (Repeat=${event.repeatCount})")
             
             // 더블 클릭 타이머 관리
             if (keyCode != lastKeyCode) {

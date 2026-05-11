@@ -183,8 +183,23 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private var lastKeyInputTime = 0L
+    private var lastKeyInputCode = -1
+
     private fun handleKeyCodeInput(keyCode: Int) {
         if (keyCode == -1) return
+        
+        val currentTime = System.currentTimeMillis()
+        // [DEDUPLICATION] 녹화 중일 때는 하드웨어 특성을 고려하여 10ms로 대폭 완화 (빠른 연타 허용)
+        if (keyCode == lastKeyInputCode && currentTime - lastKeyInputTime < 10) {
+            Log.d("MainActivity", "Ignoring extreme duplicate key input: $keyCode")
+            return
+        }
+        lastKeyInputTime = currentTime
+        lastKeyInputCode = keyCode
+        
+        // ViewModel에 이벤트 발생 알림 (SharedFlow)
+        viewModel.onKeyEvent(keyCode)
         
         val uiState = viewModel.uiState.value
         

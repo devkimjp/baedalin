@@ -43,6 +43,7 @@ import kr.disys.baedalin.R
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MappingWizard(
+    viewModel: kr.disys.baedalin.ui.main.MainViewModel,
     onComplete: (DeliveryFunction, ClickType, Int) -> Unit,
     onDismiss: () -> Unit,
     onResetRecording: () -> Unit,
@@ -131,11 +132,11 @@ fun MappingWizard(
     // 단계 변경 시 처리
     LaunchedEffect(currentStep, context) {
         val prefs = context.getSharedPreferences("mappings", android.content.Context.MODE_PRIVATE)
-        if (currentStep == 2) {
-            // 키 입력 단계에 진입하면 기존 녹화된 키 초기화 및 녹화 모드 활성화
-            onResetRecording()
+        if (currentStep == 2 || currentStep == 4) {
+            // 키 입력 단계 또는 더블클릭 타이밍 측정 단계에서 녹화 모드 활성화
+            if (currentStep == 2) onResetRecording()
             prefs.edit().putBoolean("is_recording", true).apply()
-            android.util.Log.d("MappingWizard", "Recording mode: ON (Step 2)")
+            android.util.Log.d("MappingWizard", "Recording mode: ON (Step $currentStep)")
         } else {
             // 다른 단계에서는 녹화 모드 비활성화
             prefs.edit().putBoolean("is_recording", false).apply()
@@ -292,7 +293,7 @@ fun MappingWizard(
                     )
                     4 -> DoubleTapTimingStep(
                         keyCode = lastRecordedKey ?: 0,
-                        keyEventTrigger = keyEventTrigger,
+                        viewModel = viewModel,
                         onTimingCaptured = { timeout ->
                             onSaveTimeout(timeout)
                             val func = selectedFunction!!
@@ -499,9 +500,9 @@ fun KeyRecordingStep(
 @Composable
 fun DoubleTapTimingStep(
     keyCode: Int,
-    keyEventTrigger: Int,
+    viewModel: kr.disys.baedalin.ui.main.MainViewModel,
     onTimingCaptured: (Long) -> Unit,
-    onChangeKey: () -> Unit // 추가: 다른 키로 변경하기 위해 Step 2로 이동
+    onChangeKey: () -> Unit
 ) {
     var firstClickTime by remember { mutableLongStateOf(0L) }
     var measuredInterval by remember { mutableLongStateOf(0L) }
@@ -510,7 +511,7 @@ fun DoubleTapTimingStep(
     var showFailureDialog by remember { mutableStateOf(false) }
     val keyName = android.view.KeyEvent.keyCodeToString(keyCode).replace("KEYCODE_", "")
 
-    // 5초 타임아웃 타이머
+    // 타임아웃 타이머
     LaunchedEffect(failedAttempts, showFailureDialog) {
         if (!showFailureDialog) {
             timeRemaining = 5
@@ -520,32 +521,31 @@ fun DoubleTapTimingStep(
                 timeRemaining--
             }
             if (timeRemaining == 0 && measuredInterval == 0L) {
-                // 타임아웃 발생
                 failedAttempts++
-                if (failedAttempts >= 3) {
-                    showFailureDialog = true
-                }
+                if (failedAttempts >= 3) showFailureDialog = true
             }
         }
     }
 
-    // 키 입력 감지 및 타이밍 계산
-    LaunchedEffect(keyEventTrigger) {
-        if (keyEventTrigger > 0 && !showFailureDialog) {
-            val currentTime = System.currentTimeMillis()
-            if (firstClickTime == 0L) {
-                // 첫 번째 클릭
-                firstClickTime = currentTime
-            } else {
-                // 두 번째 클릭
-                val interval = currentTime - firstClickTime
-                if (interval in 100..1000) {
-                    measuredInterval = interval
-                    kotlinx.coroutines.delay(500) // 성공 메시지 잠시 보여주기
-                    onTimingCaptured(interval)
+    // [고정밀 측정] SharedFlow를 통한 키 입력 감지
+    LaunchedEffect(Unit) {
+        viewModel.keyEvents.collect { inputCode ->
+            if (inputCode == keyCode && !showFailureDialog) {
+                val currentTime = System.currentTimeMillis()
+                if (firstClickTime == 0L) {
+                    firstClickTime = currentTime
+                    android.util.Log.d("MappingWizard", "First click: $keyCode")
                 } else {
-                    // 간격이 너무 길거나 짧으면 실패로 간주하고 리셋
-                    firstClickTime = currentTime // 현재 클릭을 새로운 첫 클릭으로 간주
+                    val interval = currentTime - firstClickTime
+                    android.util.Log.d("MappingWizard", "Second click: $keyCode, Interval: ${interval}ms")
+                    
+                    if (interval in 10..1000) {
+                        measuredInterval = interval
+                        kotlinx.coroutines.delay(500)
+                        onTimingCaptured(interval)
+                    } else {
+                        firstClickTime = currentTime // 너무 길면 다시 첫 번째 클릭으로
+                    }
                 }
             }
         }
@@ -553,23 +553,14 @@ fun DoubleTapTimingStep(
 
     if (showFailureDialog) {
         AlertDialog(
-            onDismissRequest = {
-                failedAttempts = 0
-                showFailureDialog = false
-            },
+            onDismissRequest = { showFailureDialog = false; failedAttempts = 0 },
             title = { Text("입력 시간 초과") },
-            text = { Text("더블 클릭 입력에 3회 실패했습니다.\n다른 키로 다시 매핑하시겠습니까?") },
+            text = { Text("더블 클릭 입력에 실패했습니다.\n다시 시도하거나 다른 키를 선택하세요.") },
             confirmButton = {
-                Button(onClick = {
-                    showFailureDialog = false
-                    onChangeKey()
-                }) { Text("다른 키로 매핑") }
+                Button(onClick = { showFailureDialog = false; onChangeKey() }) { Text("다른 키로 매핑") }
             },
             dismissButton = {
-                TextButton(onClick = {
-                    failedAttempts = 0
-                    showFailureDialog = false
-                }) { Text("다시 시도") }
+                TextButton(onClick = { showFailureDialog = false; failedAttempts = 0 }) { Text("다시 시도") }
             }
         )
     }
@@ -578,16 +569,15 @@ fun DoubleTapTimingStep(
         modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // 타이머 원형 표시
         Box(contentAlignment = Alignment.Center) {
             CircularProgressIndicator(
-                progress = { timeRemaining / 5f },
+                progress = { if (measuredInterval > 0) 1f else timeRemaining / 5f },
                 modifier = Modifier.size(100.dp),
                 strokeWidth = 8.dp,
-                color = if (timeRemaining > 1) MaterialTheme.colorScheme.primary else kr.disys.baedalin.ui.theme.AccentOrange
+                color = if (measuredInterval > 0) kr.disys.baedalin.ui.theme.SuccessGreen else MaterialTheme.colorScheme.primary
             )
             Text(
-                text = timeRemaining.toString(),
+                text = if (measuredInterval > 0) "OK" else timeRemaining.toString(),
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Black
             )
@@ -596,67 +586,22 @@ fun DoubleTapTimingStep(
         Spacer(modifier = Modifier.height(24.dp))
 
         Text(
-            text = "더블 클릭 속도 측정",
+            text = if (measuredInterval > 0) "측정 완료: ${measuredInterval}ms" else "더블 클릭 속도 측정",
             style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.ExtraBold,
-            color = MaterialTheme.colorScheme.onSurface
+            fontWeight = FontWeight.ExtraBold
         )
 
         Spacer(modifier = Modifier.height(16.dp))
 
         Text(
-            text = "[$keyName] 버튼을 평소에 두 번 누르는 속도로\n연속해서 두 번 눌러주세요.",
-            style = MaterialTheme.typography.bodyLarge,
+            text = if (measuredInterval > 0) "설정을 저장하고 있습니다..." else "[$keyName] 버튼을 평소 더블 클릭하는\n속도로 연속해서 두 번 눌러주세요.",
             textAlign = TextAlign.Center,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            lineHeight = 26.sp
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-
-        if (firstClickTime > 0L && measuredInterval == 0L) {
-            Spacer(modifier = Modifier.height(16.dp))
-            Text(
-                text = "한 번 더 눌러주세요!",
-                color = kr.disys.baedalin.ui.theme.AccentOrange,
-                fontWeight = FontWeight.Bold
-            )
-        }
-
-        Spacer(modifier = Modifier.height(40.dp))
-
-        // 측정 결과 표시
-        if (measuredInterval > 0) {
-            Card(
-                colors = CardDefaults.cardColors(
-                    containerColor = kr.disys.baedalin.ui.theme.SuccessGreen.copy(alpha = 0.1f)
-                ),
-                shape = RoundedCornerShape(16.dp)
-            ) {
-                Column(
-                    modifier = Modifier.padding(24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text(
-                        text = "${measuredInterval}ms",
-                        style = MaterialTheme.typography.displayMedium,
-                        fontWeight = FontWeight.Black,
-                        color = kr.disys.baedalin.ui.theme.SuccessGreen
-                    )
-                    Text(
-                        text = "적당한 속도입니다! 설정 완료.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            }
-        }
-        
-        Spacer(modifier = Modifier.height(32.dp))
-        
-        TextButton(onClick = { measuredInterval = 0; firstClickTime = 0L }) {
-            Text("다시 측정하기", fontSize = 18.sp, fontWeight = FontWeight.Bold)
-        }
     }
 }
+
 
 @Composable
 fun ClickTypeSelectionStep(
@@ -703,6 +648,15 @@ fun ClickTypeSelectionStep(
                 modifier = Modifier.weight(1f)
             )
             if (!isMediaKey) {
+                ClickTypeCard(
+                    title = stringResource(R.string.wizard_click_double),
+                    description = "Double",
+                    icon = Icons.Default.AdsClick,
+                    onClick = { onTypeSelected(ClickType.DOUBLE) },
+                    modifier = Modifier.weight(1f)
+                )
+            } else {
+                // 미디어 키도 더블 클릭 지원 (단, 안정성을 위해 안내 유지)
                 ClickTypeCard(
                     title = stringResource(R.string.wizard_click_double),
                     description = "Double",

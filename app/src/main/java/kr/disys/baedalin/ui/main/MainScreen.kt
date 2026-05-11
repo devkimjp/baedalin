@@ -216,6 +216,7 @@ fun MainScreen(
 
     if (uiState.isMappingWizardActive) {
         MappingWizard(
+            viewModel = viewModel,
             onComplete = { func, type, code -> viewModel.executeSaveMapping(func, type, code) },
             onDismiss = { viewModel.closeMappingWizard() },
             onResetRecording = { viewModel.resetPendingKeyCode() },

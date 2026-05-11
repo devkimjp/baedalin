@@ -41,6 +41,17 @@ class MainViewModel @Inject constructor(
         override fun onInputDeviceChanged(deviceId: Int) = refreshDeviceList()
     }
 
+    private val _keyEvents = MutableSharedFlow<Int>(extraBufferCapacity = 64)
+    val keyEvents = _keyEvents.asSharedFlow()
+
+    fun onKeyEvent(keyCode: Int) {
+        viewModelScope.launch {
+            _keyEvents.emit(keyCode)
+        }
+        // 기존 trigger 방식도 하위 호환성을 위해 유지
+        _uiState.update { it.copy(keyEventTrigger = it.keyEventTrigger + 1) }
+    }
+
     private val _uiState = MutableStateFlow(MainUiState())
     val uiState: StateFlow<MainUiState> = _uiState.asStateFlow()
 
