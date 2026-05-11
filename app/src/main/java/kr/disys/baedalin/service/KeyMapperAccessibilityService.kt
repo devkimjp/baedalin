@@ -405,9 +405,9 @@ class KeyMapperAccessibilityService : AccessibilityService() {
 
         if (action == KeyEvent.ACTION_UP) {
             val isDoubleMapped = isKeyMappedToDouble(keyCode, prefix)
+            Log.d("KeyMapper", "[DEBUG] ACTION_UP: keyCode=$keyCode, isDoubleMapped=$isDoubleMapped, currentClickCount=$clickCount")
             
             if (!isDoubleMapped) {
-                // 더블 클릭이 매핑되지 않은 키는 대기 없이 즉시 싱글 클릭으로 처리 (반응성 향상)
                 Log.d("KeyMapper", "[TOUCH] Immediate Action (Single only): keyCode=$keyCode, device=$prefix")
                 handleAction(keyCode, ClickType.SINGLE, prefix)
                 clickCount = 0
@@ -415,19 +415,27 @@ class KeyMapperAccessibilityService : AccessibilityService() {
             }
 
             clickCount++
+            Log.d("KeyMapper", "[DEBUG] clickCount incremented to $clickCount. Waiting for potential double click...")
             
-            pendingClickRunnable?.let { handler.removeCallbacks(it) }
+            pendingClickRunnable?.let { 
+                Log.d("KeyMapper", "[DEBUG] Removing existing pendingClickRunnable")
+                handler.removeCallbacks(it) 
+            }
             
             pendingClickRunnable = Runnable {
                 val type = if (clickCount >= 2) ClickType.DOUBLE else ClickType.SINGLE
+                Log.d("KeyMapper", "[TOUCH] Executing Delayed Action: keyCode=$keyCode, type=$type, count=$clickCount")
                 
-                Log.d("KeyMapper", "[TOUCH] Delayed Action: keyCode=$keyCode, type=$type, device=$prefix")
                 val handled = handleAction(keyCode, type, prefix)
                 if (!handled) {
-                    Log.e("KeyMapper", "[TOUCH] handleAction Failed or Not Handled for keyCode=$keyCode")
+                    Log.e("KeyMapper", "[TOUCH] handleAction Failed: No mapping found for $type on key $keyCode")
                 }
                 clickCount = 0
-            }.also { handler.postDelayed(it, doubleClickTimeout) }
+                pendingClickRunnable = null
+            }.also { 
+                val posted = handler.postDelayed(it, doubleClickTimeout)
+                Log.d("KeyMapper", "[DEBUG] Posted delayed action (timeout=$doubleClickTimeout), success=$posted")
+            }
             
             return true
         }

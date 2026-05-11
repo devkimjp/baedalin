@@ -61,50 +61,61 @@ class GestureManager(private var service: AccessibilityService) {
         Log.d("GestureManager", "[TOUCH] Attempting ZOOM (in=$zoomIn) at ($centerX, $centerY)")
         
         val metrics = service.resources.displayMetrics
-        val width = metrics.widthPixels.toFloat()
+        val minSize = minOf(metrics.widthPixels, metrics.heightPixels).toFloat()
         
         val gestureBuilder = GestureDescription.Builder()
         
-        // 화면 가장자리 간섭(사이드 툴바 등)을 피하기 위해 중앙 부근에서만 동작하도록 계산
-        // 시작 지점: 중앙에서 15% 떨어진 곳
-        // 이동 거리: 중앙에서 35% 지점까지만 (가장자리 15%는 침범하지 않음)
-        val startOffset = width * 0.15f
-        val endOffset = width * 0.35f
+        // 화면 중앙을 기준으로 대각선 방향으로 핀치 제스처 생성
+        // 확대: 중앙 근처(startOffset) -> 외곽(endOffset)
+        // 축소: 외곽(endOffset) -> 중앙 근처(startOffset)
+        val startOffset = minSize * 0.10f
+        val endOffset = minSize * 0.35f
         
         val startX1: Float
+        val startY1: Float
         val endX1: Float
+        val endY1: Float
+        
         val startX2: Float
+        val startY2: Float
         val endX2: Float
+        val endY2: Float
         
         if (zoomIn) {
             // 확대 (안에서 밖으로)
             startX1 = centerX - startOffset
+            startY1 = centerY - startOffset
             endX1 = centerX - endOffset
+            endY1 = centerY - endOffset
             
             startX2 = centerX + startOffset
+            startY2 = centerY + startOffset
             endX2 = centerX + endOffset
+            endY2 = centerY + endOffset
         } else {
             // 축소 (밖에서 안으로)
             startX1 = centerX - endOffset
+            startY1 = centerY - endOffset
             endX1 = centerX - startOffset
+            endY1 = centerY - startOffset
             
             startX2 = centerX + endOffset
+            startY2 = centerY + endOffset
             endX2 = centerX + startOffset
+            endY2 = centerY + startOffset
         }
         
-        val startY = centerY
-        val endY = centerY
-        
         val path1 = Path()
-        path1.moveTo(startX1, startY)
-        path1.lineTo(endX1, endY)
+        path1.moveTo(startX1, startY1)
+        path1.lineTo(endX1, endY1)
         
         val path2 = Path()
-        path2.moveTo(startX2, startY)
-        path2.lineTo(endX2, endY)
+        path2.moveTo(startX2, startY2)
+        path2.lineTo(endX2, endY2)
         
-        gestureBuilder.addStroke(GestureDescription.StrokeDescription(path1, 0, 400))
-        gestureBuilder.addStroke(GestureDescription.StrokeDescription(path2, 0, 400))
+        // 지속 시간을 600ms로 늘려 시스템이 핀치 제스처를 더 정확하게 인식하도록 함
+        gestureBuilder.addStroke(GestureDescription.StrokeDescription(path1, 0, 600))
+        gestureBuilder.addStroke(GestureDescription.StrokeDescription(path2, 0, 600))
         
         service.dispatchGesture(gestureBuilder.build(), object : AccessibilityService.GestureResultCallback() {
             override fun onCompleted(gestureDescription: GestureDescription?) {

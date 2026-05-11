@@ -294,6 +294,11 @@ class MainViewModel @Inject constructor(
         prefs.edit { putBoolean("is_recording", true) }
     }
 
+    fun resetPendingKeyCode() {
+        _uiState.update { it.copy(pendingKeyCode = null) }
+        Log.d("MainViewModel", "Pending key code reset")
+    }
+
     fun closeMappingWizard() {
         _uiState.update { it.copy(isMappingWizardActive = false, pendingKeyCode = null) }
         prefs.edit { putBoolean("is_recording", false) }

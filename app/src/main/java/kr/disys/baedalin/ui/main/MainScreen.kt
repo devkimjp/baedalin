@@ -215,6 +215,7 @@ fun MainScreen(
         MappingWizard(
             onComplete = { func, type, code -> viewModel.executeSaveMapping(func, type, code) },
             onDismiss = { viewModel.closeMappingWizard() },
+            onResetRecording = { viewModel.resetPendingKeyCode() },
             getUnmappedFunctions = { viewModel.getUnmappedFunctions() },
             devicePrefix = uiState.selectedDeviceDescriptor ?: "GLOBAL",
             recordedKeyCode = uiState.pendingKeyCode

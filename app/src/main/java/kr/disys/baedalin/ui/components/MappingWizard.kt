@@ -40,6 +40,7 @@ import android.net.Uri
 fun MappingWizard(
     onComplete: (DeliveryFunction, ClickType, Int) -> Unit,
     onDismiss: () -> Unit,
+    onResetRecording: () -> Unit,
     getUnmappedFunctions: () -> List<DeliveryFunction>,
     devicePrefix: String, // 추가
     recordedKeyCode: Int? = null
@@ -112,6 +113,15 @@ fun MappingWizard(
         }
     }
 
+    // 단계 변경 시 처리
+    LaunchedEffect(currentStepIdx) {
+        val step = activeSteps.getOrNull(currentStepIdx)
+        if (step == 2) {
+            // 키 입력 단계에 진입하면 기존 녹화된 키 초기화
+            onResetRecording()
+        }
+    }
+
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
@@ -126,10 +136,19 @@ fun MappingWizard(
             // Header
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
+                // 이전 버튼 (첫 단계가 아닐 때만 표시)
+                if (currentStepIdx > 0) {
+                    IconButton(onClick = { currentStepIdx-- }) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "이전")
+                    }
+                } else {
+                    // 간격 유지를 위한 더미 스페이스
+                    Spacer(modifier = Modifier.width(48.dp))
+                }
+
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = "버튼 매핑 마법사",
                         style = MaterialTheme.typography.titleLarge,
