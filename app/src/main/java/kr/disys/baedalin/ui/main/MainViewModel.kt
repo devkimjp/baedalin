@@ -82,7 +82,14 @@ class MainViewModel @Inject constructor(
 
     var pendingKeyCode: Int?
         get() = _uiState.value.pendingKeyCode
-        set(value) { _uiState.update { state -> state.copy(pendingKeyCode = value) } }
+        set(value) { 
+            _uiState.update { state -> 
+                state.copy(
+                    pendingKeyCode = value,
+                    keyEventTrigger = state.keyEventTrigger + 1
+                ) 
+            } 
+        }
 
     val recordingFunction: DeliveryFunction? get() = _uiState.value.recordingFunction
     val recordingClickType: ClickType? get() = _uiState.value.recordingClickType
@@ -290,9 +297,16 @@ class MainViewModel @Inject constructor(
         }
     }
 
+    fun saveDoubleClickTimeout(timeout: Long) {
+        prefs.edit(commit = true) {
+            putLong("double_click_timeout", timeout)
+        }
+        updateMappingVersion()
+        Log.d("MainViewModel", "Double click timeout saved: $timeout ms")
+    }
+
     fun openMappingWizard() {
         _uiState.update { it.copy(isMappingWizardActive = true, pendingKeyCode = null) }
-        prefs.edit { putBoolean("is_recording", true) }
     }
 
     fun resetPendingKeyCode() {

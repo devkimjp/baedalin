@@ -13,6 +13,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -43,9 +46,11 @@ fun MappingWizard(
     onComplete: (DeliveryFunction, ClickType, Int) -> Unit,
     onDismiss: () -> Unit,
     onResetRecording: () -> Unit,
+    onSaveTimeout: (Long) -> Unit, // 추가
     getUnmappedFunctions: () -> List<DeliveryFunction>,
-    devicePrefix: String, // 추가
-    recordedKeyCode: Int? = null
+    devicePrefix: String,
+    recordedKeyCode: Int? = null,
+    keyEventTrigger: Int = 0 // 추가
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -67,7 +72,7 @@ fun MappingWizard(
     
     // 권한 여부에 따라 실제 진행할 단계 정의 (0: 권한, 1: 기능선택, 2: 키입력, 3: 타입선택)
     val activeSteps = remember(hasPermission) {
-        if (hasPermission) listOf(1, 2, 3) else listOf(0, 1, 2, 3)
+        if (hasPermission) listOf(1, 2, 3, 4) else listOf(0, 1, 2, 3, 4)
     }
     
     var currentStepIdx by remember(activeSteps) { 
@@ -124,11 +129,17 @@ fun MappingWizard(
     }
 
     // 단계 변경 시 처리
-    LaunchedEffect(currentStepIdx) {
-        val step = activeSteps.getOrNull(currentStepIdx)
-        if (step == 2) {
-            // 키 입력 단계에 진입하면 기존 녹화된 키 초기화
+    LaunchedEffect(currentStep, context) {
+        val prefs = context.getSharedPreferences("mappings", android.content.Context.MODE_PRIVATE)
+        if (currentStep == 2) {
+            // 키 입력 단계에 진입하면 기존 녹화된 키 초기화 및 녹화 모드 활성화
             onResetRecording()
+            prefs.edit().putBoolean("is_recording", true).apply()
+            android.util.Log.d("MappingWizard", "Recording mode: ON (Step 2)")
+        } else {
+            // 다른 단계에서는 녹화 모드 비활성화
+            prefs.edit().putBoolean("is_recording", false).apply()
+            android.util.Log.d("MappingWizard", "Recording mode: OFF (Step $currentStep)")
         }
     }
 
@@ -262,22 +273,32 @@ fun MappingWizard(
                     3 -> ClickTypeSelectionStep(
                         recordedKeyCode = lastRecordedKey,
                         onTypeSelected = { type ->
+                            selectedClickType = type
+                            if (type == ClickType.DOUBLE) {
+                                if (currentStepIdx < totalSteps - 1) currentStepIdx++
+                            } else {
+                                val func = selectedFunction!!
+                                val code = lastRecordedKey!!
+                                onComplete(func, type, code)
+                                
+                                val remaining = getUnmappedFunctions()
+                                if (remaining.isNotEmpty()) {
+                                    showContinueDialog = true
+                                } else {
+                                    moveToNextFunction()
+                                }
+                            }
+                        }
+                    )
+                    4 -> DoubleTapTimingStep(
+                        keyCode = lastRecordedKey ?: 0,
+                        keyEventTrigger = keyEventTrigger,
+                        onTimingCaptured = { timeout ->
+                            onSaveTimeout(timeout)
                             val func = selectedFunction!!
-                            val code = recordedKeyCode!!
+                            val type = selectedClickType!!
+                            val code = lastRecordedKey!!
                             onComplete(func, type, code)
-                            
-                            // 매핑 완료 피드백 및 다음 매핑 진행 여부 확인
-                            val keyName = android.view.KeyEvent.keyCodeToString(code).replace("KEYCODE_", "")
-                            val funcLabel = context.getString(func.labelResId)
-                            val typeLabel = if (type == ClickType.SINGLE) context.getString(R.string.wizard_click_single) else context.getString(R.string.wizard_click_double)
-                            
-                            /* 
-                            android.widget.Toast.makeText(
-                                context, 
-                                "[$funcLabel] ${context.getString(R.string.wizard_complete_title)}: $keyName ($typeLabel)", 
-                                android.widget.Toast.LENGTH_SHORT
-                            ).show()
-                            */
                             
                             val remaining = getUnmappedFunctions()
                             if (remaining.isNotEmpty()) {
@@ -467,6 +488,121 @@ fun KeyRecordingStep(
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
+    }
+}
+
+@Composable
+fun DoubleTapTimingStep(
+    keyCode: Int,
+    keyEventTrigger: Int,
+    onTimingCaptured: (Long) -> Unit
+) {
+    var firstClickTime by remember { mutableLongStateOf(0L) }
+    var measuredInterval by remember { mutableLongStateOf(0L) }
+    val keyName = android.view.KeyEvent.keyCodeToString(keyCode).replace("KEYCODE_", "")
+
+    // 키 입력 감지 및 타이밍 계산
+    LaunchedEffect(keyEventTrigger) {
+        if (keyEventTrigger > 0) {
+            val currentTime = System.currentTimeMillis()
+            if (firstClickTime == 0L) {
+                // 첫 번째 클릭
+                firstClickTime = currentTime
+            } else {
+                // 두 번째 클릭
+                val interval = currentTime - firstClickTime
+                measuredInterval = interval
+                firstClickTime = 0L // 리셋하여 다시 측정 가능하게 함 (선택 사항)
+                
+                // 어느 정도 합리적인 타이밍이면 자동 전진 (예: 100ms ~ 1000ms)
+                if (interval in 100..1000) {
+                    onTimingCaptured(interval)
+                }
+            }
+        }
+    }
+
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Surface(
+            modifier = Modifier.size(100.dp),
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    imageVector = Icons.Filled.Speed,
+                    contentDescription = null,
+                    modifier = Modifier.size(56.dp),
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        Text(
+            text = "더블 클릭 속도 측정",
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.ExtraBold,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Text(
+            text = "[$keyName] 버튼을 평소에 두 번 누르는 속도로\n연속해서 두 번 눌러주세요.",
+            style = MaterialTheme.typography.bodyLarge,
+            textAlign = TextAlign.Center,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            lineHeight = 26.sp
+        )
+
+        Spacer(modifier = Modifier.height(40.dp))
+
+        // 측정 결과 표시
+        if (measuredInterval > 0) {
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = if (measuredInterval < 300) kr.disys.baedalin.ui.theme.AccentOrange.copy(alpha = 0.1f) 
+                                     else kr.disys.baedalin.ui.theme.SuccessGreen.copy(alpha = 0.1f)
+                ),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = "${measuredInterval}ms",
+                        style = MaterialTheme.typography.displayMedium,
+                        fontWeight = FontWeight.Black,
+                        color = if (measuredInterval < 300) kr.disys.baedalin.ui.theme.AccentOrange 
+                                else kr.disys.baedalin.ui.theme.SuccessGreen
+                    )
+                    Text(
+                        text = if (measuredInterval < 300) "속도가 빠릅니다. (조금 더 천천히 눌러보세요)" else "적당한 속도입니다!",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+        } else {
+            // 대기 중 애니메이션 효과
+            CircularProgressIndicator(
+                modifier = Modifier.size(64.dp),
+                strokeWidth = 6.dp,
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
+            )
+        }
+
+        Spacer(modifier = Modifier.height(32.dp))
+        
+        TextButton(onClick = { measuredInterval = 0; firstClickTime = 0L }) {
+            Text("다시 측정하기", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        }
     }
 }
 

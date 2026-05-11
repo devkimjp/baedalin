@@ -29,6 +29,7 @@ data class MainUiState(
     val recordingClickType: ClickType? = null,
     val conflictFunction: DeliveryFunction? = null,
     val pendingKeyCode: Int? = null,
+    val keyEventTrigger: Int = 0,
     
     val mappingVersion: Int = 0,
     
