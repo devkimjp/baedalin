@@ -264,9 +264,11 @@ fun MappingWizard(
                                 if (listStepIdx != -1) currentStepIdx = listStepIdx
                             }
                         )
-                        // 키가 입력되면 대기 화면 없이 즉시 다음 단계로 전진
-                        LaunchedEffect(recordedKeyCode) {
-                            if (recordedKeyCode != null) {
+                        // [버그 수정] keyEventTrigger를 키로 사용하여 실제 새 키 입력 시에만 다음 단계로 이동
+                        // recordedKeyCode를 키로 쓰면 이전 매핑 값이 남아있을 때 즉시 넘어가는 문제 발생
+                        LaunchedEffect(keyEventTrigger) {
+                            // 트리거가 0이면 초기 상태이므로 무시
+                            if (keyEventTrigger > 0 && recordedKeyCode != null) {
                                 if (currentStepIdx < totalSteps - 1) currentStepIdx++
                             }
                         }
@@ -451,8 +453,10 @@ fun KeyRecordingStep(
 ) {
     var timeLeft by remember { mutableStateOf(5) }
     
-    // 카운트다운 로직
-    LaunchedEffect(Unit) {
+    // [버그 수정] recordedKeyCode를 키에 포함시켜 리셋(null) 시 카운트다운 재시작
+    LaunchedEffect(recordedKeyCode) {
+        if (recordedKeyCode != null) return@LaunchedEffect // 키가 이미 입력된 경우 무시
+        timeLeft = 5
         while (timeLeft > 0 && recordedKeyCode == null) {
             kotlinx.coroutines.delay(1000)
             timeLeft--
