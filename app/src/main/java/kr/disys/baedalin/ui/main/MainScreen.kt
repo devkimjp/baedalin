@@ -201,9 +201,14 @@ fun MainScreen(
                 PresetItem("배민", R.drawable.ic_toolbar_baemin, "BAEMIN", viewModel)
                 PresetItem("쿠팡", R.drawable.ic_toolbar_coupang, "COUPANG", viewModel)
             }
-
-            // 버튼 확인/수정 기능 삭제됨
-
+            Spacer(modifier = Modifier.height(24.dp))
+            Text("기타 설정", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.ExtraBold)
+            ToolbarSettingsCard(
+                opacity = uiState.toolbarOpacity,
+                onOpacityChange = { viewModel.updateToolbarOpacity(it) }
+            )
+            
+            Spacer(modifier = Modifier.height(40.dp))
         }
     }
 
@@ -538,5 +543,41 @@ fun ConfigImportDialog(
                 TextButton(onClick = { showConfirmDialog = null }) { Text("취소", fontSize = 16.sp) }
             }
         )
+    }
+}
+
+@Composable
+fun ToolbarSettingsCard(
+    opacity: Float,
+    onOpacityChange: (Float) -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
+    ) {
+        Column(modifier = Modifier.padding(20.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("툴바 투명도", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text("${(opacity * 100).toInt()}%", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.primary)
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            Slider(
+                value = opacity,
+                onValueChange = onOpacityChange,
+                valueRange = 0.2f..1.0f,
+                modifier = Modifier.fillMaxWidth()
+            )
+            Text(
+                "플로팅 툴바의 불투명도를 조절합니다. (20% ~ 100%)",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+            )
+        }
     }
 }

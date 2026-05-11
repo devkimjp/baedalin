@@ -24,6 +24,7 @@ import kr.disys.baedalin.model.ShareConfig
 import android.widget.Toast
 import android.content.Intent
 import kr.disys.baedalin.model.Presets
+import kr.disys.baedalin.service.FloatingWidgetService
 
 @HiltViewModel
 class MainViewModel @Inject constructor(
@@ -135,10 +136,14 @@ class MainViewModel @Inject constructor(
         }
         
         // [사용자 요청] 앱 실행 시 무조건 서비스 시작 (자동 활성화)
-        // 기존: prefs.getBoolean("is_mapping_enabled", false)
         prefs.edit { putBoolean("is_mapping_enabled", true) }
-        _uiState.update { state -> state.copy(isMappingEnabled = true) }
-        Log.d("MainViewModel", "Service automatically enabled on app launch")
+        _uiState.update { it.copy(isMappingEnabled = true) }
+        
+        // 투명도 설정 로드
+        val opacity = prefs.getFloat("toolbar_opacity", 1.0f)
+        _uiState.update { it.copy(toolbarOpacity = opacity) }
+        
+        Log.d("MainViewModel", "Service automatically enabled on app launch (Opacity: $opacity)")
     }
 
     private fun refreshDeviceList() {
@@ -264,6 +269,18 @@ class MainViewModel @Inject constructor(
 
         _uiState.update { state -> state.copy(isMappingEnabled = nextStatus) }
         prefs.edit { putBoolean("is_mapping_enabled", nextStatus) }
+    }
+    
+    fun updateToolbarOpacity(opacity: Float) {
+        _uiState.update { it.copy(toolbarOpacity = opacity) }
+        prefs.edit { putFloat("toolbar_opacity", opacity) }
+        
+        // 서비스가 실행 중이라면 실시간으로 투명도 업데이트 전송
+        val intent = Intent(context, FloatingWidgetService::class.java).apply {
+            action = FloatingWidgetService.ACTION_UPDATE_TRANSPARENCY
+            putExtra("transparency", opacity)
+        }
+        context.startService(intent)
     }
 
     private fun saveWizardMapping() {

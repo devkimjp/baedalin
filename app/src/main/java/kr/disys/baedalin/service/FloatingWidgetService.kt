@@ -438,7 +438,8 @@ class FloatingWidgetService : Service() {
         val initialX = prefs.getInt("toolbar_x", 800)
         val initialY = prefs.getInt("toolbar_y", 500) // 초기 위치를 스위치 아래쪽으로 조정
 
-        toolbarManager.showToolbar(initialX, initialY, 1.0f, isToolbarFolded)
+        val opacity = prefs.getFloat("toolbar_opacity", 1.0f)
+        toolbarManager.showToolbar(initialX, initialY, opacity, isToolbarFolded)
         toolbarManager.root?.let {
             overlayManager.showOverlay(functionName, it, toolbarManager.currentParams!!)
         }

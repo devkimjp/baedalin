@@ -39,7 +39,10 @@ data class MainUiState(
     val isMappingWizardActive: Boolean = false,
     val currentMappingStep: Int = 0,
     val wizardSelectedFunction: DeliveryFunction? = null,
-    val wizardSelectedClickType: ClickType? = null
+    val wizardSelectedClickType: ClickType? = null,
+    
+    // Setting States
+    val toolbarOpacity: Float = 1.0f
 )
 
 data class InputDeviceInfo(
