@@ -197,6 +197,7 @@ class KeyMapperAccessibilityService : AccessibilityService() {
         val isRecording = prefs.getBoolean("is_recording", false)
         val isInterceptionActive = FloatingWidgetService.isInterceptionActive.value
         
+        // [버그 수정] info 객체 하나만 사용하여 일관성 확보
         val info = serviceInfo ?: AccessibilityServiceInfo()
         
         if (isMappingEnabled || isRecording || kr.disys.baedalin.KeyRecordingState.recordingFunction != null) {
@@ -215,7 +216,6 @@ class KeyMapperAccessibilityService : AccessibilityService() {
                 Log.d("KeyMapper", "Key Filter: ACTIVE (INTERCEPTING ALL KEYS)")
             }
 
-            // [강력 조치] 툴바 표시 중(배달 앱 인식)이라면 미디어 세션 우선권을 강제로 뺏어옴
             if (isInterceptionActive) {
                 if (mediaSession == null || mediaSession?.isActive == false) {
                     setupMediaSession()
@@ -233,13 +233,9 @@ class KeyMapperAccessibilityService : AccessibilityService() {
                 mediaSession?.isActive = false
             }
             
-            // [강력 조치] 시스템에 서비스 정보 명시적 재등록
-            val currentInfo = serviceInfo
-            if (currentInfo != null) {
-                currentInfo.flags = targetFlags
-                serviceInfo = currentInfo
-                Log.d("KeyMapper", "[SYSTEM] ServiceInfo flags updated and re-registered: $targetFlags")
-            }
+            // info.flags에 직접 targetFlags를 설정 → setServiceInfo(info) 시 올바르게 반영됨
+            info.flags = targetFlags
+            Log.d("KeyMapper", "[SYSTEM] flags set: $targetFlags (isRecording=$isRecording, isMappingEnabled=$isMappingEnabled)")
         } else {
             info.eventTypes = 0
             info.feedbackType = 0
@@ -248,9 +244,9 @@ class KeyMapperAccessibilityService : AccessibilityService() {
             Log.d("KeyMapper", "Key Filter: STEALTH (Fully Disabled)")
         }
         
-        // [강력 조치] 명시적 메서드 호출을 통해 시스템에 즉각 반영
+        // 단 한 번의 setServiceInfo 호출로 적용 (중복 호출 제거)
         setServiceInfo(info)
-        Log.d("KeyMapper", "[SYSTEM] setServiceInfo called with flags: ${info.flags}")
+        Log.d("KeyMapper", "[SYSTEM] setServiceInfo applied: flags=${info.flags}, eventTypes=${info.eventTypes}")
     }
 
     override fun onDestroy() {
@@ -442,16 +438,12 @@ class KeyMapperAccessibilityService : AccessibilityService() {
             
             if (isRecording) {
                 Log.d("KeyMapper", "[RECORDING] Capture in Wizard: $keyCode")
+                // [버그 수정] startActivity 제거: FLAG_REORDER_TO_FRONT가 ModalBottomSheet를 닫아버림
+                // 브로드캐스트만으로 MainActivity의 keyReceiver가 처리하므로 충분
                 sendBroadcast(Intent("ACTION_KEY_RECORDED").apply {
                     setPackage(packageName)
                     putExtra("keycode", keyCode)
                 })
-                val intent = Intent(this, kr.disys.baedalin.MainActivity::class.java).apply {
-                    action = "ACTION_KEY_RECORDED"
-                    putExtra("keycode", keyCode)
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
-                }
-                startActivity(intent)
             }
             
             return true
