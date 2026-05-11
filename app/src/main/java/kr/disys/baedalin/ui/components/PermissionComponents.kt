@@ -50,30 +50,48 @@ fun PermissionWizard(
 
     Scaffold(
         bottomBar = {
-            Box(modifier = Modifier.padding(24.dp).fillMaxWidth()) {
+            Box(modifier = Modifier.padding(bottom = 48.dp, start = 24.dp, end = 24.dp).fillMaxWidth()) {
                 if (currentStep == 0 && isOverlayEnabled) {
                     Button(
                         onClick = { currentStep = 1 },
-                        modifier = Modifier.fillMaxWidth().height(56.dp),
-                        shape = RoundedCornerShape(16.dp)
+                        modifier = Modifier.fillMaxWidth().height(80.dp),
+                        shape = RoundedCornerShape(24.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50)),
+                        elevation = ButtonDefaults.buttonElevation(defaultElevation = 6.dp)
                     ) {
-                        Text("다음 단계로", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("다음 단계로 진행하기", fontSize = 24.sp, fontWeight = FontWeight.ExtraBold)
+                            Spacer(Modifier.width(12.dp))
+                            Icon(Icons.Default.ArrowForward, contentDescription = null, modifier = Modifier.size(28.dp))
+                        }
                     }
                 } else if (currentStep == 1 && isAccessibilityEnabled) {
                     Button(
                         onClick = { currentStep = 2 },
-                        modifier = Modifier.fillMaxWidth().height(56.dp),
-                        shape = RoundedCornerShape(16.dp)
+                        modifier = Modifier.fillMaxWidth().height(80.dp),
+                        shape = RoundedCornerShape(24.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50)),
+                        elevation = ButtonDefaults.buttonElevation(defaultElevation = 6.dp)
                     ) {
-                        Text("다음 단계로", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("다음 단계로 진행하기", fontSize = 24.sp, fontWeight = FontWeight.ExtraBold)
+                            Spacer(Modifier.width(12.dp))
+                            Icon(Icons.Default.ArrowForward, contentDescription = null, modifier = Modifier.size(28.dp))
+                        }
                     }
                 } else if (currentStep == 2 && isBluetoothEnabled) {
                     Button(
                         onClick = { onComplete() },
-                        modifier = Modifier.fillMaxWidth().height(56.dp),
-                        shape = RoundedCornerShape(16.dp)
+                        modifier = Modifier.fillMaxWidth().height(80.dp),
+                        shape = RoundedCornerShape(24.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                        elevation = ButtonDefaults.buttonElevation(defaultElevation = 6.dp)
                     ) {
-                        Text("시작하기", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("시작하기", fontSize = 24.sp, fontWeight = FontWeight.ExtraBold)
+                            Spacer(Modifier.width(12.dp))
+                            Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(28.dp))
+                        }
                     }
                 }
             }

@@ -78,9 +78,17 @@ fun MappingWizard(
     val totalSteps = activeSteps.size
 
     var selectedFunction by remember { 
-        mutableStateOf(if (hasPermission && unmappedFunctions.isNotEmpty()) unmappedFunctions.first() else null) 
+        mutableStateOf<DeliveryFunction?>(null) 
     }
     var selectedClickType by remember { mutableStateOf<ClickType?>(null) }
+    
+    // 마지막으로 기록된 키 코드를 로컬에 유지 (저장 후 UI 초기화 시 '???' 방지)
+    var lastRecordedKey by remember { mutableStateOf<Int?>(recordedKeyCode) }
+    LaunchedEffect(recordedKeyCode) {
+        if (recordedKeyCode != null) {
+            lastRecordedKey = recordedKeyCode
+        }
+    }
 
     val launcher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -133,7 +141,7 @@ fun MappingWizard(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(bottom = 32.dp, start = 24.dp, end = 24.dp)
+                .padding(bottom = 56.dp, start = 24.dp, end = 24.dp)
         ) {
             // Header
             Row(
@@ -156,13 +164,22 @@ fun MappingWizard(
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold
                     )
-                    selectedFunction?.let {
+                    if (currentStep == 1) {
                         Text(
-                            text = stringResource(it.labelResId),
+                            text = "리모컨 키를 할당할 버튼을 선택하세요.",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.Medium
+                            color = kr.disys.baedalin.ui.theme.AccentOrange,
+                            fontWeight = FontWeight.Bold
                         )
+                    } else {
+                        selectedFunction?.let {
+                            Text(
+                                text = stringResource(it.labelResId),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
                     }
                 }
                 IconButton(onClick = onDismiss) {
@@ -243,7 +260,7 @@ fun MappingWizard(
                         }
                     }
                     3 -> ClickTypeSelectionStep(
-                        recordedKeyCode = recordedKeyCode,
+                        recordedKeyCode = lastRecordedKey,
                         onTypeSelected = { type ->
                             val func = selectedFunction!!
                             val code = recordedKeyCode!!
@@ -254,11 +271,13 @@ fun MappingWizard(
                             val funcLabel = context.getString(func.labelResId)
                             val typeLabel = if (type == ClickType.SINGLE) context.getString(R.string.wizard_click_single) else context.getString(R.string.wizard_click_double)
                             
+                            /* 
                             android.widget.Toast.makeText(
                                 context, 
                                 "[$funcLabel] ${context.getString(R.string.wizard_complete_title)}: $keyName ($typeLabel)", 
                                 android.widget.Toast.LENGTH_SHORT
                             ).show()
+                            */
                             
                             val remaining = getUnmappedFunctions()
                             if (remaining.isNotEmpty()) {
@@ -278,13 +297,30 @@ fun MappingWizard(
                         moveToNextFunction()
                     },
                     title = { Text(stringResource(R.string.wizard_complete_title)) },
-                    text = { Text(stringResource(R.string.wizard_complete_desc)) },
+                    text = { 
+                        val nextFunc = getUnmappedFunctions().firstOrNull()
+                        val nextLabel = nextFunc?.let { context.getString(it.labelResId) } ?: ""
+                        Column {
+                            Text("현재 기능의 매핑이 성공적으로 저장되었습니다.")
+                            if (nextLabel.isNotEmpty()) {
+                                Spacer(Modifier.height(12.dp))
+                                Text(
+                                    text = "다음으로 [$nextLabel] 매핑을 이어서 진행하시겠습니까?",
+                                    fontWeight = FontWeight.Bold,
+                                    color = kr.disys.baedalin.ui.theme.AccentOrange
+                                )
+                            }
+                        }
+                    },
                     confirmButton = {
-                        Button(onClick = {
-                            showContinueDialog = false
-                            startNextMapping()
-                        }) {
-                            Text(stringResource(R.string.wizard_btn_continue))
+                        Button(
+                            onClick = {
+                                showContinueDialog = false
+                                startNextMapping()
+                            },
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text("계속하기", fontWeight = FontWeight.Bold)
                         }
                     },
                     dismissButton = {
@@ -308,12 +344,6 @@ fun FunctionSelectionStep(
     onFunctionSelected: (DeliveryFunction) -> Unit
 ) {
     Column {
-        Text(
-            stringResource(R.string.main_select_device),
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Spacer(modifier = Modifier.height(16.dp))
         LazyVerticalGrid(
             columns = GridCells.Fixed(2),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -490,32 +520,36 @@ fun BluetoothPermissionStep(
         Icon(
             imageVector = Icons.Default.Bluetooth,
             contentDescription = null,
-            modifier = Modifier.size(80.dp),
+            modifier = Modifier.size(100.dp), // 크기 확대
             tint = if (hasPermission) Color(0xFF4CAF50) else MaterialTheme.colorScheme.primary
         )
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(16.dp))
         Text(
-            text = if (hasPermission) "블루투스 준비 완료" else "블루투스 권한이 필요합니다",
+            text = if (hasPermission) "준비가 완료되었습니다" else "연결 권한이 필요합니다",
             style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold
+            fontWeight = FontWeight.ExtraBold,
+            color = MaterialTheme.colorScheme.onSurface
         )
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(8.dp))
         Text(
-            text = "리모컨 장치를 정확하게 찾기 위해\n'근처 기기' 접근 권한이 필요합니다.\n이 권한이 있어야 시스템 장치를 제외할 수 있습니다.",
+            text = "리모컨 인식을 위해 '근처 기기' 권한이 필요합니다.\n아래 버튼을 눌러 진행해 주세요.",
             textAlign = TextAlign.Center,
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        Spacer(modifier = Modifier.height(40.dp))
+        Spacer(modifier = Modifier.height(32.dp))
         
         if (!hasPermission) {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
                 Button(
                     onClick = onRequestPermission,
-                    modifier = Modifier.fillMaxWidth().height(56.dp),
+                    modifier = Modifier.fillMaxWidth().height(72.dp),
                     shape = RoundedCornerShape(16.dp)
                 ) {
-                    Text("권한 허용하기", fontSize = 16.sp)
+                    Text("권한 허용하기", fontSize = 20.sp, fontWeight = FontWeight.Bold)
                 }
                 
                 TextButton(
@@ -529,19 +563,25 @@ fun BluetoothPermissionStep(
                 ) {
                     Icon(Icons.Default.Settings, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
-                    Text("시스템 설정에서 허용하기")
+                    Text("시스템 설정에서 허용하기", fontSize = 14.sp)
                 }
             }
         } else {
             Button(
                 onClick = onNext,
-                modifier = Modifier.fillMaxWidth().height(56.dp),
-                shape = RoundedCornerShape(16.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50))
+                modifier = Modifier.fillMaxWidth().height(80.dp),
+                shape = RoundedCornerShape(20.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50)),
+                elevation = ButtonDefaults.buttonElevation(defaultElevation = 6.dp)
             ) {
-                Text("다음 단계로", fontSize = 16.sp)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("다음 단계로 진행하기", fontSize = 22.sp, fontWeight = FontWeight.Black)
+                    Spacer(Modifier.width(12.dp))
+                    Icon(Icons.Default.ArrowForward, contentDescription = null, modifier = Modifier.size(28.dp))
+                }
             }
         }
+        Spacer(modifier = Modifier.height(40.dp)) // 하단 여백 추가하여 너무 붙지 않게 함
     }
 }
 
