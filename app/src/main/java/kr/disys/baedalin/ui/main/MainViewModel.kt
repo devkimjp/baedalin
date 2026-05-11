@@ -134,8 +134,11 @@ class MainViewModel @Inject constructor(
             )}
         }
         
-        val isMapping = prefs.getBoolean("is_mapping_enabled", false)
-        _uiState.update { state -> state.copy(isMappingEnabled = isMapping) }
+        // [사용자 요청] 앱 실행 시 무조건 서비스 시작 (자동 활성화)
+        // 기존: prefs.getBoolean("is_mapping_enabled", false)
+        prefs.edit { putBoolean("is_mapping_enabled", true) }
+        _uiState.update { state -> state.copy(isMappingEnabled = true) }
+        Log.d("MainViewModel", "Service automatically enabled on app launch")
     }
 
     private fun refreshDeviceList() {

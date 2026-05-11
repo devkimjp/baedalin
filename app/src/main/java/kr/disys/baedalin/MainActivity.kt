@@ -80,6 +80,11 @@ class MainActivity : ComponentActivity() {
                             viewModel.isBluetoothEnabled = checkBluetoothPermission()
                             viewModel.isBatteryOptimized = checkBatteryOptimization()
                             
+                            // [사용자 요청] 앱 진입 시 무조건 서비스 활성화 보장
+                            if (!viewModel.isMappingEnabled && !uiState.isMappingWizardActive) {
+                                viewModel.toggleService() // 내부적으로 SharedPreferences 저장 및 상태 업데이트 수행
+                            }
+                            
                             if (viewModel.isMappingEnabled && !uiState.isMappingWizardActive) {
                                 startService(Intent(this@MainActivity, FloatingWidgetService::class.java).apply {
                                     action = FloatingWidgetService.ACTION_START_SERVICE_ONLY
