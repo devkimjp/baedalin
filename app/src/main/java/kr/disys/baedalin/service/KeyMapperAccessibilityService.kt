@@ -200,7 +200,10 @@ class KeyMapperAccessibilityService : AccessibilityService() {
         // [버그 수정] info 객체 하나만 사용하여 일관성 확보
         val info = serviceInfo ?: AccessibilityServiceInfo()
         
-        if (isMappingEnabled || isRecording || kr.disys.baedalin.KeyRecordingState.recordingFunction != null) {
+        // [버그 수정] isInterceptionActive(툴바 활성)도 조건에 추가
+        // 기존: isMappingEnabled=false 상태에서 툴바가 떠있어도 STEALTH로 빠져 키 차단
+        if (isMappingEnabled || isRecording || isInterceptionActive ||
+            kr.disys.baedalin.KeyRecordingState.recordingFunction != null) {
             info.eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or AccessibilityEvent.TYPE_WINDOWS_CHANGED
             info.feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC
             info.notificationTimeout = 100
