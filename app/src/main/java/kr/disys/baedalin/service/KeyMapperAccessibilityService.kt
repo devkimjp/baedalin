@@ -56,7 +56,9 @@ class KeyMapperAccessibilityService : AccessibilityService() {
     private var isLongPressed = false
     private var mediaSession: android.media.session.MediaSession? = null
     
-    private lateinit var gestureManager: GestureManager
+    @Inject lateinit var gestureManager: GestureManager
+    @Inject lateinit var appSwitcher: AppSwitcher
+    @Inject lateinit var keyEventHandler: KeyEventHandler
 
     private val serviceReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -94,7 +96,6 @@ class KeyMapperAccessibilityService : AccessibilityService() {
 
     override fun onCreate() {
         super.onCreate()
-        gestureManager = GestureManager(this)
         Log.d("KeyMapper", "Service onCreate - Process: ${android.os.Process.myPid()}")
         val filter = IntentFilter().apply {
             addAction("ACTION_START_DIRECT_RECORDING")
@@ -571,7 +572,7 @@ class KeyMapperAccessibilityService : AccessibilityService() {
                     return true
                 }
                 DeliveryFunction.SWITCH_APP -> {
-                    switchBetweenDeliveryApps()
+                    appSwitcher.switchBetweenDeliveryApps(activePreset)
                     return true
                 }
                 else -> {
@@ -604,47 +605,5 @@ class KeyMapperAccessibilityService : AccessibilityService() {
             }
         }
         return false
-    }
-    private fun switchBetweenDeliveryApps() {
-        val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
-        val activePreset = prefs.getString("active_preset", "BAEMIN") ?: "BAEMIN"
-        
-        val nextPreset = if (activePreset == "BAEMIN") "COUPANG" else "BAEMIN"
-        val nextPackage = Presets.getPackageName(nextPreset)
-        val currentPackage = Presets.getPackageName(activePreset)
-        
-        Log.i("KeyMapper", "[APP_SWITCH] Optimized switching: $activePreset -> $nextPreset")
-        
-        try {
-            val intent = packageManager.getLaunchIntentForPackage(nextPackage)
-            if (intent != null) {
-                isSwitchingApp = true
-                lastSwitchedPackage = currentPackage
-                
-                // [최적화] 기존 태스크를 최상단으로 올리고, 새로 만들지 않음 (Warm Start 강제)
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                intent.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
-                intent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                intent.addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION)
-                
-                // [최적화] 시스템 전환 애니메이션 제거로 체감 속도 극대화
-                val options = android.app.ActivityOptions.makeCustomAnimation(this, 0, 0).toBundle()
-                startActivity(intent, options)
-                
-                Log.i("KeyMapper", "[APP_SWITCH] Fast Intent sent for $nextPackage")
-                
-                handler.postDelayed({
-                    isSwitchingApp = false
-                    lastSwitchedPackage = null
-                    Log.d("KeyMapper", "[APP_SWITCH] Transition mode cleared")
-                }, 2000)
-            } else {
-                Log.w("KeyMapper", "[APP_SWITCH] Target app not found: $nextPackage")
-                Toast.makeText(this, "$nextPreset 앱을 찾을 수 없습니다.", Toast.LENGTH_SHORT).show()
-            }
-        } catch (e: Exception) {
-            Log.e("KeyMapper", "[APP_SWITCH] Error during fast transition", e)
-            isSwitchingApp = false
-        }
     }
 }

@@ -2,6 +2,8 @@ package kr.disys.baedalin.di
 
 import kr.disys.baedalin.data.repository.PresetRepositoryImpl
 import kr.disys.baedalin.domain.repository.PresetRepository
+import kr.disys.baedalin.data.repository.MappingRepositoryImpl
+import kr.disys.baedalin.domain.repository.MappingRepository
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
@@ -17,4 +19,10 @@ abstract class RepositoryModule {
     abstract fun bindPresetRepository(
         presetRepositoryImpl: PresetRepositoryImpl
     ): PresetRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindMappingRepository(
+        mappingRepositoryImpl: MappingRepositoryImpl
+    ): MappingRepository
 }

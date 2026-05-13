@@ -23,4 +23,8 @@ object DataStoreModule {
             produceFile = { context.preferencesDataStoreFile("baedalin_prefs") }
         )
     }
+
+    @Provides
+    @Singleton
+    fun provideContext(@ApplicationContext context: Context): Context = context
 }

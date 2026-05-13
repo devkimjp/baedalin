@@ -15,7 +15,12 @@ import java.io.FileWriter
 import java.text.SimpleDateFormat
 import java.util.*
 
-class GestureManager(private var service: AccessibilityService) {
+import javax.inject.Inject
+import javax.inject.Singleton
+
+@Singleton
+class GestureManager @Inject constructor() {
+    private var service: AccessibilityService? = null
 
     fun setService(newService: AccessibilityService) {
         this.service = newService
@@ -29,7 +34,7 @@ class GestureManager(private var service: AccessibilityService) {
         gestureBuilder.addStroke(GestureDescription.StrokeDescription(path, 0, 50))
         
         val gesture = gestureBuilder.build()
-        service.dispatchGesture(gesture, object : AccessibilityService.GestureResultCallback() {
+        service?.dispatchGesture(gesture, object : AccessibilityService.GestureResultCallback() {
             override fun onCompleted(gestureDescription: GestureDescription?) {
                 Log.d("GestureManager", "[TOUCH] TAP Success at ($x, $y)")
             }
@@ -47,7 +52,7 @@ class GestureManager(private var service: AccessibilityService) {
         val gestureBuilder = GestureDescription.Builder()
         gestureBuilder.addStroke(GestureDescription.StrokeDescription(path, 0, duration))
         
-        service.dispatchGesture(gestureBuilder.build(), object : AccessibilityService.GestureResultCallback() {
+        service?.dispatchGesture(gestureBuilder.build(), object : AccessibilityService.GestureResultCallback() {
             override fun onCompleted(gestureDescription: GestureDescription?) {
                 Log.d("GestureManager", "[TOUCH] SWIPE Success")
             }
@@ -60,7 +65,7 @@ class GestureManager(private var service: AccessibilityService) {
     fun performZoom(centerX: Float, centerY: Float, zoomIn: Boolean) {
         Log.d("GestureManager", "[TOUCH] Attempting ZOOM (in=$zoomIn) at ($centerX, $centerY)")
         
-        val metrics = service.resources.displayMetrics
+        val metrics = service?.resources?.displayMetrics ?: return
         val minSize = minOf(metrics.widthPixels, metrics.heightPixels).toFloat()
         
         val gestureBuilder = GestureDescription.Builder()
@@ -117,7 +122,7 @@ class GestureManager(private var service: AccessibilityService) {
         gestureBuilder.addStroke(GestureDescription.StrokeDescription(path1, 0, 600))
         gestureBuilder.addStroke(GestureDescription.StrokeDescription(path2, 0, 600))
         
-        service.dispatchGesture(gestureBuilder.build(), object : AccessibilityService.GestureResultCallback() {
+        service?.dispatchGesture(gestureBuilder.build(), object : AccessibilityService.GestureResultCallback() {
             override fun onCompleted(gestureDescription: GestureDescription?) {
                 Log.d("GestureManager", "[TOUCH] ZOOM Success")
             }
@@ -128,11 +133,12 @@ class GestureManager(private var service: AccessibilityService) {
     }
 
     fun captureUISnapshot(): String? {
-        val root = service.rootInActiveWindow ?: return null
+        val s = service ?: return null
+        val root = s.rootInActiveWindow ?: return null
         return try {
             val logDateFormat = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault())
             val timestamp = logDateFormat.format(Date())
-            val dir = service.getExternalFilesDir(null) ?: service.filesDir
+            val dir = s.getExternalFilesDir(null) ?: s.filesDir
             val file = File(dir, "ui_snapshot_$timestamp.json")
             
             val json = JSONObject()

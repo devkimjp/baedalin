@@ -17,7 +17,6 @@ import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
-import androidx.core.content.edit
 import dagger.hilt.android.AndroidEntryPoint
 import kr.disys.baedalin.MainActivity
 import kr.disys.baedalin.R
@@ -28,14 +27,17 @@ import kr.disys.baedalin.ui.WidgetTouchHandler
 import kr.disys.baedalin.ui.overlay.OverlayManager
 import kr.disys.baedalin.util.OverlayFactory
 import kotlinx.coroutines.*
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.*
 import javax.inject.Inject
+import kr.disys.baedalin.domain.repository.MappingRepository
+import kr.disys.baedalin.model.DeliveryFunction
 
 @AndroidEntryPoint
 class FloatingWidgetService : Service() {
 
     @Inject lateinit var overlayManager: OverlayManager
+    @Inject lateinit var appSwitcher: AppSwitcher
+    @Inject lateinit var mappingRepository: MappingRepository
     
     private val ICON_SIZE = 100 
     private var currentPreset: String = "DEFAULT"
@@ -53,70 +55,60 @@ class FloatingWidgetService : Service() {
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
     private fun addNumberedWidget() {
-        val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
-        val preset = currentPreset
-        val counterKey = "${preset}_custom_counter"
-        val counter = prefs.getInt(counterKey, 1)
-        val label = counter.toString()
-        val functionName = "${preset}_CUSTOM_$label"
-        val color = Presets.getColor(preset)
-        
-        // 1. 위젯 표시
-        showWidget(
-            functionName = functionName,
-            icon = label,
-            tooltip = "사용자 $label",
-            targetX = lastAddedX,
-            targetY = lastAddedY,
-            color = color
-        )
-        
-        // 2. 데이터 저장 (목록 관리)
-        val listKey = "${preset}_active_custom_widgets"
-        val currentWidgets = prefs.getString(listKey, "") ?: ""
-        val newList = if (currentWidgets.isEmpty()) label else "$currentWidgets,$label"      
-        
-        prefs.edit { 
-            putString(listKey, newList)
-            putInt(counterKey, counter + 1)
-            putInt("${preset}_last_added_x", lastAddedX + 60)
-            putInt("${preset}_last_added_y", lastAddedY + 60)
-        }
+        serviceScope.launch {
+            val preset = currentPreset
+            val counter = mappingRepository.getCustomWidgetCounter(preset).first()
+            val label = counter.toString()
+            val functionName = "${preset}_CUSTOM_$label"
+            val color = Presets.getColor(preset)
+            
+            // 1. 위젯 표시
+            showWidget(
+                functionName = functionName,
+                icon = label,
+                tooltip = "사용자 $label",
+                targetX = lastAddedX,
+                targetY = lastAddedY,
+                color = color
+            )
+            
+            // 2. 데이터 저장
+            mappingRepository.addCustomWidget(preset, label)
+            mappingRepository.setCustomWidgetCounter(preset, counter + 1)
+            mappingRepository.saveWidgetPosition(preset, "last_added", lastAddedX + 60, lastAddedY + 60)
 
-        // 3. 좌표 및 카운터 갱신
-        lastAddedX += 60
-        lastAddedY += 60
-        if (lastAddedX > 800 || lastAddedY > 1200) {
-            lastAddedX = 200
-            lastAddedY = 250
+            // 3. 좌표 및 카운터 갱신
+            lastAddedX += 60
+            lastAddedY += 60
+            if (lastAddedX > 800 || lastAddedY > 1200) {
+                lastAddedX = 200
+                lastAddedY = 250
+            }
+            statusManager.showStatusOverlay("커스텀 위젯 $label 추가됨", 1000)
         }
-        statusManager.showStatusOverlay("커스텀 위젯 $label 추가됨", 1000)
     }
 
     private fun loadStoredCustomWidgets() {
-        val preset = currentPreset
-        val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
-        val listKey = "${preset}_active_custom_widgets"
-        val activeWidgets = prefs.getString(listKey, "") ?: ""
-        val color = Presets.getColor(preset)
+        serviceScope.launch {
+            val preset = currentPreset
+            val activeWidgets = mappingRepository.getActiveCustomWidgets(preset).first()
+            val color = Presets.getColor(preset)
 
-        if (activeWidgets.isNotEmpty()) {
-            activeWidgets.split(",").forEach { label ->
-                if (label.isNotBlank()) {
-                    showWidget(
-                        functionName = "${preset}_CUSTOM_$label",
-                        icon = label,
-                        tooltip = "사용자 $label",
-                        targetX = -1, // 기존 저장 좌표 사용
-                        targetY = -1,
-                        color = color
-                    )
-                }
+            activeWidgets.forEach { label ->
+                showWidget(
+                    functionName = "${preset}_CUSTOM_$label",
+                    icon = label,
+                    tooltip = "사용자 $label",
+                    targetX = -1,
+                    targetY = -1,
+                    color = color
+                )
             }
+            
+            val lastAdded = mappingRepository.getWidgetPosition(preset, "last_added").first()
+            lastAddedX = if (lastAdded.first != -1) lastAdded.first else 200
+            lastAddedY = if (lastAdded.second != -1) lastAdded.second else 250
         }
-        
-        lastAddedX = prefs.getInt("${preset}_last_added_x", 200)
-        lastAddedY = prefs.getInt("${preset}_last_added_y", 250)
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -127,8 +119,9 @@ class FloatingWidgetService : Service() {
         statusManager = StatusOverlayManager(this)
         _isRunning.value = true
         
-        val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
-        _isNightMode.value = prefs.getBoolean("is_night_mode", false)
+        mappingRepository.isNightMode()
+            .onEach { _isNightMode.value = it }
+            .launchIn(serviceScope)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -141,7 +134,6 @@ class FloatingWidgetService : Service() {
             _isInterceptionActive.value = active
             Log.d("KeyMapper", "FloatingWidgetService: setInterceptionActive=$active")
             
-            // [강력 조치] 접근성 서비스에 즉시 필터 갱신 요청 (브로드캐스트)
             val intent = Intent("ACTION_REFRESH_FILTER").apply {
                 setPackage(packageName)
             }
@@ -183,17 +175,17 @@ class FloatingWidgetService : Service() {
                 if (visible) showSettingsWidget() else hideWidget("SYSTEM_SETTINGS")
             }
             ACTION_UPDATE_KEY -> {
-                val functionName = intent.getStringExtra("function_name")
-                val keyName = intent.getStringExtra("key_name")
                 val label = intent.getStringExtra("label") ?: "버튼"
+                val keyName = intent.getStringExtra("key_name")
                 statusManager.showStatusOverlay("[$label] 매핑되었습니다.\n$keyName", 3000)
                 loadPresetInternal(currentPreset)
             }
             "ACTION_TOGGLE_THEME" -> {
                 val newMode = !_isNightMode.value
                 _isNightMode.value = newMode
-                val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
-                prefs.edit { putBoolean("is_night_mode", newMode) }
+                serviceScope.launch {
+                    mappingRepository.setNightMode(newMode)
+                }
                 
                 if (::toolbarManager.isInitialized) toolbarManager.updateTheme(newMode)
                 statusManager.updateTheme(newMode)
@@ -219,145 +211,139 @@ class FloatingWidgetService : Service() {
     private fun loadPresetInternal(presetName: String) {
         currentPreset = presetName
         
-        // 접근성 서비스와의 공유를 위해 SharedPreferences 업데이트
-        getSharedPreferences("mappings", Context.MODE_PRIVATE).edit(commit = true) {
-            putString("active_preset", presetName)
-        }
-        
-        val presetList = when(presetName) {
-            "BAEMIN" -> Presets.BAEMIN
-            "COUPANG" -> Presets.COUPANG
-            else -> Presets.BAEMIN
-        }
-        val color = Presets.getColor(presetName)
+        serviceScope.launch {
+            mappingRepository.setActivePreset(presetName)
+            
+            val presetList = when(presetName) {
+                "BAEMIN" -> Presets.BAEMIN
+                "COUPANG" -> Presets.COUPANG
+                else -> Presets.BAEMIN
+            }
+            val color = Presets.getColor(presetName)
 
-        overlayManager.getAllOverlayIds().forEach { id ->
-            if (id != "SYSTEM_SETTINGS") hideWidget(id)
-        }
-        setPresetsVisibility(false)
+            overlayManager.getAllOverlayIds().forEach { id ->
+                if (id != "SYSTEM_SETTINGS") hideWidget(id)
+            }
+            setPresetsVisibility(false)
 
-        val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
-        val sharedPrefs = getSharedPreferences("WidgetPositions", Context.MODE_PRIVATE)
-        val offsetX = ICON_SIZE / 2
-        val offsetY = ICON_SIZE / 2 + 40
-        val prefix = prefs.getString("selected_device_descriptor", "GLOBAL") ?: "GLOBAL"
-        presetList.forEach { info ->
-            val savedX = sharedPrefs.getInt("${presetName}_${info.function.name}_x", -1)
-            val savedY = sharedPrefs.getInt("${presetName}_${info.function.name}_y", -1)
+            val deviceDescriptor = mappingRepository.getSelectedDeviceDescriptor().first() ?: "GLOBAL"
+            val offsetX = ICON_SIZE / 2
+            val offsetY = ICON_SIZE / 2 + 40
             
-            val targetX = if (savedX != -1) savedX else info.x - offsetX
-            val targetY = if (savedY != -1) savedY else info.y - offsetY
-            
-            val keycode = prefs.getInt("${prefix}_${info.function.name}_keycode", -1)
-            val keyInfo = if (keycode != -1) {
-                val keyName = android.view.KeyEvent.keyCodeToString(keycode).replace("KEYCODE_", "")
-                "$keycode ($keyName)"
-            } else null
-            
-            showWidget(info.function.name, info.icon, info.tooltip, targetX, targetY, color, keyInfo)
+            presetList.forEach { info ->
+                val pos = mappingRepository.getWidgetPosition(presetName, info.function.name).first()
+                val targetX = if (pos.first != -1) pos.first else info.x - offsetX
+                val targetY = if (pos.second != -1) pos.second else info.y - offsetY
+                
+                // keyMappingRepository still uses DeliveryFunction/ClickType but we need a simple check
+                val keycode = mappingRepository.getMapping(deviceDescriptor, info.function, kr.disys.baedalin.model.ClickType.SINGLE).first()
+                val keyInfo = if (keycode != null) {
+                    val keyName = android.view.KeyEvent.keyCodeToString(keycode).replace("KEYCODE_", "")
+                    "$keycode ($keyName)"
+                } else null
+                
+                showWidget(info.function.name, info.icon, info.tooltip, targetX, targetY, color, keyInfo)
+            }
         }
     }
 
     private fun showWidget(functionName: String, icon: String, tooltip: String, targetX: Int, targetY: Int, color: Int, keyInfo: String? = null) {
-        val params = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or 
-            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or 
-            WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
-            (if (_isMoveMode.value) 0 else WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE),
-            PixelFormat.TRANSLUCENT
-        ).apply {
-            gravity = Gravity.TOP or Gravity.START
-            
-            val sharedPrefs = getSharedPreferences("WidgetPositions", Context.MODE_PRIVATE)
-            val savedX = sharedPrefs.getInt("${currentPreset}_${functionName}_x", -1)
-            val savedY = sharedPrefs.getInt("${currentPreset}_${functionName}_y", -1)
-
-            if (savedX != -1 && savedY != -1) {
-                x = savedX
-                y = savedY
-            } else if (targetX != -1 && targetY != -1) {
-                x = targetX
-                y = targetY
-                sharedPrefs.edit { putInt("${currentPreset}_${functionName}_x", x); putInt("${currentPreset}_${functionName}_y", y) }
-            } else {
-                x = 100
-                y = 100
+        serviceScope.launch {
+            val params = WindowManager.LayoutParams(
+                WindowManager.LayoutParams.WRAP_CONTENT,
+                WindowManager.LayoutParams.WRAP_CONTENT,
+                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or 
+                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or 
+                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
+                (if (_isMoveMode.value) 0 else WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE),
+                PixelFormat.TRANSLUCENT
+            ).apply {
+                gravity = Gravity.TOP or Gravity.START
+                
+                val pos = mappingRepository.getWidgetPosition(currentPreset, functionName).first()
+                if (pos.first != -1 && pos.second != -1) {
+                    x = pos.first
+                    y = pos.second
+                } else if (targetX != -1 && targetY != -1) {
+                    x = targetX
+                    y = targetY
+                    mappingRepository.saveWidgetPosition(currentPreset, functionName, x, y)
+                } else {
+                    x = 100
+                    y = 100
+                }
             }
-        }
 
-        val container = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER_HORIZONTAL
-            
-            addView(View(this@FloatingWidgetService).apply {
-                id = 10001
-                layoutParams = LinearLayout.LayoutParams(20, 20)
-                setBackgroundColor(Color.YELLOW)
-                visibility = if (_isMoveMode.value) View.VISIBLE else View.GONE
-            })
-
-            addView(TextView(this@FloatingWidgetService).apply { 
-                id = 10002
-                text = tooltip 
-                setTextColor(if (_isNightMode.value) Color.LTGRAY else Color.WHITE)
-                setBackgroundColor(if (_isNightMode.value) 0xEE111111.toInt() else 0xCC000000.toInt())
-                setPadding(8, 4, 8, 4)
-                textSize = 10f
-            })
-            addView(OverlayFactory.createCircleIcon(this@FloatingWidgetService, icon, color, ICON_SIZE))
-            
-            if (keyInfo != null) {
-                addView(TextView(this@FloatingWidgetService).apply {
-                    text = keyInfo
-                    setTextColor(Color.YELLOW)
-                    setBackgroundColor(0xAA000000.toInt())
-                    setPadding(4, 2, 4, 2)
-                    textSize = 9f
-                    gravity = Gravity.CENTER
+            val container = LinearLayout(this@FloatingWidgetService).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER_HORIZONTAL
+                
+                addView(View(this@FloatingWidgetService).apply {
+                    id = 10001
+                    layoutParams = LinearLayout.LayoutParams(20, 20)
+                    setBackgroundColor(Color.YELLOW)
+                    visibility = if (_isMoveMode.value) View.VISIBLE else View.GONE
                 })
+
+                addView(TextView(this@FloatingWidgetService).apply { 
+                    id = 10002
+                    text = tooltip 
+                    setTextColor(if (_isNightMode.value) Color.LTGRAY else Color.WHITE)
+                    setBackgroundColor(if (_isNightMode.value) 0xEE111111.toInt() else 0xCC000000.toInt())
+                    setPadding(8, 4, 8, 4)
+                    textSize = 10f
+                })
+                addView(OverlayFactory.createCircleIcon(this@FloatingWidgetService, icon, color, ICON_SIZE))
+                
+                if (keyInfo != null) {
+                    addView(TextView(this@FloatingWidgetService).apply {
+                        text = keyInfo
+                        setTextColor(Color.YELLOW)
+                        setBackgroundColor(0xAA000000.toInt())
+                        setPadding(4, 2, 4, 2)
+                        textSize = 9f
+                        gravity = Gravity.CENTER
+                    })
+                }
             }
+
+            container.setOnTouchListener(WidgetTouchHandler(
+                windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager,
+                onMove = { x, y ->
+                    params.x = x
+                    params.y = y
+                    overlayManager.updateOverlay(functionName, params)
+                },
+                onSave = { x, y -> 
+                    serviceScope.launch {
+                        mappingRepository.saveWidgetPosition(currentPreset, functionName, x, y)
+                        if (kr.disys.baedalin.KeyRecordingState.recordingFunction == null) {
+                            statusManager.showStatusOverlay("위치 저장 완료", 1000)
+                        }
+                    }
+                },
+                onClick = {
+                    val intent = Intent(ACTION_MANUAL_CLICK).apply {
+                        setPackage(packageName)
+                        putExtra("function_name", functionName)
+                    }
+                    sendBroadcast(intent)
+                },
+                onLongClick = { 
+                    statusManager.showStatusOverlay("${tooltip} 위젯 선택됨", 1000)
+                    triggerVibration(50)
+                },
+                onMappingMode = { 
+                    triggerVibration(150)
+                    startMappingCountdown(tooltip, functionName)
+                },
+                isMoveMode = { _isMoveMode.value },
+                isRecording = { kr.disys.baedalin.KeyRecordingState.recordingFunction != null }
+            ))
+
+            overlayManager.showOverlay(functionName, container, params)
         }
-
-        container.setOnTouchListener(WidgetTouchHandler(
-            windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager,
-            onMove = { x, y ->
-                params.x = x
-                params.y = y
-                overlayManager.updateOverlay(functionName, params)
-            },
-            onSave = { x, y -> 
-                val sharedPrefs = getSharedPreferences("WidgetPositions", Context.MODE_PRIVATE)
-                sharedPrefs.edit {
-                    putInt("${currentPreset}_${functionName}_x", x)
-                    putInt("${currentPreset}_${functionName}_y", y)
-                }
-                if (kr.disys.baedalin.KeyRecordingState.recordingFunction == null) {
-                    statusManager.showStatusOverlay("위치 저장 완료", 1000)
-                }
-            },
-            onClick = {
-                val intent = Intent(ACTION_MANUAL_CLICK).apply {
-                    setPackage(packageName)
-                    putExtra("function_name", functionName)
-                }
-                sendBroadcast(intent)
-            },
-            onLongClick = { 
-                statusManager.showStatusOverlay("${tooltip} 위젯 선택됨", 1000)
-                triggerVibration(50)
-            },
-            onMappingMode = { 
-                triggerVibration(150)
-                startMappingCountdown(tooltip, functionName)
-            },
-            isMoveMode = { _isMoveMode.value },
-            isRecording = { kr.disys.baedalin.KeyRecordingState.recordingFunction != null }
-        ))
-
-        overlayManager.showOverlay(functionName, container, params)
     }
 
     private fun showSettingsWidget() {
@@ -413,14 +399,13 @@ class FloatingWidgetService : Service() {
                     }
                     override fun onLaunchApp(name: String) { 
                         val pkg = Presets.getPackageName(name)
-                        launchApp(pkg)
+                        appSwitcher.launchApp(pkg)
                         loadPresetInternal(name) 
                     }
                     override fun onFold(folded: Boolean) { isToolbarFolded = folded }
                     override fun onSavePosition(x: Int, y: Int) {
-                        getSharedPreferences("mappings", Context.MODE_PRIVATE).edit {
-                            putInt("toolbar_x", x)
-                            putInt("toolbar_y", y)
+                        serviceScope.launch {
+                            mappingRepository.saveWidgetPosition("SYSTEM", "toolbar", x, y)
                         }
                     }
                 },
@@ -434,14 +419,16 @@ class FloatingWidgetService : Service() {
             )
         }
 
-        val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
-        val initialX = prefs.getInt("toolbar_x", 800)
-        val initialY = prefs.getInt("toolbar_y", 500) // 초기 위치를 스위치 아래쪽으로 조정
+        serviceScope.launch {
+            val pos = mappingRepository.getWidgetPosition("SYSTEM", "toolbar").first()
+            val initialX = if (pos.first != -1) pos.first else 800
+            val initialY = if (pos.second != -1) pos.second else 500
 
-        val opacity = prefs.getFloat("toolbar_opacity", 1.0f)
-        toolbarManager.showToolbar(initialX, initialY, opacity, isToolbarFolded)
-        toolbarManager.root?.let {
-            overlayManager.showOverlay(functionName, it, toolbarManager.currentParams!!)
+            val opacity = mappingRepository.getToolbarOpacity().first()
+            toolbarManager.showToolbar(initialX, initialY, opacity, isToolbarFolded)
+            toolbarManager.root?.let {
+                overlayManager.showOverlay(functionName, it, toolbarManager.currentParams!!)
+            }
         }
     }
 
@@ -522,21 +509,6 @@ class FloatingWidgetService : Service() {
         }
     }
 
-    private fun launchApp(packageName: String) {
-        val launchIntent = packageManager.getLaunchIntentForPackage(packageName)
-        if (launchIntent != null) {
-            launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            try {
-                startActivity(launchIntent)
-            } catch (e: Exception) {
-                Log.e("KeyMapper", "Failed to launch app: $packageName", e)
-                Toast.makeText(this, "앱을 실행할 수 없습니다.", Toast.LENGTH_SHORT).show()
-            }
-        } else {
-            Toast.makeText(this, "앱이 설치되어 있지 않습니다: $packageName", Toast.LENGTH_SHORT).show()
-        }
-    }
-
     private fun triggerVibration(durationMs: Long = 100) {
         try {
             val vibrator = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
@@ -603,11 +575,10 @@ class FloatingWidgetService : Service() {
         hideScreenBorder()
         overlayManager.hideAll()
         _isRunning.value = false
-        // 앱 재진입 시 자동 재시작 방지를 위해 서비스 상태 저장
-        getSharedPreferences("mappings", Context.MODE_PRIVATE).edit {
-            putBoolean("is_mapping_enabled", false)
+        serviceScope.launch {
+            mappingRepository.setMappingEnabled(false)
+            stopSelf()
         }
-        stopSelf()
     }
 
     override fun onDestroy() {

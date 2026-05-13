@@ -2,14 +2,19 @@ package kr.disys.baedalin.model
 
 import kr.disys.baedalin.R
 
+import kotlinx.serialization.Serializable
+
+@Serializable
 enum class ActionType {
     TAP, SWIPE
 }
 
+@Serializable
 enum class ClickType {
     SINGLE, DOUBLE, LONG
 }
 
+@Serializable
 enum class DeliveryFunction(val labelResId: Int) {
     CALL_CHECK(R.string.func_call_check),
     ACCEPT(R.string.func_accept),
@@ -20,6 +25,7 @@ enum class DeliveryFunction(val labelResId: Int) {
     SWITCH_APP(R.string.func_switch_app)
 }
 
+@Serializable
 data class Mapping(
     val function: DeliveryFunction,
     val keyCode: Int,
