@@ -9,6 +9,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -268,7 +269,7 @@ private fun NextStepButton(onClick: () -> Unit) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("다음 단계로 진행하기", fontSize = 24.sp, fontWeight = FontWeight.ExtraBold)
             Spacer(Modifier.width(12.dp))
-            Icon(Icons.Default.ArrowForward, contentDescription = null, modifier = Modifier.size(28.dp))
+            Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, modifier = Modifier.size(28.dp))
         }
     }
 }

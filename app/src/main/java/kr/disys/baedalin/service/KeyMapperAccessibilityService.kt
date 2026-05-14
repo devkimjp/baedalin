@@ -146,9 +146,6 @@ class KeyMapperAccessibilityService : AccessibilityService() {
         try {
             mediaSession?.release()
             mediaSession = android.media.session.MediaSession(this, "DalmalingMediaHijacker").apply {
-                setFlags(android.media.session.MediaSession.FLAG_HANDLES_MEDIA_BUTTONS or 
-                         android.media.session.MediaSession.FLAG_HANDLES_TRANSPORT_CONTROLS)
-                
                 // [CRITICAL] 시스템을 속이기 위해 '재생 중' 상태를 강제로 보고하고 모든 미디어 버튼 가로채기
                 reportPlayingState()
 

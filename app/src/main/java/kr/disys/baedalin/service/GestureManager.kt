@@ -151,8 +151,6 @@ class GestureManager @Inject constructor() {
         } catch (e: Exception) {
             Log.e("GestureManager", "Snapshot failed", e)
             null
-        } finally {
-            root.recycle()
         }
     }
 
@@ -178,7 +176,6 @@ class GestureManager @Inject constructor() {
             for (i in 0 until node.childCount) {
                 node.getChild(i)?.let { child ->
                     children.put(dumpNodeToJson(child))
-                    child.recycle()
                 }
             }
             json.put("children", children)

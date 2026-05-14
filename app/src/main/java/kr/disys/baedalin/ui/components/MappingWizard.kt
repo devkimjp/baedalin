@@ -11,6 +11,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.mutableLongStateOf
@@ -163,7 +164,7 @@ fun MappingWizard(
                 // 이전 버튼 (첫 단계가 아닐 때만 표시)
                 if (currentStepIdx > 0) {
                     IconButton(onClick = { currentStepIdx-- }) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "이전")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "이전")
                     }
                 } else {
                     // 간격 유지를 위한 더미 스페이스
@@ -457,11 +458,11 @@ fun KeyRecordingStep(
     LaunchedEffect(recordedKeyCode) {
         if (recordedKeyCode != null) return@LaunchedEffect // 키가 이미 입력된 경우 무시
         timeLeft = 5
-        while (timeLeft > 0 && recordedKeyCode == null) {
+        while (timeLeft > 0) {
             kotlinx.coroutines.delay(1000)
             timeLeft--
         }
-        if (timeLeft == 0 && recordedKeyCode == null) {
+        if (timeLeft == 0) {
             onTimeout()
         }
     }
@@ -473,7 +474,7 @@ fun KeyRecordingStep(
         // 타이머 원형 표시
         Box(contentAlignment = Alignment.Center) {
             CircularProgressIndicator(
-                progress = timeLeft / 5f,
+                progress = { timeLeft / 5f },
                 modifier = Modifier.size(100.dp),
                 strokeWidth = 8.dp,
                 color = if (timeLeft > 1) MaterialTheme.colorScheme.primary else kr.disys.baedalin.ui.theme.AccentOrange
@@ -759,7 +760,7 @@ fun BluetoothPermissionStep(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("다음 단계로 진행하기", fontSize = 22.sp, fontWeight = FontWeight.Black)
                     Spacer(Modifier.width(12.dp))
-                    Icon(Icons.Default.ArrowForward, contentDescription = null, modifier = Modifier.size(28.dp))
+                    Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, modifier = Modifier.size(28.dp))
                 }
             }
         }
