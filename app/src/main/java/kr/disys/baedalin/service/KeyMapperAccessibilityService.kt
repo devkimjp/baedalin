@@ -59,6 +59,12 @@ class KeyMapperAccessibilityService : AccessibilityService() {
     @Inject lateinit var gestureManager: GestureManager
     @Inject lateinit var appSwitcher: AppSwitcher
     @Inject lateinit var keyEventHandler: KeyEventHandler
+    @Inject lateinit var mappingRepository: MappingRepository
+    @Inject lateinit var overlayManager: OverlayManager
+
+    private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+    private var isMappingEnabledLocal = false
+    private var activePresetLocal = "BAEMIN"
 
     private val serviceReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -125,7 +131,7 @@ class KeyMapperAccessibilityService : AccessibilityService() {
         doubleClickTimeout = (measured * 1.1).toLong() // 10% 여유 추가
         prefs.registerOnSharedPreferenceChangeListener(prefsListener)
             
-        CoroutineScope(Dispatchers.Main).launch {
+        serviceScope.launch {
             launch {
                 FloatingWidgetService.isInterceptionActive.collect { active ->
                     // [CRITICAL] 배달 앱이 활성화된 상태에서만 세션 활성화
@@ -137,6 +143,19 @@ class KeyMapperAccessibilityService : AccessibilityService() {
             launch {
                 FloatingWidgetService.isMoveMode.collect {
                     updateKeyFilterState()
+                }
+            }
+            launch {
+                FloatingWidgetService.isMappingEnabled.collect { enabled ->
+                    isMappingEnabledLocal = enabled
+                    Log.d("KeyMapper", "[STATE] isMappingEnabled updated (from service): $enabled")
+                    updateKeyFilterState()
+                }
+            }
+            launch {
+                mappingRepository.getActivePreset().collect { preset ->
+                    activePresetLocal = preset
+                    Log.d("KeyMapper", "[STATE] activePreset updated: $preset")
                 }
             }
         }
@@ -195,7 +214,7 @@ class KeyMapperAccessibilityService : AccessibilityService() {
 
     private fun updateKeyFilterState() {
         val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
-        val isMappingEnabled = prefs.getBoolean("is_mapping_enabled", false)
+        val isMappingEnabled = isMappingEnabledLocal
         val isRecording = prefs.getBoolean("is_recording", false)
         val isInterceptionActive = FloatingWidgetService.isInterceptionActive.value
         
@@ -262,6 +281,7 @@ class KeyMapperAccessibilityService : AccessibilityService() {
         } catch (e: Exception) {}
         getSharedPreferences("mappings", Context.MODE_PRIVATE)
             .unregisterOnSharedPreferenceChangeListener(prefsListener)
+        serviceScope.cancel()
         instance = null
     }
 
@@ -270,7 +290,7 @@ class KeyMapperAccessibilityService : AccessibilityService() {
             val packageName = event.packageName?.toString() ?: return
             
             // [개선] 앱 전환 직후 2초 동안은 이전 앱의 이벤트를 무시하여 위젯 깜빡임 방지
-            if (isSwitchingApp && packageName == lastSwitchedPackage) {
+            if (appSwitcher.isSwitching() && packageName == appSwitcher.getLastSwitchedPackage()) {
                 Log.d("KeyMapper", "Ignoring window change for old app during transition: $packageName")
                 return
             }
@@ -279,13 +299,11 @@ class KeyMapperAccessibilityService : AccessibilityService() {
             
             currentPackageName = packageName 
             
-            val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
-            val isMappingEnabled = prefs.getBoolean("is_mapping_enabled", false)
             val isRunning = FloatingWidgetService.isRunning.value
             
-            Log.d("KeyMapper", "Window changed: $packageName (Full:$isFullScreen), enabled=$isMappingEnabled, running=$isRunning")
+            Log.d("KeyMapper", "Window changed: $packageName (Full:$isFullScreen), enabled=$isMappingEnabledLocal, running=$isRunning")
 
-            if (!isMappingEnabled) return
+            if (!isMappingEnabledLocal) return
 
             val preset = Presets.getPresetFromPackage(packageName)
             
@@ -411,7 +429,7 @@ class KeyMapperAccessibilityService : AccessibilityService() {
         
         // 2. 핵심 상태 확인
         val isRecording = KeyRecordingState.isRecording || prefs.getBoolean("is_recording", false)
-        val isMappingEnabled = prefs.getBoolean("is_mapping_enabled", false)
+        val isMappingEnabled = isMappingEnabledLocal
         val isInterceptionActive = FloatingWidgetService.isInterceptionActive.value
         val directRecordingFunction = KeyRecordingState.recordingFunction
         
@@ -423,7 +441,7 @@ class KeyMapperAccessibilityService : AccessibilityService() {
 
         // 3. 시스템 가로채기 판단
         val shouldIntercept = isRecording || directRecordingFunction != null || 
-                             ((isMappingEnabled || isInterceptionActive) && isInterceptionActive && isMapped)
+                             ((isMappingEnabledLocal || isInterceptionActive) && isInterceptionActive && isMapped)
         
         if (shouldIntercept && keyAction == KeyEvent.ACTION_DOWN) {
             if (!isRecording && event.repeatCount > 0) {
@@ -530,7 +548,7 @@ class KeyMapperAccessibilityService : AccessibilityService() {
 
     private fun handleAction(keyCode: Int, clickType: ClickType, prefix: String): Boolean {
         val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
-        val isMappingEnabled = prefs.getBoolean("is_mapping_enabled", false)
+        val isMappingEnabled = isMappingEnabledLocal
         val isRecording = prefs.getBoolean("is_recording", false)
         val isInterceptionActive = FloatingWidgetService.isInterceptionActive.value
 
@@ -539,7 +557,7 @@ class KeyMapperAccessibilityService : AccessibilityService() {
             return false
         }
         
-        val activePreset = prefs.getString("active_preset", "DEFAULT") ?: "DEFAULT"
+        val activePreset = activePresetLocal
         Log.d("KeyMapper", "[TOUCH] handleAction: keyCode=$keyCode, clickType=$clickType, prefix=$prefix, activePreset=$activePreset")
         
         var function = DeliveryFunction.entries.find { func ->
@@ -569,10 +587,23 @@ class KeyMapperAccessibilityService : AccessibilityService() {
                     return true
                 }
                 DeliveryFunction.SWITCH_APP -> {
-                    appSwitcher.switchBetweenDeliveryApps(activePreset)
+                    appSwitcher.switchBetweenDeliveryApps(activePresetLocal)
                     return true
                 }
                 else -> {
+                    // [개선] 위젯이 화면에 표시 중이라면 OverlayManager에서 실시간 좌표를 가져옴 (이동된 좌표 즉시 반영)
+                    val overlayView = overlayManager.getOverlayView(function.name)
+                    if (overlayView != null) {
+                        val params = overlayView.layoutParams as WindowManager.LayoutParams
+                        // 위젯 container 내부 구조(핸들20 + 툴팁 + 아이콘50)를 고려한 보정값 적용
+                        val tapX = params.x + 50f
+                        val tapY = params.y + 100f
+                        Log.d("KeyMapper", "[TOUCH] PERFORMING TAP (REALTIME OVERLAY POS): ${function.name} at ($tapX, $tapY)")
+                        gestureManager.performTap(tapX, tapY)
+                        return true
+                    }
+
+                    // 위젯이 없는 경우(잠금 모드 등) 저장된 좌표 또는 기본 좌표 사용
                     val widgetPrefs = getSharedPreferences("WidgetPositions", Context.MODE_PRIVATE)
                     var x = widgetPrefs.getInt("${activePreset}_${function.name}_x", -1).toFloat()
                     var y = widgetPrefs.getInt("${activePreset}_${function.name}_y", -1).toFloat()
@@ -594,7 +625,7 @@ class KeyMapperAccessibilityService : AccessibilityService() {
                     if (x != -1f && y != -1f) {
                         val tapX = x + 50f
                         val tapY = y + 100f
-                        Log.d("KeyMapper", "[TOUCH] PERFORMING TAP: ${function.name} at ($tapX, $tapY)")
+                        Log.d("KeyMapper", "[TOUCH] PERFORMING TAP (STORED POS): ${function.name} at ($tapX, $tapY)")
                         gestureManager.performTap(tapX, tapY)
                         return true
                     }
