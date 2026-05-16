@@ -80,12 +80,15 @@ class MainActivity : ComponentActivity() {
                             viewModel.isBluetoothEnabled = checkBluetoothPermission()
                             viewModel.isBatteryOptimized = checkBatteryOptimization()
                             
-                            // [사용자 요청] 앱 진입 시 무조건 서비스 활성화 보장
-                            if (!viewModel.isMappingEnabled && !uiState.isMappingWizardActive) {
-                                viewModel.toggleService() // 내부적으로 SharedPreferences 저장 및 상태 업데이트 수행
-                            }
+                            // 권한 허용 여부 재계산
+                            val isBatteryExempt = !checkBatteryOptimization()
+                            val allPermissionsGranted = viewModel.isAccessibilityEnabled && 
+                                                      viewModel.isOverlayEnabled && 
+                                                      viewModel.isBluetoothEnabled && 
+                                                      isBatteryExempt
                             
-                            if (viewModel.isMappingEnabled && !uiState.isMappingWizardActive) {
+                            // 모든 권한이 허용되고 서비스가 활성화된 경우에만 툴바 서비스 시작
+                            if (allPermissionsGranted && viewModel.isMappingEnabled && !uiState.isMappingWizardActive) {
                                 startService(Intent(this@MainActivity, FloatingWidgetService::class.java).apply {
                                     action = FloatingWidgetService.ACTION_START_SERVICE_ONLY
                                 })
@@ -236,10 +239,13 @@ class MainActivity : ComponentActivity() {
         val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
         prefs.edit { putString("active_preset", presetName) }
 
-        startService(Intent(this, FloatingWidgetService::class.java).apply {
-            action = FloatingWidgetService.ACTION_LOAD_PRESET
-            putExtra("preset_name", presetName)
-        })
+        // [사용자 요청 수정] 서비스가 활성화된 상태일 때만 툴바 서비스를 호출하여 툴바를 띄움
+        if (viewModel.isMappingEnabled) {
+            startService(Intent(this, FloatingWidgetService::class.java).apply {
+                action = FloatingWidgetService.ACTION_LOAD_PRESET
+                putExtra("preset_name", presetName)
+            })
+        }
         
         // 해당 배달 앱 실행
         val packageName = kr.disys.baedalin.model.Presets.getPackageName(presetName)

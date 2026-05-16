@@ -174,11 +174,8 @@ class MainViewModel @Inject constructor(
     }
 
     private fun loadInitialDevice() {
-        // [사용자 요청] 앱 실행 시 무조건 서비스 시작 (자동 활성화)
-        viewModelScope.launch {
-            mappingRepository.setMappingEnabled(true)
-            Log.d("MainViewModel", "Service automatically enabled on app launch via DataStore")
-        }
+        // [사용자 요청 수정] 앱 실행 시 무조건 서비스 시작 로직 제거. 
+        // 권한 설정이 완료된 후 사용자가 명시적으로 켰을 때만 시작되도록 함.
     }
 
     private fun refreshDeviceList() {

@@ -22,6 +22,7 @@ import kr.disys.baedalin.model.DeliveryFunction
 import kr.disys.baedalin.model.Presets
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import android.widget.Toast
 import android.content.SharedPreferences
 import androidx.core.content.edit
@@ -68,6 +69,7 @@ class KeyMapperAccessibilityService : AccessibilityService() {
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private var isMappingEnabledLocal = false
     private var activePresetLocal = "BAEMIN"
+    private var targetDescriptorLocal = "GLOBAL"
     private var currentMappingsCache: Map<String, Int> = emptyMap() // Key: "${ClickType}_${FunctionName}"
 
     private val serviceReceiver = object : BroadcastReceiver() {
@@ -132,10 +134,12 @@ class KeyMapperAccessibilityService : AccessibilityService() {
             
         serviceScope.launch {
             // 1. 매핑 데이터 캐싱 (DataStore -> Local Cache)
+            @OptIn(ExperimentalCoroutinesApi::class)
             launch {
                 mappingRepository.getSelectedDeviceDescriptor().flatMapLatest { descriptor ->
-                    val prefix = descriptor ?: "GLOBAL"
-                    mappingRepository.getAllMappings(prefix)
+                    targetDescriptorLocal = descriptor ?: "GLOBAL"
+                    Log.d("KeyMapper", "[STATE] targetDescriptorLocal updated: $targetDescriptorLocal")
+                    mappingRepository.getAllMappings(targetDescriptorLocal)
                 }.collect { mappings ->
                     val newCache = mutableMapOf<String, Int>()
                     mappings.forEach { (func, pairs) ->
@@ -441,8 +445,7 @@ class KeyMapperAccessibilityService : AccessibilityService() {
         // 미디어 세션 우선권 유지를 위해 주기적으로 재생 상태 보고
         if (keyAction == KeyEvent.ACTION_DOWN) reportPlayingState()
 
-        val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
-        val targetDescriptor = prefs.getString("selected_device_descriptor", null) ?: "GLOBAL"
+        val targetDescriptor = targetDescriptorLocal
         
         // 1. 장치 필터링
         val device = InputDevice.getDevice(event.deviceId)
@@ -452,16 +455,16 @@ class KeyMapperAccessibilityService : AccessibilityService() {
         }
         
         // 2. 핵심 상태 확인
-        val isRecording = KeyRecordingState.isRecording || prefs.getBoolean("is_recording", false)
+        val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
+        val isRecording = prefs.getBoolean("is_recording", false)
         val isMappingEnabled = isMappingEnabledLocal
         val isInterceptionActive = FloatingWidgetService.isInterceptionActive.value
         val directRecordingFunction = KeyRecordingState.recordingFunction
         
-        // [강력 조치] 기기 전용 매핑과 GLOBAL 매핑을 모두 확인하여 인식률 극대화 (Dual Lookup)
-        val prefix = targetDescriptor
-        val isMapped = isKeyMapped(keyCode, prefix) || isKeyMapped(keyCode, "GLOBAL")
+        // [강력 조치] 현재 선택된 장치(또는 GLOBAL) 매핑 정보 확인
+        val isMapped = isKeyMapped(keyCode, targetDescriptor)
         
-        Log.d("KeyMapper", "Status: isRecording=$isRecording, isMappingEnabled=$isMappingEnabled, isInterceptionActive=$isInterceptionActive, isMapped=$isMapped (Prefix: $prefix)")
+        Log.d("KeyMapper", "Status: isRecording=$isRecording, isMappingEnabled=$isMappingEnabled, isInterceptionActive=$isInterceptionActive, isMapped=$isMapped (Prefix: $targetDescriptor)")
 
         // 3. 시스템 가로채기 판단
         val shouldIntercept = isRecording || directRecordingFunction != null || 
@@ -509,12 +512,12 @@ class KeyMapperAccessibilityService : AccessibilityService() {
             }
 
             // UP 이벤트에서도 기기 전용 매핑과 GLOBAL 매핑을 모두 고려
-            val isDoubleMapped = isKeyMappedToDouble(keyCode, prefix) || isKeyMappedToDouble(keyCode, "GLOBAL")
+            val isDoubleMapped = isKeyMappedToDouble(keyCode, targetDescriptor) || isKeyMappedToDouble(keyCode, "GLOBAL")
             Log.d("KeyMapper", "[INTERCEPT] UP: $keyCode, doubleMapped=$isDoubleMapped")
             
             if (!isDoubleMapped) {
                 // 더블 클릭 매핑이 없는 경우 즉시 실행 (이때도 우선순위 기기 -> GLOBAL 순으로 확인)
-                val usedPrefix = if (isKeyMapped(keyCode, prefix)) prefix else "GLOBAL"
+                val usedPrefix = if (isKeyMapped(keyCode, targetDescriptor)) targetDescriptor else "GLOBAL"
                 handleAction(keyCode, ClickType.SINGLE, usedPrefix)
                 clickCount = 0
                 lastKeyCode = -1
@@ -527,7 +530,7 @@ class KeyMapperAccessibilityService : AccessibilityService() {
             
             pendingClickRunnable = Runnable {
                 val type = if (clickCount >= 2) ClickType.DOUBLE else ClickType.SINGLE
-                val usedPrefix = if (isKeyMapped(keyCode, prefix)) prefix else "GLOBAL"
+                val usedPrefix = if (isKeyMapped(keyCode, targetDescriptor)) targetDescriptor else "GLOBAL"
                 Log.d("KeyMapper", "[TOUCH] Dispatching $type (Total=$clickCount, Timeout=${doubleClickTimeout}ms) via $usedPrefix")
                 handleAction(keyCode, type, usedPrefix)
                 clickCount = 0
