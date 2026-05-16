@@ -229,7 +229,8 @@ fun MainScreen(
             getUnmappedFunctions = { viewModel.getUnmappedFunctions() },
             devicePrefix = uiState.selectedDeviceDescriptor ?: "GLOBAL",
             recordedKeyCode = uiState.pendingKeyCode,
-            keyEventTrigger = uiState.keyEventTrigger
+            keyEventTrigger = uiState.keyEventTrigger,
+            mappings = uiState.mappings
         )
     }
 

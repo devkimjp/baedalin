@@ -42,7 +42,14 @@ data class MainUiState(
     val wizardSelectedClickType: ClickType? = null,
     
     // Setting States
-    val toolbarOpacity: Float = 1.0f
+    val toolbarOpacity: Float = 1.0f,
+    val unmappedFunctions: List<DeliveryFunction> = DeliveryFunction.entries.toList(),
+    val mappings: Map<DeliveryFunction, FunctionMappingState> = emptyMap()
+)
+
+data class FunctionMappingState(
+    val singleKeyCode: Int? = null,
+    val doubleKeyCode: Int? = null
 )
 
 data class InputDeviceInfo(

@@ -164,4 +164,26 @@ class MappingRepositoryImpl @Inject constructor(
             preferences[key] = newList
         }
     }
+
+    override fun getUnmappedFunctions(deviceDescriptor: String): Flow<List<DeliveryFunction>> {
+        return dataStore.data.map { preferences ->
+            DeliveryFunction.entries.filter { function ->
+                val singleKey = intPreferencesKey("${deviceDescriptor}_${function.name}_SINGLE_keycode")
+                val doubleKey = intPreferencesKey("${deviceDescriptor}_${function.name}_DOUBLE_keycode")
+                preferences[singleKey] == null && preferences[doubleKey] == null
+            }
+        }
+    }
+
+    override fun getAllMappings(deviceDescriptor: String): Flow<Map<DeliveryFunction, Pair<Int?, Int?>>> {
+        return dataStore.data.map { preferences ->
+            DeliveryFunction.entries.associateWith { function ->
+                val singleKey = intPreferencesKey("${deviceDescriptor}_${function.name}_SINGLE_keycode")
+                val doubleKey = intPreferencesKey("${deviceDescriptor}_${function.name}_DOUBLE_keycode")
+                val single = preferences[singleKey]
+                val double = preferences[doubleKey]
+                Pair(single, double)
+            }
+        }
+    }
 }

@@ -1,0 +1,54 @@
+{
+  "version": "2.0",
+  "lastUpdated": "2026-05-13T16:30:00.000Z",
+  "activeFeatures": [],
+  "primaryFeature": null,
+  "features": {
+    "rebuilding": {
+      "status": "Archived",
+      "completionRate": 95,
+      "lastPhase": "Report",
+      "iterations": 3,
+      "gapAnalysis": "docs/03-analysis/rebuilding-gap-analysis.md",
+      "completionReport": "docs/04-report/rebuilding-completion-report.md"
+    }
+  },
+  "pipeline": {
+    "currentPhase": 9,
+    "level": "Enterprise",
+    "phaseHistory": [
+      {
+        "phase": 1,
+        "name": "Plan",
+        "completedAt": "2026-05-07T13:00:00.000Z"
+      },
+      {
+        "phase": 2,
+        "name": "Design",
+        "completedAt": "2026-05-07T14:00:00.000Z"
+      },
+      {
+        "phase": 4,
+        "name": "Analyze",
+        "completedAt": "2026-05-13T14:00:00.000Z"
+      },
+      {
+        "phase": 5,
+        "name": "Iterate",
+        "completedAt": "2026-05-13T15:45:00.000Z"
+      },
+      {
+        "phase": 6,
+        "name": "Report",
+        "completedAt": "2026-05-13T16:30:00.000Z"
+      }
+    ]
+  },
+  "session": {
+    "startedAt": "2026-05-13T13:48:15.254Z",
+    "onboardingCompleted": true,
+    "lastActivity": "2026-05-13T16:30:00.000Z"
+  },
+  "_snapshotTimestamp": "2026-05-13T15:30:10.763Z",
+  "_reason": "pre-compress"
+}

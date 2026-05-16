@@ -125,6 +125,7 @@ class MainViewModel @Inject constructor(
         }
     }
 
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     private fun observeMappingSettings() {
         mappingRepository.isMappingEnabled()
             .onEach { enabled -> _uiState.update { it.copy(isMappingEnabled = enabled) } }
@@ -147,6 +148,27 @@ class MainViewModel @Inject constructor(
                     selectedDeviceDescriptor = descriptor,
                     selectedDeviceName = deviceName
                 ) }
+            }
+            .launchIn(viewModelScope)
+
+        mappingRepository.getSelectedDeviceDescriptor()
+            .flatMapLatest { descriptor ->
+                mappingRepository.getUnmappedFunctions(descriptor ?: "GLOBAL")
+            }
+            .onEach { unmapped ->
+                _uiState.update { it.copy(unmappedFunctions = unmapped) }
+            }
+            .launchIn(viewModelScope)
+
+        mappingRepository.getSelectedDeviceDescriptor()
+            .flatMapLatest { descriptor ->
+                mappingRepository.getAllMappings(descriptor ?: "GLOBAL")
+            }
+            .onEach { allMappings ->
+                val mappingStateMap = allMappings.mapValues { (_, pair) ->
+                    FunctionMappingState(singleKeyCode = pair.first, doubleKeyCode = pair.second)
+                }
+                _uiState.update { it.copy(mappings = mappingStateMap) }
             }
             .launchIn(viewModelScope)
     }
@@ -296,12 +318,13 @@ class MainViewModel @Inject constructor(
             // or should be fully migrated to Repository logic. 
             // For now, using Repository for simple save/remove.
             
-            // 1. 중복 키 제거
+            // 1. 중복 키 제거 (새로 저장하려는 키코드가 이미 다른 기능에 할당되어 있다면 제거)
             DeliveryFunction.entries.forEach { f ->
                 ClickType.entries.forEach { t ->
-                    // This is inefficient via individual DataStore edits. 
-                    // In a future step, Repository will handle this atomically.
-                    mappingRepository.removeMapping(prefix, f, t)
+                    val existing = mappingRepository.getMapping(prefix, f, t).first()
+                    if (existing == keyCode) {
+                        mappingRepository.removeMapping(prefix, f, t)
+                    }
                 }
             }
 
@@ -354,8 +377,7 @@ class MainViewModel @Inject constructor(
     }
 
     fun getUnmappedFunctions(): List<DeliveryFunction> {
-        // This still needs SharedPreferences or a better Repository method for batch access
-        return DeliveryFunction.entries // Placeholder
+        return _uiState.value.unmappedFunctions
     }
 
     fun stopRecording() {

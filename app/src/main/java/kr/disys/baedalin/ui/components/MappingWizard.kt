@@ -1,6 +1,7 @@
 package kr.disys.baedalin.ui.components
 
 import androidx.compose.animation.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -48,11 +49,12 @@ fun MappingWizard(
     onComplete: (DeliveryFunction, ClickType, Int) -> Unit,
     onDismiss: () -> Unit,
     onResetRecording: () -> Unit,
-    onSaveTimeout: (Long) -> Unit, // 추가
+    onSaveTimeout: (Long) -> Unit,
     getUnmappedFunctions: () -> List<DeliveryFunction>,
     devicePrefix: String,
-    recordedKeyCode: Int? = null,
-    keyEventTrigger: Int = 0 // 추가
+    recordedKeyCode: Int?,
+    keyEventTrigger: Int,
+    mappings: Map<DeliveryFunction, kr.disys.baedalin.ui.main.FunctionMappingState> = emptyMap()
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -107,22 +109,29 @@ fun MappingWizard(
     }
 
     var showContinueDialog by remember { mutableStateOf(false) }
+    var autoContinue by remember { mutableStateOf(false) }
     
     // 매핑 완료 후 다음 기능을 찾는 로직 (자동화)
     val moveToNextFunction = {
-        val listStepIdx = activeSteps.indexOf(1)
-        if (listStepIdx != -1) {
-            currentStepIdx = listStepIdx
+        val remaining = getUnmappedFunctions()
+        if (remaining.isEmpty()) {
+            onDismiss() // 모든 매핑이 완료되면 종료
         } else {
-            onDismiss()
+            val listStepIdx = activeSteps.indexOf(1)
+            if (listStepIdx != -1) {
+                currentStepIdx = listStepIdx
+            } else {
+                onDismiss()
+            }
         }
     }
 
     // 다음 버튼 매핑 연속 진행
-    val startNextMapping = {
-        val remaining = getUnmappedFunctions()
+    val startNextMapping = { excludeFunc: DeliveryFunction? ->
+        val remaining = getUnmappedFunctions().filter { it != excludeFunc }
         if (remaining.isNotEmpty()) {
             selectedFunction = remaining.first()
+            onResetRecording() // 키 기록 초기화
             val keyStepIdx = activeSteps.indexOf(2)
             if (keyStepIdx != -1) currentStepIdx = keyStepIdx
         } else {
@@ -247,8 +256,8 @@ fun MappingWizard(
                         onNext = { if (currentStepIdx < totalSteps - 1) currentStepIdx++ }
                     )
                     1 -> FunctionSelectionStep(
-                        prefs = context.getSharedPreferences("mappings", Context.MODE_PRIVATE),
-                        devicePrefix = devicePrefix,
+                        unmappedFunctions = getUnmappedFunctions(),
+                        mappings = mappings,
                         onFunctionSelected = {
                             selectedFunction = it
                             if (currentStepIdx < totalSteps - 1) currentStepIdx++
@@ -265,11 +274,16 @@ fun MappingWizard(
                                 if (listStepIdx != -1) currentStepIdx = listStepIdx
                             }
                         )
-                        // [버그 수정] keyEventTrigger를 키로 사용하여 실제 새 키 입력 시에만 다음 단계로 이동
-                        // recordedKeyCode를 키로 쓰면 이전 매핑 값이 남아있을 때 즉시 넘어가는 문제 발생
+                        // [버그 수정] 현재 단계에 진입했을 때의 트리거 값을 저장하여, 
+                        // 이전에 발생했던 키 이벤트로 인해 즉시 다음 단계로 넘어가는 현상 방지
+                        var initialTrigger by remember { mutableIntStateOf(keyEventTrigger) }
+                        LaunchedEffect(selectedFunction) {
+                            initialTrigger = keyEventTrigger
+                        }
+
                         LaunchedEffect(keyEventTrigger) {
-                            // 트리거가 0이면 초기 상태이므로 무시
-                            if (keyEventTrigger > 0 && recordedKeyCode != null) {
+                            // 현재 단계 진입 이후에 새롭게 키가 입력된 경우에만 다음으로
+                            if (keyEventTrigger > initialTrigger && recordedKeyCode != null) {
                                 if (currentStepIdx < totalSteps - 1) currentStepIdx++
                             }
                         }
@@ -287,7 +301,11 @@ fun MappingWizard(
                                 
                                 val remaining = getUnmappedFunctions()
                                 if (remaining.isNotEmpty()) {
-                                    showContinueDialog = true
+                                    if (autoContinue) {
+                                        startNextMapping(func)
+                                    } else {
+                                        showContinueDialog = true
+                                    }
                                 } else {
                                     moveToNextFunction()
                                 }
@@ -306,7 +324,11 @@ fun MappingWizard(
                             
                             val remaining = getUnmappedFunctions()
                             if (remaining.isNotEmpty()) {
-                                showContinueDialog = true
+                                if (autoContinue) {
+                                    startNextMapping(func)
+                                } else {
+                                    showContinueDialog = true
+                                }
                             } else {
                                 moveToNextFunction()
                             }
@@ -343,22 +365,47 @@ fun MappingWizard(
                         }
                     },
                     confirmButton = {
-                        Button(
-                            onClick = {
-                                showContinueDialog = false
-                                startNextMapping()
-                            },
-                            shape = RoundedCornerShape(12.dp)
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Text("계속하기", fontWeight = FontWeight.Bold)
-                        }
-                    },
-                    dismissButton = {
-                        TextButton(onClick = {
-                            showContinueDialog = false
-                            moveToNextFunction()
-                        }) {
-                            Text(stringResource(R.string.wizard_btn_finish))
+                            Button(
+                                onClick = {
+                                    showContinueDialog = false
+                                    startNextMapping(selectedFunction)
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Text("다음 기능 매핑하기", fontWeight = FontWeight.Bold)
+                            }
+                            
+                            OutlinedButton(
+                                onClick = {
+                                    autoContinue = true
+                                    showContinueDialog = false
+                                    startNextMapping(selectedFunction)
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp),
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary)
+                            ) {
+                                Icon(Icons.Default.AutoFixHigh, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text("묻지 않고 계속 매핑하기", fontWeight = FontWeight.Bold)
+                            }
+
+                            Spacer(modifier = Modifier.height(4.dp))
+
+                            TextButton(
+                                onClick = {
+                                    showContinueDialog = false
+                                    moveToNextFunction()
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(stringResource(R.string.wizard_btn_finish), fontWeight = FontWeight.Medium)
+                            }
                         }
                     }
                 )
@@ -369,8 +416,8 @@ fun MappingWizard(
 
 @Composable
 fun FunctionSelectionStep(
-    prefs: android.content.SharedPreferences,
-    devicePrefix: String,
+    unmappedFunctions: List<DeliveryFunction>,
+    mappings: Map<DeliveryFunction, kr.disys.baedalin.ui.main.FunctionMappingState>,
     onFunctionSelected: (DeliveryFunction) -> Unit
 ) {
     Column {
@@ -381,9 +428,10 @@ fun FunctionSelectionStep(
             modifier = Modifier.height(400.dp)
         ) {
             items(DeliveryFunction.entries) { function ->
-                val singleKey = prefs.getInt("${devicePrefix}_${function.name}_SINGLE_keycode", -1)
-                val doubleKey = prefs.getInt("${devicePrefix}_${function.name}_DOUBLE_keycode", -1)
-                val isAnyMapped = singleKey != -1 || doubleKey != -1
+                val mappingState = mappings[function]
+                val isSingleMapped = mappingState?.singleKeyCode != null
+                val isDoubleMapped = mappingState?.doubleKeyCode != null
+                val isAnyMapped = isSingleMapped || isDoubleMapped
 
                 Card(
                     onClick = { onFunctionSelected(function) },
@@ -412,23 +460,25 @@ fun FunctionSelectionStep(
                                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                if (singleKey != -1) {
+                                // 단일 클릭 점 1개
+                                if (isSingleMapped) {
                                     Box(Modifier.size(6.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary))
                                 }
-                                if (doubleKey != -1) {
+                                // 더블 클릭 점 2개
+                                if (isDoubleMapped) {
                                     Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                                        Box(Modifier.size(6.dp).clip(CircleShape).background(kr.disys.baedalin.ui.theme.AccentOrange))
-                                        Box(Modifier.size(6.dp).clip(CircleShape).background(kr.disys.baedalin.ui.theme.AccentOrange))
+                                        Box(Modifier.size(6.dp).clip(CircleShape).background(MaterialTheme.colorScheme.secondary))
+                                        Box(Modifier.size(6.dp).clip(CircleShape).background(MaterialTheme.colorScheme.secondary))
                                     }
                                 }
                             }
                             
-                            val keyLabel = when {
-                                singleKey != -1 -> android.view.KeyEvent.keyCodeToString(singleKey).replace("KEYCODE_", "")
-                                doubleKey != -1 -> android.view.KeyEvent.keyCodeToString(doubleKey).replace("KEYCODE_", "")
-                                else -> ""
-                            }
-                            if (keyLabel.isNotEmpty()) {
+                            val keyCode = mappingState?.singleKeyCode ?: mappingState?.doubleKeyCode
+                            if (keyCode != null) {
+                                val keyLabel = android.view.KeyEvent.keyCodeToString(keyCode)
+                                    .replace("KEYCODE_", "")
+                                    .replace("DPAD_", "")
+                                
                                 Text(
                                     keyLabel, 
                                     fontSize = 10.sp, 

@@ -26,4 +26,6 @@ interface MappingRepository {
     suspend fun setCustomWidgetCounter(preset: String, counter: Int)
     fun getActiveCustomWidgets(preset: String): Flow<List<String>>
     suspend fun addCustomWidget(preset: String, label: String)
+    fun getUnmappedFunctions(deviceDescriptor: String): Flow<List<DeliveryFunction>>
+    fun getAllMappings(deviceDescriptor: String): Flow<Map<DeliveryFunction, Pair<Int?, Int?>>>
 }
