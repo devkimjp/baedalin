@@ -21,7 +21,7 @@ import kr.disys.baedalin.model.ClickType
 import kr.disys.baedalin.model.DeliveryFunction
 import kr.disys.baedalin.model.Presets
 import kotlinx.coroutines.*
-import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.*
 import android.widget.Toast
 import android.content.SharedPreferences
 import androidx.core.content.edit
@@ -68,6 +68,7 @@ class KeyMapperAccessibilityService : AccessibilityService() {
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private var isMappingEnabledLocal = false
     private var activePresetLocal = "BAEMIN"
+    private var currentMappingsCache: Map<String, Int> = emptyMap() // Key: "${ClickType}_${FunctionName}"
 
     private val serviceReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -128,13 +129,33 @@ class KeyMapperAccessibilityService : AccessibilityService() {
 
         updateKeyFilterState()
         setupMediaSession()
-        
-        val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
-        val measured = prefs.getLong("double_click_timeout", 500L)
-        doubleClickTimeout = (measured * 1.1).toLong() // 10% 여유 추가
-        prefs.registerOnSharedPreferenceChangeListener(prefsListener)
             
         serviceScope.launch {
+            // 1. 매핑 데이터 캐싱 (DataStore -> Local Cache)
+            launch {
+                mappingRepository.getSelectedDeviceDescriptor().flatMapLatest { descriptor ->
+                    val prefix = descriptor ?: "GLOBAL"
+                    mappingRepository.getAllMappings(prefix)
+                }.collect { mappings ->
+                    val newCache = mutableMapOf<String, Int>()
+                    mappings.forEach { (func, pairs) ->
+                        pairs.first?.let { newCache["${ClickType.SINGLE.name}_${func.name}"] = it }
+                        pairs.second?.let { newCache["${ClickType.DOUBLE.name}_${func.name}"] = it }
+                    }
+                    currentMappingsCache = newCache
+                    Log.d("KeyMapper", "[CACHE] Mappings updated: ${newCache.size} entries")
+                    updateKeyFilterState()
+                }
+            }
+
+            // 2. 더블 클릭 타이머 동기화
+            launch {
+                mappingRepository.getDoubleClickTimeout().collect { measured ->
+                    doubleClickTimeout = (measured * 1.1).toLong()
+                    Log.d("KeyMapper", "[STATE] doubleClickTimeout updated: $doubleClickTimeout ms")
+                }
+            }
+
             launch {
                 FloatingWidgetService.isInterceptionActive.collect { active ->
                     // [CRITICAL] 배달 앱이 활성화된 상태에서만 세션 활성화
@@ -521,58 +542,44 @@ class KeyMapperAccessibilityService : AccessibilityService() {
         return super.onKeyEvent(event)
     }
 
-    private fun isKeyMappedToDouble(keyCode: Int, prefix: String): Boolean {
-        val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
-        return DeliveryFunction.entries.any { func ->
-            val mappedKey = prefs.getInt("${prefix}_${func.name}_DOUBLE_keycode", -1)
-            mappedKey == keyCode
+    private fun saveDirectMapping(functionName: String, keyCode: Int) {
+        serviceScope.launch {
+            val prefix = mappingRepository.getSelectedDeviceDescriptor().first() ?: "GLOBAL"
+            val function = DeliveryFunction.entries.find { it.name == functionName } ?: return@launch
+            
+            Log.d("KeyMapper", "[DIRECT] Saving mapping: $functionName -> $keyCode (Prefix: $prefix)")
+            mappingRepository.saveMapping(prefix, function, ClickType.SINGLE, keyCode)
+            playSuccessSound()
+            updateKeyFilterState()
         }
     }
 
-    private fun saveDirectMapping(functionName: String, keyCode: Int) {
-        val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
-        val targetDescriptor = prefs.getString("selected_device_descriptor", "GLOBAL") ?: "GLOBAL"
-        
-        prefs.edit(commit = true) {
-            putInt("${targetDescriptor}_${functionName}_keycode", keyCode)
-            putString("${targetDescriptor}_${functionName}_clicktype", ClickType.SINGLE.name)
+    private fun isKeyMappedToDouble(keyCode: Int, prefix: String): Boolean {
+        // prefix는 이미 캐시 동기화 시 반영되어 있으므로 무시하고 캐시 확인
+        return currentMappingsCache.any { (key, value) -> 
+            key.startsWith(ClickType.DOUBLE.name) && value == keyCode 
         }
-        Log.d("KeyMapper", "Direct mapping saved: $functionName -> $keyCode")
     }
 
     private fun isKeyMapped(keyCode: Int, prefix: String): Boolean {
-        val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
-        return DeliveryFunction.entries.any { function ->
-            val singleKey = prefs.getInt("${prefix}_${function.name}_SINGLE_keycode", -1)
-            val doubleKey = prefs.getInt("${prefix}_${function.name}_DOUBLE_keycode", -1)
-            singleKey == keyCode || doubleKey == keyCode
-        }
+        return currentMappingsCache.containsValue(keyCode)
     }
 
     private fun handleAction(keyCode: Int, clickType: ClickType, prefix: String): Boolean {
-        val prefs = getSharedPreferences("mappings", Context.MODE_PRIVATE)
         val isMappingEnabled = isMappingEnabledLocal
-        val isRecording = prefs.getBoolean("is_recording", false)
         val isInterceptionActive = FloatingWidgetService.isInterceptionActive.value
 
-        if (!isMappingEnabled && !isRecording && !isInterceptionActive) {
+        if (!isMappingEnabled && !isInterceptionActive) {
             Log.d("KeyMapper", "[TOUCH] handleAction aborted: All triggers are OFF")
             return false
         }
         
         val activePreset = activePresetLocal
-        Log.d("KeyMapper", "[TOUCH] handleAction: keyCode=$keyCode, clickType=$clickType, prefix=$prefix, activePreset=$activePreset")
+        Log.d("KeyMapper", "[TOUCH] handleAction: keyCode=$keyCode, clickType=$clickType, activePreset=$activePreset")
         
-        var function = DeliveryFunction.entries.find { func ->
-            val mappedKey = prefs.getInt("${prefix}_${func.name}_${clickType.name}_keycode", -1)
-            mappedKey == keyCode
-        }
-        
-        if (function == null && clickType == ClickType.SINGLE) {
-            function = DeliveryFunction.entries.find { func ->
-                val mappedKey = prefs.getInt("${prefix}_${func.name}_keycode", -1)
-                mappedKey == keyCode
-            }
+        val cacheKey = "${clickType.name}_"
+        val function = DeliveryFunction.entries.find { func ->
+            currentMappingsCache["$cacheKey${func.name}"] == keyCode
         }
         
         if (function != null) {

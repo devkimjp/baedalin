@@ -35,5 +35,10 @@
 - git commit message 도 한글로 작성해주세요.
 - 모든 산출되는 문서는 한글로하세요
 - 코드 주석도 한글로 해야합니다.
+### 6. 배포 원칙 (Clean Deployment)
+- **모든 배포 시 반드시 기존 앱을 삭제(Uninstall)하여 설치 정보와 데이터를 초기화한 후 재설치합니다.**
+- 이는 항상 깨끗한 상태에서 기능과 설정을 검증하기 위함입니다.
+- 명령어 예시: `adb uninstall kr.disys.baedalin` -> `adb install <path_to_apk>`
+
 ---
 *참고: [andrej-karpathy-skills](https://github.com/forrestchang/andrej-karpathy-skills)*

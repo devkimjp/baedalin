@@ -318,16 +318,22 @@ class MainViewModel @Inject constructor(
             // or should be fully migrated to Repository logic. 
             // For now, using Repository for simple save/remove.
             
-            // 1. 중복 키 제거 (새로 저장하려는 키코드가 이미 다른 기능에 할당되어 있다면 제거)
+            // 1. 중복 키 제거 (새로 저장하려는 키코드와 클릭 타입이 이미 다른 기능에 할당되어 있다면 제거)
+            Log.d("KeyMapper", "[SAVE] Checking duplication for key=$keyCode, type=$type")
             DeliveryFunction.entries.forEach { f ->
                 ClickType.entries.forEach { t ->
                     val existing = mappingRepository.getMapping(prefix, f, t).first()
-                    if (existing == keyCode) {
-                        mappingRepository.removeMapping(prefix, f, t)
+                    // 같은 키코드이면서 클릭 타입까지 같을 때만 중복으로 판단하여 제거
+                    if (existing == keyCode && t == type) {
+                        if (f != func) {
+                            Log.i("KeyMapper", "[SAVE] Removing duplicate mapping: ${f.name} ($t) was using $keyCode")
+                            mappingRepository.removeMapping(prefix, f, t)
+                        }
                     }
                 }
             }
 
+            Log.i("KeyMapper", "[SAVE] Saving new mapping: ${func.name} ($type) -> $keyCode")
             // 2. 새 매핑 저장
             mappingRepository.saveMapping(prefix, func, type, keyCode)
             
